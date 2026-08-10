@@ -138,6 +138,12 @@ export default [
         action: "read",
         subject: "finance.manualAdjustments",
       },
+      {
+        title: "platform.lossBonus",
+        to: "apps-loss-bonus",
+        action: "read",
+        subject: "finance.lossBonus",
+      },
     ],
   },
 
