@@ -20,6 +20,7 @@ const REPORT_METHOD_KEYS = {
 };
 
 const CONTROL_GAME_METHOD_KEYS = {
+	"vendor-games": "vendorGames",
 	"online-users": "onlineUsers",
 	"call-list": "callList",
 	"call-result": "callHistory",
