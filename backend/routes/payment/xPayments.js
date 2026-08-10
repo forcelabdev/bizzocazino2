@@ -101,6 +101,12 @@ const sendError = (res, error, fallback) => {
 	return res.status(statusCode).json({
 		success: false,
 		error: getXPaymentsErrorMessage(error, fallback),
+		...(error instanceof XPaymentsServiceError && error.code
+			? { code: error.code }
+			: {}),
+		...(error instanceof XPaymentsServiceError && error.details
+			? error.details
+			: {}),
 	});
 };
 
