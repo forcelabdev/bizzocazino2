@@ -1571,7 +1571,7 @@ router.get("/users/:id/history", checkPermission("users.read"), async (req, res)
 			}
 
 			// 🔀 round_id bazında merge: aynı round için debit + credit (veya çoklu kısmi
-			// işlemler) tek satırda toplanır. round_id boş ise işlem kendi başına grup olur.
+			// işlemler) tek satırda toplan��r. round_id boş ise işlem kendi başına grup olur.
 			const groupKey = {
 				$cond: [
 					{
@@ -6938,6 +6938,126 @@ router.get("/sports-bets/:betId", checkPermission("sports.read"), async (req, re
 	}
 });
 
+// Get sports bets for a specific user (used by the user detail "Sports Bet History" tab)
+router.get(
+	"/users/:id/sports-bets",
+	checkPermission(["sports.read", "users.read"]),
+	async (req, res) => {
+		try {
+			const { id } = req.params;
+
+			if (!mongoose.Types.ObjectId.isValid(id)) {
+				return res
+					.status(400)
+					.json({ success: false, message: "Geçersiz kullanıcı ID" });
+			}
+
+			const {
+				page = 1,
+				limit = 20,
+				status,
+				search,
+				sortBy = "createdAt",
+				sortOrder = "desc",
+			} = req.query;
+
+			const query = { user: new mongoose.Types.ObjectId(id) };
+
+			if (
+				status &&
+				["pending", "won", "lost", "cancelled", "cashout"].includes(status)
+			) {
+				query.status = status;
+			}
+
+			if (search) {
+				query.$or = [
+					{ externalCouponId: { $regex: search, $options: "i" } },
+					{ externalBetId: { $regex: search, $options: "i" } },
+				];
+			}
+
+			const pageNum = Math.max(1, parseInt(page) || 1);
+			const limitNum = Math.min(200, Math.max(1, parseInt(limit) || 20));
+			const skip = (pageNum - 1) * limitNum;
+			const sortOptions = { [sortBy]: sortOrder === "desc" ? -1 : 1 };
+
+			const [bets, total, summaryAgg] = await Promise.all([
+				SportsBet.find(query)
+					.sort(sortOptions)
+					.skip(skip)
+					.limit(limitNum)
+					.lean(),
+				SportsBet.countDocuments(query),
+				SportsBet.aggregate([
+					{ $match: { user: new mongoose.Types.ObjectId(id) } },
+					{
+						$group: {
+							_id: null,
+							totalRecords: { $sum: 1 },
+							totalStake: { $sum: { $ifNull: ["$amount", 0] } },
+							totalWin: { $sum: { $ifNull: ["$actualWin", 0] } },
+							totalWon: {
+								$sum: { $cond: [{ $eq: ["$status", "won"] }, 1, 0] },
+							},
+							totalLost: {
+								$sum: { $cond: [{ $eq: ["$status", "lost"] }, 1, 0] },
+							},
+							totalPending: {
+								$sum: {
+									$cond: [{ $eq: ["$status", "pending"] }, 1, 0],
+								},
+							},
+						},
+					},
+				]),
+			]);
+
+			const betIds = bets.map((b) => b._id);
+			const allEvents = await SportsBetEvent.find({ bet: { $in: betIds } })
+				.sort({ createdAt: 1 })
+				.lean();
+
+			const eventsByBet = {};
+			allEvents.forEach((ev) => {
+				const betId = ev.bet.toString();
+				if (!eventsByBet[betId]) eventsByBet[betId] = [];
+				eventsByBet[betId].push(ev);
+			});
+
+			const betsWithEvents = bets.map((bet) => ({
+				...bet,
+				details: eventsByBet[bet._id.toString()] || [],
+			}));
+
+			const summaryRaw = summaryAgg?.[0] || {};
+			const totalStake = Number(summaryRaw.totalStake || 0);
+			const totalWin = Number(summaryRaw.totalWin || 0);
+
+			res.json({
+				success: true,
+				data: betsWithEvents,
+				total,
+				page: pageNum,
+				limit: limitNum,
+				totalPages: Math.ceil(total / limitNum),
+				summary: {
+					totalRecords: Number(summaryRaw.totalRecords || 0),
+					totalStake,
+					totalWin,
+					netProfit: totalWin - totalStake,
+					totalWon: Number(summaryRaw.totalWon || 0),
+					totalLost: Number(summaryRaw.totalLost || 0),
+					totalPending: Number(summaryRaw.totalPending || 0),
+				},
+			});
+		} catch (error) {
+			console.error("User sports bets fetch error:", error);
+			res.status(500).json({ success: false, message: "Sunucu hatası" });
+		}
+	},
+);
+
 // Get sports bets statistics for admin
 router.get("/sports-bets-stats", checkPermission("sports.read"), async (req, res) => {
 	try {
@@ -7986,7 +8106,7 @@ router.put(
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 🖼️ AVATAR MANAGEMENT ENDPOINTS
-// ═══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════��═══
 
 // Avatar upload directory
 const avatarUploadDir = path.join(__dirname, "..", "..", "uploads", "avatars");

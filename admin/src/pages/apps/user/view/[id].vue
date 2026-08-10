@@ -8,6 +8,7 @@ import UserTabProfile from "@/views/apps/user/view/UserTabProfile.vue"
 import UserTabAccount from "@/views/apps/user/view/UserTabAccount.vue"
 import UserTabBillingsPlans from "@/views/apps/user/view/UserTabBillingsPlans.vue"
 import UserTabManualAdjustments from "@/views/apps/user/view/UserTabManualAdjustments.vue"
+import UserTabSportsBetHistory from "@/views/apps/user/view/UserTabSportsBetHistory.vue"
 
 // import UserTabConnections from "@/views/apps/user/view/UserTabConnections.vue";
 import UserTabNotifications from "@/views/apps/user/view/UserTabNotifications.vue"
@@ -26,6 +27,7 @@ const tabs = [
   { icon: "tabler-user-circle", title: t("userDetail.tabs.profile") },
   { icon: "tabler-wallet", title: t("userDetail.tabs.finance") },
   { icon: "tabler-device-gamepad-2", title: t("userDetail.tabs.gameHistory") },
+  { icon: "tabler-ball-football", title: t("userDetail.tabs.sportsBetHistory") },
   { icon: "tabler-history", title: t("userDetail.tabs.balanceAdjustment") },
   { icon: "tabler-lock", title: t("userDetail.tabs.security") },
   { icon: "tabler-bell", title: t("userDetail.tabs.notifications") },
@@ -121,6 +123,9 @@ watch(
         </VWindowItem>
         <VWindowItem>
           <UserTabAccount :selected-user-id="userData._id" />
+        </VWindowItem>
+        <VWindowItem>
+          <UserTabSportsBetHistory :selected-user-id="userData._id" />
         </VWindowItem>
         <VWindowItem>
           <UserTabManualAdjustments :selected-user-id="userData._id" />

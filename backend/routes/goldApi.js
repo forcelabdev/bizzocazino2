@@ -702,6 +702,12 @@ router.post("/", async (req, res) => {
 						balance_after: balanceAfter,
 						rakeback: rakebackAmount,
 						affiliate: affiliateAmount,
+						// SB (sportsbook) kuponlarının maç/market detaylarını (info) daha
+						// sonra referans/debug için Transaction kaydında da saklıyoruz.
+						extra:
+							game_type === "SB" && gameDetails?.info
+								? { info: gameDetails.info }
+								: undefined,
 					});
 
 					await transaction.save();
@@ -863,7 +869,14 @@ router.post("/", async (req, res) => {
 								}
 							}
 						} catch (sbError) {
-							console.error("Nexus SB bet tracking error:", sbError.message);
+							console.error(
+								"Nexus SB bet tracking error:",
+								sbError?.name,
+								sbError?.message,
+								sbError?.errors
+									? JSON.stringify(sbError.errors)
+									: "",
+							);
 						}
 					}
 
