@@ -43,7 +43,7 @@ const refVForm = ref()
 const email = ref("")
 const password = ref("")
 const rememberMe = ref(false)
-const BASE_URL = import.meta.env.VITE_API_BASE_URL
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || ""
 
 onMounted(() => {
   if (!localStorage.getItem("accessToken") && readAdminMfaChallenge()) {
