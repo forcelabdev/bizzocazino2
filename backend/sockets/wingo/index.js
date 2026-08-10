@@ -398,10 +398,7 @@ async function runWingoRoundCompletion(io) {
 
   io.emit('wingo:round:complete', { roundId: currentGame.roundId });
 
-
   startWingoLoop(io);
-}, duration);
-
 }
 
         module.exports = setupWingoSocket;

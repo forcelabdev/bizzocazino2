@@ -325,47 +325,47 @@ onMounted(() => {
         >
           <template #item.user="{ item }">
             <div class="d-flex flex-column">
-              <span class="font-weight-medium">{{ item.userSnapshot?.username || item.userSnapshot?.name }}</span>
-              <span class="text-caption text-disabled">{{ item.userSnapshot?.email }}</span>
+              <span class="font-weight-medium">{{ item.raw.userSnapshot?.username || item.raw.userSnapshot?.name }}</span>
+              <span class="text-caption text-disabled">{{ item.raw.userSnapshot?.email }}</span>
             </div>
           </template>
 
           <template #item.period="{ item }">
-            <span class="text-caption">{{ formatDate(item.periodStart) }} → {{ formatDate(item.periodEnd) }}</span>
+            <span class="text-caption">{{ formatDate(item.raw.periodStart) }} → {{ formatDate(item.raw.periodEnd) }}</span>
           </template>
 
           <template #item.netLoss="{ item }">
-            {{ formatMoney(item.netLoss) }}
+            {{ formatMoney(item.raw.netLoss) }}
           </template>
 
           <template #item.bonusAmount="{ item }">
-            <span class="font-weight-medium text-success">{{ formatMoney(item.appliedAmount) }}</span>
+            <span class="font-weight-medium text-success">{{ formatMoney(item.raw.appliedAmount) }}</span>
           </template>
 
           <template #item.status="{ item }">
             <VChip
-              :color="statusColor(item.status)"
+              :color="statusColor(item.raw.status)"
               size="small"
             >
-              {{ statusLabel(item.status) }}
+              {{ statusLabel(item.raw.status) }}
             </VChip>
           </template>
 
           <template #item.date="{ item }">
-            <span class="text-caption">{{ formatDate(item.createdAt) }}</span>
+            <span class="text-caption">{{ formatDate(item.raw.createdAt) }}</span>
           </template>
 
           <template #item.actions="{ item }">
             <div
-              v-if="item.status === 'pending'"
+              v-if="item.raw.status === 'pending'"
               class="d-flex gap-1"
             >
               <VBtn
                 size="small"
                 color="success"
                 variant="tonal"
-                :loading="actionId === item._id"
-                @click="approveClaim(item)"
+                :loading="actionId === item.raw._id"
+                @click="approveClaim(item.raw)"
               >
                 {{ t("lossBonusAdmin.approve") }}
               </VBtn>
@@ -373,8 +373,8 @@ onMounted(() => {
                 size="small"
                 color="error"
                 variant="tonal"
-                :loading="actionId === item._id"
-                @click="rejectClaim(item)"
+                :loading="actionId === item.raw._id"
+                @click="rejectClaim(item.raw)"
               >
                 {{ t("lossBonusAdmin.reject") }}
               </VBtn>
