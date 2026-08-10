@@ -10,6 +10,7 @@ import UserTabBillingsPlans from "@/views/apps/user/view/UserTabBillingsPlans.vu
 import UserTabManualAdjustments from "@/views/apps/user/view/UserTabManualAdjustments.vue"
 import UserTabSportsBetHistory from "@/views/apps/user/view/UserTabSportsBetHistory.vue"
 import UserTabControls from "@/views/apps/user/view/UserTabControls.vue"
+import UserTabReloadBonus from "@/views/apps/user/view/UserTabReloadBonus.vue"
 
 // import UserTabConnections from "@/views/apps/user/view/UserTabConnections.vue";
 import UserTabNotifications from "@/views/apps/user/view/UserTabNotifications.vue"
@@ -31,6 +32,7 @@ const tabs = [
   { icon: "tabler-ball-football", title: t("userDetail.tabs.sportsBetHistory") },
   { icon: "tabler-history", title: t("userDetail.tabs.balanceAdjustment") },
   { icon: "tabler-adjustments", title: t("userDetail.tabs.controls") },
+  { icon: "tabler-gift", title: t("userDetail.tabs.bonuses") },
   { icon: "tabler-lock", title: t("userDetail.tabs.security") },
   { icon: "tabler-bell", title: t("userDetail.tabs.notifications") },
 
@@ -137,6 +139,9 @@ watch(
             :user-data="userData"
             @updated="userData = { ...userData, ...$event }"
           />
+        </VWindowItem>
+        <VWindowItem>
+          <UserTabReloadBonus :selected-user-id="userData._id" />
         </VWindowItem>
         <VWindowItem>
           <UserTabSecurity :user-data="userData" />
