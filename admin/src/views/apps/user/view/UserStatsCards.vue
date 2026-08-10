@@ -38,7 +38,7 @@ const totalIpCount = computed(() => props.userData?.ips?.length || 0)
       sm="6"
       md="3"
     >
-      <VCard>
+      <VCard class="ma-2">
         <VCardText class="d-flex align-center gap-4">
           <VAvatar
             size="46"
@@ -68,7 +68,7 @@ const totalIpCount = computed(() => props.userData?.ips?.length || 0)
       sm="6"
       md="3"
     >
-      <VCard>
+      <VCard class="ma-2">
         <VCardText class="d-flex align-center gap-4">
           <VAvatar
             size="46"
@@ -97,7 +97,7 @@ const totalIpCount = computed(() => props.userData?.ips?.length || 0)
       sm="6"
       md="3"
     >
-      <VCard>
+      <VCard class="ma-2">
         <VCardText class="d-flex align-center gap-4">
           <VAvatar
             size="46"
@@ -127,7 +127,7 @@ const totalIpCount = computed(() => props.userData?.ips?.length || 0)
       sm="6"
       md="3"
     >
-      <VCard>
+      <VCard class="ma-2">
         <VCardText class="d-flex align-center gap-4">
           <VAvatar
             size="46"
