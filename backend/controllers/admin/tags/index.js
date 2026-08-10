@@ -169,7 +169,7 @@ exports.getTagUsers = async (req, res) => {
 		const safeLimit = Math.min(Math.max(Number(limit) || 20, 1), 100);
 		const safePage = Math.max(Number(page) || 1, 1);
 
-		const [users, totalCount] = await Promise.all([
+		const [users, total] = await Promise.all([
 			User.find(query)
 				.select("username name local.email avatar")
 				.sort({ username: 1 })
@@ -183,14 +183,15 @@ exports.getTagUsers = async (req, res) => {
 			success: true,
 			data: {
 				users: users.map((u) => ({
-					id: u._id,
+					_id: u._id,
 					username: u.username || u.name || "—",
 					email: u.local?.email || "",
 					avatar: u.avatar || null,
 				})),
-				totalCount,
+				total,
 				page: safePage,
 				limit: safeLimit,
+				totalPages: Math.max(1, Math.ceil(total / safeLimit)),
 			},
 		});
 	} catch (err) {

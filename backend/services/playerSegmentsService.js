@@ -259,11 +259,11 @@ const attachTagCategories = async (metricsByUserId) => {
 const formatUserListItem = (metrics) => {
 	const { user } = metrics;
 	return {
-		id: user._id,
+		_id: user._id,
 		username: user.username || user.name || "—",
 		email: user.local?.email || "",
 		avatar: user.avatar || null,
-		vipLevelName: metrics.vipLevelName,
+		vipLevel: metrics.vipLevelName || "VIP 0",
 		totalDeposit: metrics.totalDeposit,
 		totalWithdrawal: metrics.totalWithdrawal,
 		netValue: metrics.netValue,
@@ -313,7 +313,7 @@ const getSegmentUsers = async (key, { search = "", page = 1, limit = 20 } = {}) 
 
 	matched.sort((a, b) => (a.user.username || "").localeCompare(b.user.username || ""));
 
-	const totalCount = matched.length;
+	const total = matched.length;
 	const safeLimit = Math.min(Math.max(Number(limit) || 20, 1), 100);
 	const safePage = Math.max(Number(page) || 1, 1);
 	const startIndex = (safePage - 1) * safeLimit;
@@ -321,9 +321,10 @@ const getSegmentUsers = async (key, { search = "", page = 1, limit = 20 } = {}) 
 
 	return {
 		users: pageItems.map(formatUserListItem),
-		totalCount,
+		total,
 		page: safePage,
 		limit: safeLimit,
+		totalPages: Math.max(1, Math.ceil(total / safeLimit)),
 	};
 };
 
