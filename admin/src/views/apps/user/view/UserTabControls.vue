@@ -52,6 +52,16 @@ const formatMoney = value => {
   return `$${number.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
+const formatDate = value => {
+  if (!value) return "—"
+
+  return new Date(value).toLocaleDateString("tr-TR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  })
+}
+
 const financialCards = computed(() => [
   {
     key: "deposits",
