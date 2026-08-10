@@ -177,6 +177,10 @@ export default defineConfig(({ mode }) => {
 		entries: ["./src/**/*.vue"],
 	},
 	server: {
+		host: true,
+		hmr: {
+			clientPort: 443,
+		},
 		proxy: Object.fromEntries(
 			BACKEND_ROUTE_PREFIXES.map((prefix) => [
 				prefix,
