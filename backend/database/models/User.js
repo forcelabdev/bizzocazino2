@@ -264,6 +264,19 @@ const userSchema = new mongoose.Schema(
 			completedAt: { type: Date, default: null },
 		},
 
+		// Reload Bonusu kilidi: bonusLock'tan tamamen bağımsızdır (Reload,
+		// Yatırım/Kayıp Bonusu'nu bloklamaz ve onlardan bloklanmaz). Aktif bir
+		// Reload ataması varken kullanıcı çekim yapamaz; çevrim tamamlanan
+		// veya süresi biten Reload'lar bu kilidi otomatik serbest bırakır.
+		reloadLock: {
+			assignmentId: { type: mongoose.Schema.Types.ObjectId, default: null },
+			totalAmount: { type: Number, default: 0 },
+			wageringMultiplier: { type: Number, default: 0 },
+			wageringRequired: { type: Number, default: 0 },
+			wageringSince: { type: Date, default: null },
+			completedAt: { type: Date, default: null },
+		},
+
 		rakeback: {
 			earned: { type: Number, default: 0 },
 			available: { type: Number, default: 0 },

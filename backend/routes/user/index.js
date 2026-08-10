@@ -25,6 +25,7 @@ const { maskEmailAddress } = require("../../utils/mfa");
 const { RIVO_WALLET } = require("../../utils/rivoWallet");
 const lossBonusService = require("../../services/lossBonusService");
 const depositBonusService = require("../../services/depositBonusService");
+const { evaluateBonusLock } = require("../../utils/bonusLock");
 
 const DEPOSIT_BONUS_ERROR_MESSAGES = {
 	USER_NOT_FOUND: "Kullanıcı bulunamadı.",
@@ -478,7 +479,7 @@ router.post("/switch-wallet", [authorizeUser(true)], async (req, res) => {
 // E-posta Değiştirme Akışı
 // Kullanıcı yeni e-postaya doğrulama linki ister, linke tıklayınca e-posta
 // değişir ve emailVerified=true olarak işaretlenir.
-// ═══════════════════════════════════════════════════════════════════════════
+// ══════════════════════��════════════════════════════════════════════════════
 
 const EMAIL_CHANGE_TOKEN_TYPE = "email-change";
 const EMAIL_CHANGE_REQUEST_COOLDOWN_MS = 1000 * 60 * 5;

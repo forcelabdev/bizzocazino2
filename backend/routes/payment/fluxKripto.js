@@ -586,12 +586,17 @@ router.post("/withdraw", authorizeUser(true), async (req, res) => {
 		});
 	} catch (error) {
 		console.error("FluxKripto withdraw hatası:", error.message);
-		res.status(error.statusCode || 500).json({
+		const response = {
 			success: false,
 			error: error.statusCode
 				? error.message
 				: "FluxKripto çekim talebi oluşturulamadı.",
-		});
+		};
+		if (error instanceof RouteError && error.code) response.code = error.code;
+		if (error instanceof RouteError && error.wagering) {
+			response.wagering = error.wagering;
+		}
+		res.status(error.statusCode || 500).json(response);
 	} finally {
 		await session.endSession();
 	}
