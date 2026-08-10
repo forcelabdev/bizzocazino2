@@ -7,6 +7,7 @@ const mongoose = require("mongoose");
 const upload = require("../../middleware/upload");
 const adminWingoController = require("../../controllers/adminWingoController");
 const manualBonusCategoryController = require("../../controllers/admin/manualBonusCategoryController");
+const lossBonusController = require("../../controllers/admin/lossBonusController");
 const playerSegmentsController = require("../../controllers/admin/playerSegments");
 const tagsController = require("../../controllers/admin/tags");
 const { generalGetChatOnlineCount } = require("../../utils/general/chat");
@@ -1028,7 +1029,7 @@ router.patch(
 
 			res.status(200).json({
 				success: true,
-				message: "Kullanıcı ask��ya alındı.",
+				message: "Kullanıcı ask����ya alındı.",
 				data: buildAdminUserResponseData(updatedUser),
 			});
 		} catch (error) {
@@ -2240,6 +2241,43 @@ router.delete(
 	"/manual-bonus-categories/:id",
 	checkPermission(["finance.manualAdjustments.manage", "finance.promo.manage"]),
 	manualBonusCategoryController.deleteCategory,
+);
+
+// Kayıp Bonusu (Loss Bonus)
+router.get(
+	"/loss-bonus/settings",
+	checkPermission(["finance.lossBonus.read", "finance.lossBonus.manage"]),
+	lossBonusController.getSettings,
+);
+
+router.put(
+	"/loss-bonus/settings",
+	checkPermission("finance.lossBonus.manage"),
+	lossBonusController.updateSettings,
+);
+
+router.get(
+	"/loss-bonus/claims",
+	checkPermission(["finance.lossBonus.read", "finance.lossBonus.manage"]),
+	lossBonusController.listClaims,
+);
+
+router.post(
+	"/loss-bonus/claims/:id/approve",
+	checkPermission("finance.lossBonus.manage"),
+	lossBonusController.approveClaim,
+);
+
+router.post(
+	"/loss-bonus/claims/:id/reject",
+	checkPermission("finance.lossBonus.manage"),
+	lossBonusController.rejectClaim,
+);
+
+router.get(
+	"/users/:id/loss-bonus",
+	checkPermission(["finance.lossBonus.read", "finance.lossBonus.manage", "users.read"]),
+	lossBonusController.getUserSummary,
 );
 
 router.get(

@@ -233,6 +233,12 @@ const userSchema = new mongoose.Schema(
 			default: [],
 		},
 
+		// Kayıp Bonusu: son talep edilen dönemin bitiş tarihi.
+		// Bir sonraki dönem bu tarihten (yoksa createdAt'ten) başlar.
+		lossBonus: {
+			lastClaimAt: { type: Date },
+		},
+
 		rakeback: {
 			earned: { type: Number, default: 0 },
 			available: { type: Number, default: 0 },

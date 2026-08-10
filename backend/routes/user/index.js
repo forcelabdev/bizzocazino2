@@ -23,6 +23,70 @@ const {
 } = require("../../services/mfaService");
 const { maskEmailAddress } = require("../../utils/mfa");
 const { RIVO_WALLET } = require("../../utils/rivoWallet");
+const lossBonusService = require("../../services/lossBonusService");
+
+const LOSS_BONUS_ERROR_MESSAGES = {
+	USER_NOT_FOUND: "Kullanıcı bulunamadı.",
+	LOSS_BONUS_DISABLED: "Kayıp bonusu şu anda aktif değil.",
+	NO_LOSS_IN_PERIOD:
+		"Bu dönemde kaybınız olmadığı için bonus talep edemezsiniz.",
+	LOSS_BELOW_MINIMUM: "Net kaybınız minimum tutarın altında.",
+	CLAIM_IN_PROGRESS: "Talebiniz işleniyor, lütfen tekrar deneyin.",
+};
+
+// Kayıp Bonusu: mevcut potansiyel bonusu sorgula
+// @route   GET /users/loss-bonus/potential
+router.get("/loss-bonus/potential", authorizeUser(true), async (req, res) => {
+	try {
+		const potential = await lossBonusService.getPotential(req.user._id);
+
+		res.status(200).json({
+			status: "success",
+			data: {
+				total_deposit: potential.totalDeposit,
+				total_withdrawal: potential.totalWithdrawal,
+				current_balance: potential.currentBalance,
+				net_loss: potential.netLoss,
+				bonus_rate: potential.percentage,
+				potential_bonus: potential.potentialBonus,
+				is_eligible: potential.eligible,
+				message: potential.message,
+			},
+		});
+	} catch (err) {
+		const message = LOSS_BONUS_ERROR_MESSAGES[err.message] || "Sunucu hatası.";
+		const status = LOSS_BONUS_ERROR_MESSAGES[err.message] ? 400 : 500;
+		if (status === 500) console.error("Loss bonus potential error:", err);
+		res.status(status).json({ status: "error", message });
+	}
+});
+
+// Kayıp Bonusu: talep et (kaydet ve dönemi sıfırla)
+// @route   POST /users/loss-bonus/claim
+router.post("/loss-bonus/claim", authorizeUser(true), async (req, res) => {
+	try {
+		const result = await lossBonusService.claim(req.user._id);
+		const isPending = result.claim.status === "pending";
+
+		res.status(200).json({
+			status: "success",
+			message: isPending
+				? "Kayıp bonusu talebiniz alındı, onay bekleniyor."
+				: "Kayıp bonusu başarıyla hesabınıza tanımlandı.",
+			data: {
+				claim_id: result.claim._id,
+				status: result.claim.status,
+				bonus_amount: result.claim.appliedAmount,
+				new_balance: result.newBalance,
+			},
+		});
+	} catch (err) {
+		const message = LOSS_BONUS_ERROR_MESSAGES[err.message] || "Sunucu hatası.";
+		const status = LOSS_BONUS_ERROR_MESSAGES[err.message] ? 400 : 500;
+		if (status === 500) console.error("Loss bonus claim error:", err);
+		res.status(status).json({ status: "error", message });
+	}
+});
 
 // Update user information (email and password)
 // Update User Information

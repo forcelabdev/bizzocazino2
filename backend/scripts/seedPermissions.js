@@ -237,6 +237,20 @@ const defaultPermissions = [
 		action: "manage",
 		group: "Finans",
 	},
+	{
+		code: "finance.lossBonus.read",
+		name: "Finans - Kayıp Bonusu Görüntüle",
+		resource: "finance.lossBonus",
+		action: "read",
+		group: "Finans",
+	},
+	{
+		code: "finance.lossBonus.manage",
+		name: "Finans - Kayıp Bonusu Yönet",
+		resource: "finance.lossBonus",
+		action: "manage",
+		group: "Finans",
+	},
 
 	// Games
 	{
@@ -705,6 +719,7 @@ const defaultRoles = [
 			"users.mfa.manage",
 			"finance.read",
 			"finance.manualAdjustments.manage",
+			"finance.lossBonus.manage",
 			"games.read",
 			"games.update",
 			"providers.read",
@@ -732,6 +747,7 @@ const defaultRoles = [
 			"finance.create",
 			"finance.update",
 			"finance.manualAdjustments.manage",
+			"finance.lossBonus.manage",
 			"users.read",
 		],
 	},
@@ -807,6 +823,7 @@ const defaultRoles = [
 			"users.mfa.read",
 			"finance.read",
 			"finance.manualAdjustments.read",
+			"finance.lossBonus.read",
 			"games.read",
 			"providers.read",
 			"platform.read",
