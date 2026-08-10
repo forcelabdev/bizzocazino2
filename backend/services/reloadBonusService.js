@@ -9,7 +9,10 @@ const {
 	createAdminManualAdjustment,
 } = require("./adminManualAdjustmentService");
 const { RIVO_WALLET } = require("../utils/rivoWallet");
-const { applyReloadWageringLock } = require("../utils/bonusLock");
+const {
+	applyReloadWageringLock,
+	evaluateReloadLock,
+} = require("../utils/bonusLock");
 
 const CATEGORY = "RELOAD BONUSU";
 const SOURCE = "reload_bonus";
@@ -263,6 +266,11 @@ const getStatus = async (userId) => {
 		assignment.claimedPeriods < assignment.totalPeriods &&
 		now >= assignment.nextClaimAt;
 
+	// Çevrim (wagering) ilerlemesi, admin panelindeki "Bonuslar" sekmesinde
+	// progress bar olarak gösterilmek üzere `reloadLock`'tan canlı hesaplanır.
+	const user = await User.findById(userId).select("reloadLock");
+	const wageringStatus = user ? await evaluateReloadLock(user) : { active: false };
+
 	return {
 		hasActiveReload: true,
 		assignmentId: assignment._id,
@@ -278,6 +286,9 @@ const getStatus = async (userId) => {
 		endAt: assignment.endAt,
 		nextClaimAt: assignment.nextClaimAt,
 		canClaimNow,
+		wageringRequired: wageringStatus.wageringRequired || 0,
+		wageringProgress: wageringStatus.wageringProgress || 0,
+		wageringRemaining: wageringStatus.wageringRemaining || 0,
 	};
 };
 

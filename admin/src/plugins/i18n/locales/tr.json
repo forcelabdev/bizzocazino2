@@ -1347,6 +1347,23 @@
 			"cancelFailed": "Atama iptal edilemedi.",
 			"empty": "Henüz atama oluşturulmadı."
 		},
+		"userTabReloadBonus": {
+			"periodLossTitle": "Bu Dönem Kaybı",
+			"periodLossSince": "{date} tarihinden itibaren",
+			"periodLossDeposit": "Yatırım",
+			"periodLossWithdrawal": "Çekim",
+			"periodLossBalance": "Güncel Bakiye",
+			"periodLossNet": "Net Kayıp",
+			"useThisAmount": "Bu Tutarı Kullan",
+			"activeCardTitle": "Aktif Reload Bonusu",
+			"remainingPeriods": "Kalan Parça",
+			"nextClaimAt": "Sıradaki Claim",
+			"wageringProgress": "Çevrim İlerlemesi",
+			"noWagering": "Çevrim şartı yok",
+			"noActiveReload": "Bu kullanıcının aktif bir Reload Bonusu yok. Aşağıdan yeni bir atama oluşturabilirsiniz.",
+			"historyTitle": "Son Atamalar",
+			"noHistory": "Henüz atama geçmişi yok."
+		},
 		"manualAdjustments": {
 		"title": "Manuel İşlemler",
 		"listTitle": "Manuel İşlem Geçmişi",
