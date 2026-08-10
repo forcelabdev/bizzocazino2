@@ -1,0 +1,14 @@
+@baseUrl = http://localhost:5000
+@adminToken = REPLACE_WITH_ADMIN_JWT
+
+### Smart search: exact match is returned by default
+GET {{baseUrl}}/admin/users?search=Kayaak04&searchMode=smart&includeSimilar=false&page=1&limit=10
+x-auth-token: {{adminToken}}
+
+### Smart search: exact match stays first and similar matches are included
+GET {{baseUrl}}/admin/users?search=Kayaak04&searchMode=smart&includeSimilar=true&page=1&limit=10
+x-auth-token: {{adminToken}}
+
+### Backwards-compatible partial search for existing consumers
+GET {{baseUrl}}/admin/users?search=Kayaak04&page=1&limit=10
+x-auth-token: {{adminToken}}

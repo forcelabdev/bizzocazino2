@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="">
+	<head>
+		<meta charset="utf-8" />
+		<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+		<meta name="viewport" content="width=device-width,initial-scale=1" />
+		<link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;700&display=swap" rel="stylesheet" />
+		<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@100;200;300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+		<script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
+		<link rel="icon" href="https://apibizzocasino.site/uploads/favicon.png" />
+		<title>Bizzocazino: The Innovative Crypto Casino Site</title>
+		<meta
+			name="description"
+			content="Bizzocazino: Discover the leading Crypto Gambling site with the most diverse game selection. Deposit with Crypto, Limiteds, Visa, PayPal, Crypto & more."
+		/>
+		<meta
+			name="keywords"
+			content="Bizzocazino, Bizzocazinocom, Bizzocazino.com, Crypto gambling, Crypto gambing, Crypto casino, Crypto casino, gambling, roll, duels, blackjack, crash"
+		/>
+		<script defer="defer" src="/js/chunk-vendors.73d38ef9.js?n=1"></script>
+		<!-- app vv -->
+		<script defer="defer" src="/js/environment.js?n=1"></script>
+		<script defer="defer" src="/js/app.cbab5add.js?n=10"></script>
+		<link href="/css/chunk-vendors.d042ef86.css?n=3" rel="stylesheet" />
+		<link href="/css/app.833d0f48.css?n=5" rel="stylesheet" />
+		<!-- injections -->
+		<script defer="defer" src="/js/injection-bonus.js?n=13"></script>
+		<script defer="defer" src="/js/bank-injection.js?n=30"></script>
+		<script defer="defer" src="/js/injection-bets.js?n=3"></script>
+		<script defer="defer" src="/js/injection-promotions.js?n=3"></script>
+		<!-- Custom CSS from Site Settings - no cache -->
+		<link href="https://apibizzocasino.site/custom.css" rel="stylesheet" />
+	</head>
+	<body>
+		<div id="app"></div>
+		<!-- Custom JS from Site Settings - no cache -->
+		<script>
+			(function () {
+				var script = document.createElement("script");
+				script.src = "https://apibizzocasino.site/custom.js?" + Date.now();
+				script.async = true;
+				document.head.appendChild(script);
+			})();
+		</script>
+		<!-- Custom HTML from Site Settings - no cache -->
+		<div id="custom-html-container"></div>
+		<script>
+			(function () {
+				fetch("https://apibizzocasino.site/custom.html?" + Date.now())
+					.then(function (response) {
+						return response.text();
+					})
+					.then(function (html) {
+						if (html && html.trim()) {
+							var container = document.getElementById("custom-html-container");
+							container.innerHTML = html;
+							// Execute any scripts in the injected HTML
+							var scripts = container.querySelectorAll("script");
+							scripts.forEach(function (oldScript) {
+								var newScript = document.createElement("script");
+								if (oldScript.src) {
+									newScript.src = oldScript.src;
+									newScript.async = oldScript.async;
+								} else {
+									newScript.textContent = oldScript.textContent;
+								}
+								oldScript.parentNode.replaceChild(newScript, oldScript);
+							});
+						}
+					})
+					.catch(function (err) {
+						console.error("Custom HTML load error:", err);
+					});
+			})();
+		</script>
+		<script src="https://accounts.google.com/gsi/client" async defer="defer"></script>
+	</body>
+</html>
