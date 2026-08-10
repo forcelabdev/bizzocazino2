@@ -13,9 +13,52 @@ import vuetify from "vite-plugin-vuetify";
 import DefineOptions from "unplugin-vue-define-options/vite";
 
 // https://vitejs.dev/config/
+// Backend route prefixes that are mounted at the API server root (see
+// backend/routes/index.js). The admin dev server proxies these to the local
+// backend so the browser only ever talks to a single origin (no CORS).
+const BACKEND_ROUTE_PREFIXES = [
+	"/auth",
+	"/admin",
+	"/affiliate",
+	"/avatar",
+	"/banner",
+	"/battlepass",
+	"/betcolabs_api",
+	"/betinovi_api",
+	"/binance",
+	"/bonus",
+	"/bonus-settings",
+	"/callback",
+	"/captcha",
+	"/customerservices",
+	"/deposit",
+	"/drakon_api",
+	"/exchange",
+	"/gamehistory",
+	"/games",
+	"/gold_api",
+	"/maxicallback",
+	"/news",
+	"/notices",
+	"/payment",
+	"/poker_api",
+	"/public",
+	"/settings",
+	"/shop",
+	"/telegram",
+	"/telegram-settings",
+	"/users",
+	"/vip",
+	"/wallet",
+	"/wingo",
+	"/withdrawal",
+	"/uploads",
+];
+
 export default defineConfig(({ mode }) => {
 	const env = loadEnv(mode, process.cwd(), "");
 	const newSiteMode = String(env.NEW_SITE_MODE ?? "true").toLowerCase();
+	const backendTarget = env.VITE_BACKEND_PROXY_TARGET || "http://localhost:5000";
 
 	return {
 	plugins: [
@@ -132,6 +175,17 @@ export default defineConfig(({ mode }) => {
 	optimizeDeps: {
 		exclude: ["vuetify"],
 		entries: ["./src/**/*.vue"],
+	},
+	server: {
+		proxy: Object.fromEntries(
+			BACKEND_ROUTE_PREFIXES.map((prefix) => [
+				prefix,
+				{
+					target: backendTarget,
+					changeOrigin: true,
+				},
+			])
+		),
 	},
 };
 });
