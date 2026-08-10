@@ -112,6 +112,12 @@ export default [
             action: "read",
             subject: "finance.promo",
           },
+          {
+            title: "platform.bonusNames",
+            to: "apps-bonus-names",
+            action: "read",
+            subject: "finance.manualAdjustments",
+          },
         ],
       },
     ],

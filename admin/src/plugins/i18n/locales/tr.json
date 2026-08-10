@@ -438,7 +438,7 @@
 	"gamestitle": "Oyunlar",
 	"gamesall": "Tümü",
 	"gameshistorytitle": "Oyun Geçmişi",
-	"gamesproviders": "Sa�����layıcılar",
+	"gamesproviders": "Sa������layıcılar",
 	"gameshistoryfutures": "Futures Geçmişi",
 	"gameshistoryturbo": "Turbo Geçmişi",
 	"gameshistorywingo": "Wingo Geçmişi",
@@ -551,6 +551,7 @@
 		"category": "Kategori",
 		"campaigns": "Kampanyalar",
 		"promotions": "Promosyonlar",
+		"bonusNames": "Bonus Adları",
 		"bankAccounts": "Banka Hesapları"
 	},
 	"battlepass": {
@@ -1134,6 +1135,19 @@
 			"pending": "Beklemede"
 		},
 		"copy": "Kopyala"
+	},
+	"bonusNames": {
+		"title": "Bonus Adları",
+		"description": "Kullanıcı düzenleme ekranındaki \"Bonus Adı\" listesinde görünen kategorileri buradan ekleyip düzenleyebilirsiniz.",
+		"add": "Bonus Adı Ekle",
+		"edit": "Bonus Adını Düzenle",
+		"name": "Bonus Adı",
+		"order": "Sıra",
+		"status": "Durum",
+		"active": "Aktif",
+		"inactive": "Pasif",
+		"deleteConfirm": "Silme Onayı",
+		"deleteMessage": "\"{name}\" bonus adını silmek istediğinizden emin misiniz?"
 	},
 	"manualAdjustments": {
 		"title": "Manuel İşlemler",

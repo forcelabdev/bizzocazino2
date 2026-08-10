@@ -6,6 +6,7 @@ const User = require("../../database/models/User"); // Kullanıcı modelini impo
 const mongoose = require("mongoose");
 const upload = require("../../middleware/upload");
 const adminWingoController = require("../../controllers/adminWingoController");
+const manualBonusCategoryController = require("../../controllers/admin/manualBonusCategoryController");
 const { generalGetChatOnlineCount } = require("../../utils/general/chat");
 
 // Tabloları import edin
@@ -228,21 +229,9 @@ const ACTIVE_BALANCE_SORT_KEYS = new Set([
 	"activeBalance",
 ]);
 
-const MANUAL_BONUS_CATEGORIES = [
-	"CALL DAVET",
-	"İLK 3 YATIRIMA SİGORTA",
-	"İLK ÇEKİM ÖDÜLÜ",
-	"5X KAZANC BONUSU",
-	"YATIR 2X BAŞLA",
-	"%20 DİSCOUNT",
-	"%25 KRİPTO YATIRIM BONUSU",
-	"1000X PRAGMATİC",
-	"100X EGT",
-	"KUMBARA BONUSU",
-	"JEST",
-	"%5 RELOAD",
-];
-const MANUAL_BONUS_CATEGORY_SET = new Set(MANUAL_BONUS_CATEGORIES);
+// Bonus adları artık ManualBonusCategory koleksiyonunda (DB) yönetiliyor.
+// Bkz. controllers/admin/manualBonusCategoryController.js
+// Admin panelinde: Finans > Promosyonlar > Bonus Adları
 const APPROVED_PAYMENT_STATUS = "approved";
 const APPROVED_CRYPTO_STATES = ["completed", "success"];
 
@@ -2019,12 +2008,31 @@ router.get(
 router.get(
 	"/manual-bonus-categories",
 	checkPermission(["finance.manualAdjustments.manage", "users.update"]),
-	async (req, res) => {
-		res.status(200).json({
-			success: true,
-			data: MANUAL_BONUS_CATEGORIES,
-		});
-	},
+	manualBonusCategoryController.getActiveCategoryNames,
+);
+
+router.get(
+	"/manual-bonus-categories/manage",
+	checkPermission(["finance.manualAdjustments.manage", "finance.promo.manage"]),
+	manualBonusCategoryController.getAllCategories,
+);
+
+router.post(
+	"/manual-bonus-categories",
+	checkPermission(["finance.manualAdjustments.manage", "finance.promo.manage"]),
+	manualBonusCategoryController.createCategory,
+);
+
+router.put(
+	"/manual-bonus-categories/:id",
+	checkPermission(["finance.manualAdjustments.manage", "finance.promo.manage"]),
+	manualBonusCategoryController.updateCategory,
+);
+
+router.delete(
+	"/manual-bonus-categories/:id",
+	checkPermission(["finance.manualAdjustments.manage", "finance.promo.manage"]),
+	manualBonusCategoryController.deleteCategory,
 );
 
 router.get(
@@ -2255,12 +2263,12 @@ router.post(
 
 			if (
 				kind === "bonus" &&
-				!MANUAL_BONUS_CATEGORY_SET.has(category)
+				!(await manualBonusCategoryController.isValidCategoryName(category))
 			) {
 				return res.status(400).json({
 					success: false,
 					message: "INVALID_MANUAL_BONUS_CATEGORY",
-					data: MANUAL_BONUS_CATEGORIES,
+					data: await manualBonusCategoryController.getActiveCategoryNamesRaw(),
 				});
 			}
 

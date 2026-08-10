@@ -567,6 +567,8 @@
 		"filter": "Filter",
 		"category": "Category",
 		"campaigns": "Campaigns",
+		"promotions": "Promotions",
+		"bonusNames": "Bonus Names",
 		"bankAccounts": "Bank Accounts"
 	},
 	"battlepass": {
@@ -1073,6 +1075,19 @@
 			"pending": "Pending"
 		},
 		"copy": "Copy"
+	},
+	"bonusNames": {
+		"title": "Bonus Names",
+		"description": "Add and edit the categories shown in the \"Bonus Name\" list on the user edit screen.",
+		"add": "Add Bonus Name",
+		"edit": "Edit Bonus Name",
+		"name": "Bonus Name",
+		"order": "Order",
+		"status": "Status",
+		"active": "Active",
+		"inactive": "Inactive",
+		"deleteConfirm": "Confirm Delete",
+		"deleteMessage": "Are you sure you want to delete the bonus name \"{name}\"?"
 	},
 	"manualAdjustments": {
 		"title": "Manual Adjustments",
