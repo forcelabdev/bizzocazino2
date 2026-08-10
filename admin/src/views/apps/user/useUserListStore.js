@@ -151,5 +151,20 @@ export const useUserListStore = defineStore('UserListStore', {
       return axios.post(`/admin/tags/${tagId}/unassign`, { userIds: [userId] }).then(res => res.data)
     },
 
+    // ✅ Kayıp Bonusu: kullanıcı özeti (Kontroller sekmesi için)
+    fetchUserLossBonusSummary(userId) {
+      return axios.get(`/admin/users/${userId}/loss-bonus`).then(res => res.data.data)
+    },
+
+    // ✅ Kayıp Bonusu: talebi onayla (Kontroller sekmesinden)
+    approveLossBonusClaim(claimId) {
+      return axios.post(`/admin/loss-bonus/claims/${claimId}/approve`).then(res => res.data)
+    },
+
+    // ✅ Kayıp Bonusu: talebi reddet (Kontroller sekmesinden)
+    rejectLossBonusClaim(claimId, reason = "") {
+      return axios.post(`/admin/loss-bonus/claims/${claimId}/reject`, { reason }).then(res => res.data)
+    },
+
   },
 })

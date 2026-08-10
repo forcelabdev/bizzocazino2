@@ -361,12 +361,77 @@ const toggleTag = async tag => {
 }
 
 /* --------------------------------------------------------------------- */
+/* Kayıp Bonusu özeti                                                    */
+/* --------------------------------------------------------------------- */
+
+const lossBonusLoading = ref(false)
+const lossBonusPotential = ref(null)
+const lossBonusClaims = ref([])
+const lossBonusActionId = ref(null)
+
+const lossBonusStatusColor = status => {
+  if (status === "approved") return "success"
+  if (status === "rejected") return "error"
+  return "warning"
+}
+
+const lossBonusStatusLabel = status => {
+  if (status === "approved") return t("lossBonusAdmin.statusApproved")
+  if (status === "rejected") return t("lossBonusAdmin.statusRejected")
+  return t("lossBonusAdmin.statusPending")
+}
+
+const fetchLossBonusSummary = async () => {
+  if (!props.userData?._id) return
+
+  lossBonusLoading.value = true
+  try {
+    const data = await userStore.fetchUserLossBonusSummary(props.userData._id)
+    lossBonusPotential.value = data?.potential || null
+    lossBonusClaims.value = data?.claims || []
+  } catch (error) {
+    console.error("Kayıp bonusu özeti alınamadı:", error)
+  } finally {
+    lossBonusLoading.value = false
+  }
+}
+
+const approveLossBonusClaim = async claim => {
+  lossBonusActionId.value = claim._id
+  try {
+    await userStore.approveLossBonusClaim(claim._id)
+    await fetchLossBonusSummary()
+  } catch (error) {
+    console.error("Kayıp bonusu talebi onaylanamadı:", error)
+    alert(error.response?.data?.message || t("lossBonusAdmin.approveFailed"))
+  } finally {
+    lossBonusActionId.value = null
+  }
+}
+
+const rejectLossBonusClaim = async claim => {
+  if (!confirm(t("lossBonusAdmin.rejectConfirm"))) return
+
+  lossBonusActionId.value = claim._id
+  try {
+    await userStore.rejectLossBonusClaim(claim._id)
+    await fetchLossBonusSummary()
+  } catch (error) {
+    console.error("Kayıp bonusu talebi reddedilemedi:", error)
+    alert(error.response?.data?.message || t("lossBonusAdmin.rejectFailed"))
+  } finally {
+    lossBonusActionId.value = null
+  }
+}
+
+/* --------------------------------------------------------------------- */
 
 watch(
   () => props.userData?._id,
   () => {
     syncControlsFromUser()
     fetchReport()
+    fetchLossBonusSummary()
   },
 )
 
@@ -374,6 +439,7 @@ onMounted(() => {
   syncControlsFromUser()
   fetchReport()
   fetchAllTags()
+  fetchLossBonusSummary()
 })
 </script>
 
@@ -646,6 +712,147 @@ onMounted(() => {
               {{ t("userControls.tags.empty") }}
             </span>
           </div>
+        </VCardText>
+      </VCard>
+    </VCol>
+
+    <!-- Kayıp Bonusu -->
+    <VCol cols="12">
+      <VCard>
+        <VCardText>
+          <div class="d-flex flex-wrap align-center justify-space-between gap-4 mb-4">
+            <div>
+              <h5 class="text-h5">
+                {{ t("lossBonusAdmin.title") }}
+              </h5>
+              <span class="text-body-2 text-disabled">{{ t("lossBonusAdmin.description") }}</span>
+            </div>
+          </div>
+
+          <VProgressLinear
+            v-if="lossBonusLoading"
+            indeterminate
+            color="primary"
+            class="mb-4"
+          />
+
+          <VRow
+            v-if="lossBonusPotential"
+            class="mb-4"
+          >
+            <VCol
+              cols="12"
+              sm="6"
+              md="3"
+            >
+              <VCard variant="tonal">
+                <VCardText>
+                  <span class="text-body-2 text-disabled">{{ t("lossBonusAdmin.netLoss") }}</span>
+                  <h5 class="text-h5 mt-1">
+                    {{ formatMoney(lossBonusPotential.netLoss) }}
+                  </h5>
+                </VCardText>
+              </VCard>
+            </VCol>
+            <VCol
+              cols="12"
+              sm="6"
+              md="3"
+            >
+              <VCard
+                variant="tonal"
+                :color="lossBonusPotential.eligible ? 'success' : undefined"
+              >
+                <VCardText>
+                  <span class="text-body-2 text-disabled">{{ t("lossBonusAdmin.bonusAmount") }}</span>
+                  <h5 class="text-h5 mt-1">
+                    {{ formatMoney(lossBonusPotential.potentialBonus) }}
+                  </h5>
+                </VCardText>
+              </VCard>
+            </VCol>
+            <VCol
+              cols="12"
+              md="6"
+              class="d-flex align-center"
+            >
+              <span class="text-body-2">{{ lossBonusPotential.message }}</span>
+            </VCol>
+          </VRow>
+
+          <VTable v-if="lossBonusClaims.length">
+            <thead>
+              <tr>
+                <th>{{ t("lossBonusAdmin.period") }}</th>
+                <th>{{ t("lossBonusAdmin.netLoss") }}</th>
+                <th>{{ t("lossBonusAdmin.bonusAmount") }}</th>
+                <th>{{ t("lossBonusAdmin.status") }}</th>
+                <th>{{ t("lossBonusAdmin.date") }}</th>
+                <th>{{ t("lossBonusAdmin.actions") }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="claimItem in lossBonusClaims"
+                :key="claimItem._id"
+              >
+                <td class="text-caption">
+                  {{ formatDate(claimItem.periodStart) }} → {{ formatDate(claimItem.periodEnd) }}
+                </td>
+                <td>{{ formatMoney(claimItem.netLoss) }}</td>
+                <td class="font-weight-medium text-success">
+                  {{ formatMoney(claimItem.appliedAmount) }}
+                </td>
+                <td>
+                  <VChip
+                    :color="lossBonusStatusColor(claimItem.status)"
+                    size="small"
+                  >
+                    {{ lossBonusStatusLabel(claimItem.status) }}
+                  </VChip>
+                </td>
+                <td class="text-caption">
+                  {{ formatDate(claimItem.createdAt) }}
+                </td>
+                <td>
+                  <div
+                    v-if="claimItem.status === 'pending'"
+                    class="d-flex gap-1"
+                  >
+                    <VBtn
+                      size="small"
+                      color="success"
+                      variant="tonal"
+                      :loading="lossBonusActionId === claimItem._id"
+                      @click="approveLossBonusClaim(claimItem)"
+                    >
+                      {{ t("lossBonusAdmin.approve") }}
+                    </VBtn>
+                    <VBtn
+                      size="small"
+                      color="error"
+                      variant="tonal"
+                      :loading="lossBonusActionId === claimItem._id"
+                      @click="rejectLossBonusClaim(claimItem)"
+                    >
+                      {{ t("lossBonusAdmin.reject") }}
+                    </VBtn>
+                  </div>
+                  <span
+                    v-else
+                    class="text-caption text-disabled"
+                  >—</span>
+                </td>
+              </tr>
+            </tbody>
+          </VTable>
+
+          <span
+            v-else-if="!lossBonusLoading"
+            class="text-body-2 text-disabled"
+          >
+            {{ t("lossBonusAdmin.empty") }}
+          </span>
         </VCardText>
       </VCard>
     </VCol>
