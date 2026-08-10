@@ -6,7 +6,7 @@ import BetinoviReportPage from "@/components/betinovi/BetinoviReportPage.vue";
 	<BetinoviReportPage
 		report-type="wager-index"
 		title="Bahis indeksine göre"
-		description="Wager ID başlangıcına göre Betinovi bahis kayıtlarını listeleyin."
+		description="Wager ID başlangıcına göre Forcelab bahis kayıtlarını listeleyin."
 	/>
 </template>
 

@@ -20,7 +20,7 @@ const sportsBetSchema = new mongoose.Schema(
 		// Provider bilgileri
 		provider: {
 			type: String,
-			enum: ["betcolabs", "webspor"],
+			enum: ["betcolabs", "webspor", "nexusggr"],
 			default: "betcolabs",
 		},
 

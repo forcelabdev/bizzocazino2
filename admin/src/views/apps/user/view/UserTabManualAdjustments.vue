@@ -1,5 +1,6 @@
 <script setup>
 import { useUserListStore } from "@/views/apps/user/useUserListStore"
+import { formatCoinType } from "@/utils/currency"
 import { computed, ref, watch } from "vue"
 import { useI18n } from "vue-i18n"
 
@@ -65,7 +66,7 @@ const fieldLabels = computed(() => ({
 const formatWallet = wallet => {
   if (!wallet) return "-"
 
-  return [wallet.coinType, wallet.chain, wallet.type]
+  return [formatCoinType(wallet.coinType), wallet.chain, wallet.type]
     .filter(Boolean)
     .join(" / ")
 }

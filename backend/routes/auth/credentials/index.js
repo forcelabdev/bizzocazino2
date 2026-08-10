@@ -52,6 +52,7 @@ const {
 	authCheckPostCredentialsResetData,
 	authCheckPostCredentialsResetToken,
 } = require("../../../utils/auth/credentials");
+const { createAdminNotification } = require("../../../utils/adminNotification");
 
 module.exports = () => {
 	// @desc    Login user
@@ -371,6 +372,14 @@ module.exports = () => {
 					state: "created",
 				}),
 			]);
+
+			createAdminNotification(
+				"new_user",
+				"Yeni Üye Kaydı",
+				`${username} kullanıcı adıyla yeni bir üye kayıt oldu.`,
+				"/apps/user/list",
+				{ username, userId: newUser._id },
+			);
 
 			newUser = newUser.toObject();
 			delete newUser.local.password;

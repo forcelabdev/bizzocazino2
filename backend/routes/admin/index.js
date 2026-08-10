@@ -6,6 +6,12 @@ const User = require("../../database/models/User"); // Kullanıcı modelini impo
 const mongoose = require("mongoose");
 const upload = require("../../middleware/upload");
 const adminWingoController = require("../../controllers/adminWingoController");
+const manualBonusCategoryController = require("../../controllers/admin/manualBonusCategoryController");
+const lossBonusController = require("../../controllers/admin/lossBonusController");
+const depositBonusController = require("../../controllers/admin/depositBonusController");
+const reloadBonusController = require("../../controllers/admin/reloadBonusController");
+const playerSegmentsController = require("../../controllers/admin/playerSegments");
+const tagsController = require("../../controllers/admin/tags");
 const { generalGetChatOnlineCount } = require("../../utils/general/chat");
 
 // Tabloları import edin
@@ -188,6 +194,8 @@ const { getIO } = require("../../utils/io");
 const {
 	notifyAndDisconnectSuspendedUser,
 } = require("../../utils/userSuspension");
+const { createAdminNotification } = require("../../utils/adminNotification");
+const AdminNotification = require("../../database/models/AdminNotification");
 const {
 	authenticateAdmin,
 	checkPermission,
@@ -213,6 +221,11 @@ const {
 	getMfaCodesForUser,
 	getUserMfaSummary,
 } = require("../../services/mfaService");
+const {
+	APPROVED_PAYMENT_STATUS,
+	APPROVED_CRYPTO_STATES,
+	getUserApprovedFinanceTotals,
+} = require("../../utils/userFinanceTotals");
 
 const USER_LIST_SORT_FIELDS = {
 	user: "username",
@@ -227,178 +240,6 @@ const ACTIVE_BALANCE_SORT_KEYS = new Set([
 	"activeWallet.balance",
 	"activeBalance",
 ]);
-
-const MANUAL_BONUS_CATEGORIES = [
-	"CALL DAVET",
-	"İLK 3 YATIRIMA SİGORTA",
-	"İLK ÇEKİM ÖDÜLÜ",
-	"5X KAZANC BONUSU",
-	"YATIR 2X BAŞLA",
-	"%20 DİSCOUNT",
-	"%25 KRİPTO YATIRIM BONUSU",
-	"1000X PRAGMATİC",
-	"100X EGT",
-	"KUMBARA BONUSU",
-	"JEST",
-	"%5 RELOAD",
-];
-const MANUAL_BONUS_CATEGORY_SET = new Set(MANUAL_BONUS_CATEGORIES);
-const APPROVED_PAYMENT_STATUS = "approved";
-const APPROVED_CRYPTO_STATES = ["completed", "success"];
-
-const getUserApprovedFinanceTotals = async (userIds) => {
-	const normalizedUserIds = userIds
-		.filter((userId) => mongoose.Types.ObjectId.isValid(userId))
-		.map((userId) => new mongoose.Types.ObjectId(userId));
-
-	const totalsByUser = new Map(
-		normalizedUserIds.map((userId) => [
-			userId.toString(),
-			{ totalDeposit: 0, totalWithdrawal: 0 },
-		]),
-	);
-
-	if (!normalizedUserIds.length) return totalsByUser;
-
-	const groupByUserAndType = (type) => ({
-		$group: {
-			_id: { user: "$user", type },
-			total: { $sum: "$amount" },
-		},
-	});
-
-	const [
-		cryptoAgg,
-		fiatDepositAgg,
-		fiatWithdrawalAgg,
-		bankAgg,
-		echopayzAgg,
-		forcelabAgg,
-		meelDevAgg,
-		galaxyPayAgg,
-		fluxKriptoAgg,
-		xPaymentsAgg,
-	] = await Promise.all([
-		CryptoTransaction.aggregate([
-			{
-				$match: {
-					user: { $in: normalizedUserIds },
-					state: { $in: APPROVED_CRYPTO_STATES },
-				},
-			},
-			groupByUserAndType("$type"),
-		]),
-		Deposit.aggregate([
-			{
-				$match: {
-					user: { $in: normalizedUserIds },
-					status: APPROVED_PAYMENT_STATUS,
-				},
-			},
-			groupByUserAndType("deposit"),
-		]),
-		Withdrawal.aggregate([
-			{
-				$match: {
-					user: { $in: normalizedUserIds },
-					status: APPROVED_PAYMENT_STATUS,
-				},
-			},
-			groupByUserAndType("withdraw"),
-		]),
-		BankTransfer.aggregate([
-			{
-				$match: {
-					user: { $in: normalizedUserIds },
-					status: APPROVED_PAYMENT_STATUS,
-				},
-			},
-			groupByUserAndType("$type"),
-		]),
-		EchoPayzTransaction.aggregate([
-			{
-				$match: {
-					user: { $in: normalizedUserIds },
-					status: APPROVED_PAYMENT_STATUS,
-				},
-			},
-			groupByUserAndType("deposit"),
-		]),
-		ForcelabFinanceTransaction.aggregate([
-			{
-				$match: {
-					user: { $in: normalizedUserIds },
-					status: APPROVED_PAYMENT_STATUS,
-				},
-			},
-			groupByUserAndType({ $ifNull: ["$providerType", "deposit"] }),
-		]),
-		MeelDevTransaction.aggregate([
-			{
-				$match: {
-					user: { $in: normalizedUserIds },
-					status: APPROVED_PAYMENT_STATUS,
-				},
-			},
-			groupByUserAndType("$type"),
-		]),
-		GalaxyPayTransaction.aggregate([
-			{
-				$match: {
-					user: { $in: normalizedUserIds },
-					status: APPROVED_PAYMENT_STATUS,
-				},
-			},
-			groupByUserAndType("$type"),
-		]),
-		FluxKriptoTransaction.aggregate([
-			{
-				$match: {
-					user: { $in: normalizedUserIds },
-					status: APPROVED_PAYMENT_STATUS,
-				},
-			},
-			groupByUserAndType("$type"),
-		]),
-		XPaymentTransaction.aggregate([
-			{
-				$match: {
-					user: { $in: normalizedUserIds },
-					status: APPROVED_PAYMENT_STATUS,
-				},
-			},
-			groupByUserAndType("$type"),
-		]),
-	]);
-
-	const addRowsToTotals = (rows) => {
-		for (const row of rows) {
-			const userTotals = totalsByUser.get(row._id.user.toString());
-			if (!userTotals) continue;
-
-			if (row._id.type === "deposit") {
-				userTotals.totalDeposit += Number(row.total || 0);
-			} else if (row._id.type === "withdraw") {
-				userTotals.totalWithdrawal += Number(row.total || 0);
-			}
-		}
-	};
-
-	[
-		cryptoAgg,
-		fiatDepositAgg,
-		fiatWithdrawalAgg,
-		bankAgg,
-		echopayzAgg,
-		forcelabAgg,
-		meelDevAgg,
-		galaxyPayAgg,
-		fluxKriptoAgg,
-		xPaymentsAgg,
-	].forEach(addRowsToTotals);
-
-	return totalsByUser;
-};
 
 const buildActiveWalletAggregationFields = () => ({
 	activeWallet: {
@@ -747,7 +588,7 @@ router.post("/users", checkPermission("users.create"), async (req, res) => {
 router.get("/users/:id", checkPermission("users.read"), async (req, res) => {
 	try {
 		const user = await User.findById(req.params.id)
-			.select("-local.password -ips")
+			.select("-local.password")
 			.populate("adminRole");
 		if (!user)
 			return res
@@ -1180,9 +1021,17 @@ router.patch(
 			});
 			await notifyAndDisconnectSuspendedUser(getIO(), updatedUser._id);
 
+			createAdminNotification(
+				"sanction",
+				"Kullanıcı Askıya Alındı",
+				`${updatedUser.username} kullanıcısı askıya alındı.`,
+				`/apps/user/view/${updatedUser._id}`,
+				{ username: updatedUser.username, userId: updatedUser._id, reason },
+			);
+
 			res.status(200).json({
 				success: true,
-				message: "Kullanıcı askıya alındı.",
+				message: "Kullanıcı ask����ya alındı.",
 				data: buildAdminUserResponseData(updatedUser),
 			});
 		} catch (error) {
@@ -1328,6 +1177,318 @@ router.patch(
 			});
 		} catch (error) {
 			console.error("Bet erişimi güncelleme hatası:", error);
+			res.status(500).json({ success: false, message: "Sunucu hatası" });
+		}
+	},
+);
+
+// 🔹 Kontroller sekmesi: hesap kısıtlamaları, kategori engelleri ve platform erişimi
+router.patch(
+	"/users/:id/controls",
+	checkPermission("users.update"),
+	async (req, res) => {
+		try {
+			const { id } = req.params;
+			if (!mongoose.Types.ObjectId.isValid(id)) {
+				return res.status(400).json({
+					success: false,
+					message: "Geçersiz kullanıcı ID.",
+				});
+			}
+
+			const user = await User.findById(id);
+			if (!user) {
+				return res
+					.status(404)
+					.json({ success: false, message: "Kullanıcı bulunamadı." });
+			}
+
+			const originalControls = user.controls
+				? user.controls.toObject?.() || user.controls
+				: {};
+
+			const boolFields = [
+				"withdrawalBlocked",
+				"depositBlocked",
+				"gameBlocked",
+				"tipBlocked",
+			];
+			const categoryFields = [
+				"slots",
+				"liveCasino",
+				"sportsBook",
+				"originals",
+			];
+			const platformFields = [
+				"affiliatePanel",
+				"partnerAccess",
+				"contentEditor",
+				"chatModerator",
+				"streamer",
+			];
+
+			const nextControls = {
+				withdrawalBlocked: Boolean(
+					originalControls.withdrawalBlocked,
+				),
+				depositBlocked: Boolean(originalControls.depositBlocked),
+				gameBlocked: Boolean(originalControls.gameBlocked),
+				tipBlocked: Boolean(originalControls.tipBlocked),
+				categoryRestrictions: {
+					slots: Boolean(
+						originalControls.categoryRestrictions?.slots,
+					),
+					liveCasino: Boolean(
+						originalControls.categoryRestrictions?.liveCasino,
+					),
+					sportsBook: Boolean(
+						originalControls.categoryRestrictions?.sportsBook,
+					),
+					originals: Boolean(
+						originalControls.categoryRestrictions?.originals,
+					),
+				},
+				platformAccess: {
+					affiliatePanel: Boolean(
+						originalControls.platformAccess?.affiliatePanel,
+					),
+					partnerAccess: Boolean(
+						originalControls.platformAccess?.partnerAccess,
+					),
+					contentEditor: Boolean(
+						originalControls.platformAccess?.contentEditor,
+					),
+					chatModerator: Boolean(
+						originalControls.platformAccess?.chatModerator,
+					),
+					streamer: Boolean(
+						originalControls.platformAccess?.streamer,
+					),
+				},
+			};
+
+			const changes = [];
+
+			boolFields.forEach((field) => {
+				if (typeof req.body?.[field] === "boolean") {
+					const from = nextControls[field];
+					const to = req.body[field];
+					if (from !== to) {
+						changes.push({ field: `controls.${field}`, from, to });
+					}
+					nextControls[field] = to;
+				}
+			});
+
+			if (req.body?.categoryRestrictions) {
+				categoryFields.forEach((field) => {
+					if (
+						typeof req.body.categoryRestrictions[field] ===
+						"boolean"
+					) {
+						const from = nextControls.categoryRestrictions[field];
+						const to = req.body.categoryRestrictions[field];
+						if (from !== to) {
+							changes.push({
+								field: `controls.categoryRestrictions.${field}`,
+								from,
+								to,
+							});
+						}
+						nextControls.categoryRestrictions[field] = to;
+					}
+				});
+			}
+
+			if (req.body?.platformAccess) {
+				platformFields.forEach((field) => {
+					if (typeof req.body.platformAccess[field] === "boolean") {
+						const from = nextControls.platformAccess[field];
+						const to = req.body.platformAccess[field];
+						if (from !== to) {
+							changes.push({
+								field: `controls.platformAccess.${field}`,
+								from,
+								to,
+							});
+						}
+						nextControls.platformAccess[field] = to;
+					}
+				});
+			}
+
+			nextControls.updatedAt = new Date();
+			user.controls = nextControls;
+			user.markModified("controls");
+
+			const updatedUser = await user.save();
+
+			if (changes.length) {
+				await createAdminUserAuditLog({
+					targetUser: updatedUser,
+					actorUser: req.adminUser || null,
+					action: "controls_update",
+					summary: "Kullanıcı kontrolleri güncellendi",
+					changes,
+					source: "admin-user-controls",
+					metadata: {
+						initiatedFrom: "admin-user-profile",
+					},
+				});
+			}
+
+			res.status(200).json({
+				success: true,
+				message: "Kullanıcı kontrolleri güncellendi.",
+				data: buildAdminUserResponseData(updatedUser),
+			});
+		} catch (error) {
+			console.error("Kullanıcı kontrolleri güncelleme hatası:", error);
+			res.status(500).json({ success: false, message: "Sunucu hatası" });
+		}
+	},
+);
+
+// 🔹 Kontroller sekmesi: kullanıcıyı bir partnerin/affiliate'in altına ata
+router.patch(
+	"/users/:id/partner",
+	checkPermission("users.update"),
+	async (req, res) => {
+		try {
+			const { id } = req.params;
+			if (!mongoose.Types.ObjectId.isValid(id)) {
+				return res.status(400).json({
+					success: false,
+					message: "Geçersiz kullanıcı ID.",
+				});
+			}
+
+			const identifier = String(req.body?.identifier || "").trim();
+			if (!identifier) {
+				return res.status(400).json({
+					success: false,
+					message: "Referans kodu veya kullanıcı ID'si giriniz.",
+				});
+			}
+
+			const user = await User.findById(id);
+			if (!user) {
+				return res
+					.status(404)
+					.json({ success: false, message: "Kullanıcı bulunamadı." });
+			}
+
+			const partnerQuery = mongoose.Types.ObjectId.isValid(identifier)
+				? { $or: [{ _id: identifier }, { "affiliates.code": identifier }] }
+				: { "affiliates.code": identifier };
+
+			const partner = await User.findOne(partnerQuery).select(
+				"_id username name affiliates.code",
+			);
+
+			if (!partner) {
+				return res.status(404).json({
+					success: false,
+					message: "Belirtilen partner bulunamadı.",
+				});
+			}
+
+			if (partner._id.toString() === user._id.toString()) {
+				return res.status(400).json({
+					success: false,
+					message: "Kullanıcı kendisine partner olarak atanamaz.",
+				});
+			}
+
+			const previousReferrer = user.affiliates?.referrer || null;
+			user.affiliates = user.affiliates || {};
+			user.affiliates.referrer = partner._id;
+			user.markModified("affiliates");
+
+			const updatedUser = await user.save();
+			await createAdminUserAuditLog({
+				targetUser: updatedUser,
+				actorUser: req.adminUser || null,
+				action: "partner_assign",
+				summary: "Kullanıcı bir partnere atandı",
+				changes: [
+					{
+						field: "affiliates.referrer",
+						from: previousReferrer,
+						to: partner._id,
+					},
+				],
+				source: "admin-user-controls",
+				metadata: {
+					initiatedFrom: "admin-user-profile",
+					partnerUsername: partner.username || partner.name || "",
+				},
+			});
+
+			res.status(200).json({
+				success: true,
+				message: "Kullanıcı partnere atandı.",
+				data: buildAdminUserResponseData(updatedUser),
+			});
+		} catch (error) {
+			console.error("Partner atama hatası:", error);
+			res.status(500).json({ success: false, message: "Sunucu hatası" });
+		}
+	},
+);
+
+router.delete(
+	"/users/:id/partner",
+	checkPermission("users.update"),
+	async (req, res) => {
+		try {
+			const { id } = req.params;
+			if (!mongoose.Types.ObjectId.isValid(id)) {
+				return res.status(400).json({
+					success: false,
+					message: "Geçersiz kullanıcı ID.",
+				});
+			}
+
+			const user = await User.findById(id);
+			if (!user) {
+				return res
+					.status(404)
+					.json({ success: false, message: "Kullanıcı bulunamadı." });
+			}
+
+			const previousReferrer = user.affiliates?.referrer || null;
+			if (user.affiliates) {
+				user.affiliates.referrer = null;
+				user.markModified("affiliates");
+			}
+
+			const updatedUser = await user.save();
+			await createAdminUserAuditLog({
+				targetUser: updatedUser,
+				actorUser: req.adminUser || null,
+				action: "partner_unassign",
+				summary: "Kullanıcının partner bağlantısı kaldırıldı",
+				changes: [
+					{
+						field: "affiliates.referrer",
+						from: previousReferrer,
+						to: null,
+					},
+				],
+				source: "admin-user-controls",
+				metadata: {
+					initiatedFrom: "admin-user-profile",
+				},
+			});
+
+			res.status(200).json({
+				success: true,
+				message: "Partner bağlantısı kaldırıldı.",
+				data: buildAdminUserResponseData(updatedUser),
+			});
+		} catch (error) {
+			console.error("Partner bağlantısı kaldırma hatası:", error);
 			res.status(500).json({ success: false, message: "Sunucu hatası" });
 		}
 	},
@@ -1582,7 +1743,7 @@ router.get("/users/:id/history", checkPermission("users.read"), async (req, res)
 			}
 
 			// 🔀 round_id bazında merge: aynı round için debit + credit (veya çoklu kısmi
-			// işlemler) tek satırda toplanır. round_id boş ise işlem kendi başına grup olur.
+			// işlemler) tek satırda toplan��r. round_id boş ise işlem kendi başına grup olur.
 			const groupKey = {
 				$cond: [
 					{
@@ -2016,15 +2177,193 @@ router.get(
 	},
 );
 
+// ═══════════════════════════════════════════════════════════════════════════
+// CRM: Oyuncu Segmentleri
+// ═══════════════════════════════════════════════════════════════════════════
+router.get(
+	"/player-segments/summary",
+	checkPermission("users.read"),
+	playerSegmentsController.getSummary,
+);
+
+router.get(
+	"/player-segments/:key/users",
+	checkPermission("users.read"),
+	playerSegmentsController.getUsers,
+);
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CRM: Tag Manager
+// ═══════════════════════════════════════════════════════════════════════════
+router.get("/tags", checkPermission("users.read"), tagsController.listTags);
+router.post("/tags", checkPermission("users.manage"), tagsController.createTag);
+router.put("/tags/:id", checkPermission("users.manage"), tagsController.updateTag);
+router.delete("/tags/:id", checkPermission("users.manage"), tagsController.deleteTag);
+router.get(
+	"/tags/:id/users",
+	checkPermission("users.read"),
+	tagsController.getTagUsers,
+);
+router.post(
+	"/tags/:id/assign",
+	checkPermission("users.manage"),
+	tagsController.assignUsers,
+);
+router.post(
+	"/tags/:id/unassign",
+	checkPermission("users.manage"),
+	tagsController.unassignUsers,
+);
+
 router.get(
 	"/manual-bonus-categories",
 	checkPermission(["finance.manualAdjustments.manage", "users.update"]),
-	async (req, res) => {
-		res.status(200).json({
-			success: true,
-			data: MANUAL_BONUS_CATEGORIES,
-		});
-	},
+	manualBonusCategoryController.getActiveCategoryNames,
+);
+
+router.get(
+	"/manual-bonus-categories/manage",
+	checkPermission(["finance.manualAdjustments.manage", "finance.promo.manage"]),
+	manualBonusCategoryController.getAllCategories,
+);
+
+router.post(
+	"/manual-bonus-categories",
+	checkPermission(["finance.manualAdjustments.manage", "finance.promo.manage"]),
+	manualBonusCategoryController.createCategory,
+);
+
+router.put(
+	"/manual-bonus-categories/:id",
+	checkPermission(["finance.manualAdjustments.manage", "finance.promo.manage"]),
+	manualBonusCategoryController.updateCategory,
+);
+
+router.delete(
+	"/manual-bonus-categories/:id",
+	checkPermission(["finance.manualAdjustments.manage", "finance.promo.manage"]),
+	manualBonusCategoryController.deleteCategory,
+);
+
+// Kayıp Bonusu (Loss Bonus)
+router.get(
+	"/loss-bonus/settings",
+	checkPermission(["finance.lossBonus.read", "finance.lossBonus.manage"]),
+	lossBonusController.getSettings,
+);
+
+router.put(
+	"/loss-bonus/settings",
+	checkPermission("finance.lossBonus.manage"),
+	lossBonusController.updateSettings,
+);
+
+router.get(
+	"/loss-bonus/claims",
+	checkPermission(["finance.lossBonus.read", "finance.lossBonus.manage"]),
+	lossBonusController.listClaims,
+);
+
+router.post(
+	"/loss-bonus/claims/:id/approve",
+	checkPermission("finance.lossBonus.manage"),
+	lossBonusController.approveClaim,
+);
+
+router.post(
+	"/loss-bonus/claims/:id/reject",
+	checkPermission("finance.lossBonus.manage"),
+	lossBonusController.rejectClaim,
+);
+
+router.get(
+	"/users/:id/loss-bonus",
+	checkPermission(["finance.lossBonus.read", "finance.lossBonus.manage", "users.read"]),
+	lossBonusController.getUserSummary,
+);
+
+// Reload Bonusu (Reload Bonus)
+router.get(
+	"/reload-bonus/settings",
+	checkPermission(["finance.reloadBonus.read", "finance.reloadBonus.manage"]),
+	reloadBonusController.getSettings,
+);
+
+router.put(
+	"/reload-bonus/settings",
+	checkPermission("finance.reloadBonus.manage"),
+	reloadBonusController.updateSettings,
+);
+
+router.post(
+	"/reload-bonus/preview",
+	checkPermission(["finance.reloadBonus.read", "finance.reloadBonus.manage"]),
+	reloadBonusController.preview,
+);
+
+router.get(
+	"/reload-bonus/assignments",
+	checkPermission(["finance.reloadBonus.read", "finance.reloadBonus.manage"]),
+	reloadBonusController.listAssignments,
+);
+
+router.post(
+	"/reload-bonus/assignments/:id/cancel",
+	checkPermission("finance.reloadBonus.manage"),
+	reloadBonusController.cancelAssignment,
+);
+
+router.get(
+	"/users/:id/reload-bonus",
+	checkPermission(["finance.reloadBonus.read", "finance.reloadBonus.manage", "users.read"]),
+	reloadBonusController.getUserSummary,
+);
+
+router.post(
+	"/users/:id/reload-bonus",
+	checkPermission("finance.reloadBonus.manage"),
+	reloadBonusController.createAssignment,
+);
+
+// Yatırım Bonusu (Deposit Bonus)
+router.get(
+	"/deposit-bonus/settings",
+	checkPermission(["finance.depositBonus.read", "finance.depositBonus.manage"]),
+	depositBonusController.getSettings,
+);
+
+router.put(
+	"/deposit-bonus/settings",
+	checkPermission("finance.depositBonus.manage"),
+	depositBonusController.updateSettings,
+);
+
+router.get(
+	"/deposit-bonus/claims",
+	checkPermission(["finance.depositBonus.read", "finance.depositBonus.manage"]),
+	depositBonusController.listClaims,
+);
+
+router.post(
+	"/deposit-bonus/claims/:id/approve",
+	checkPermission("finance.depositBonus.manage"),
+	depositBonusController.approveClaim,
+);
+
+router.post(
+	"/deposit-bonus/claims/:id/reject",
+	checkPermission("finance.depositBonus.manage"),
+	depositBonusController.rejectClaim,
+);
+
+router.get(
+	"/users/:id/deposit-bonus",
+	checkPermission([
+		"finance.depositBonus.read",
+		"finance.depositBonus.manage",
+		"users.read",
+	]),
+	depositBonusController.getUserSummary,
 );
 
 router.get(
@@ -2255,12 +2594,12 @@ router.post(
 
 			if (
 				kind === "bonus" &&
-				!MANUAL_BONUS_CATEGORY_SET.has(category)
+				!(await manualBonusCategoryController.isValidCategoryName(category))
 			) {
 				return res.status(400).json({
 					success: false,
 					message: "INVALID_MANUAL_BONUS_CATEGORY",
-					data: MANUAL_BONUS_CATEGORIES,
+					data: await manualBonusCategoryController.getActiveCategoryNamesRaw(),
 				});
 			}
 
@@ -2346,6 +2685,250 @@ router.get("/users/:id/transactions", checkPermission("users.read"), async (req,
 		res.status(500).json({ success: false, message: "Sunucu hatası." });
 	}
 });
+
+// 🔹 Kontroller sekmesi: dönemsel finansal rapor (yatırım/çekim/net kâr/bonus/çevrim/GGR)
+router.get(
+	"/users/:id/financial-report",
+	checkPermission("users.read"),
+	async (req, res) => {
+		try {
+			const { id } = req.params;
+			if (!mongoose.Types.ObjectId.isValid(id)) {
+				return res.status(400).json({
+					success: false,
+					message: "Geçersiz kullanıcı ID.",
+				});
+			}
+
+			const period = String(req.query.period || "monthly").toLowerCase();
+			const now = new Date();
+			let dateFrom = null;
+			let dateTo = null;
+
+			if (period === "daily") {
+				dateFrom = new Date(now);
+				dateFrom.setHours(0, 0, 0, 0);
+			} else if (period === "weekly") {
+				dateFrom = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+			} else if (period === "monthly") {
+				dateFrom = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+			} else if (period === "custom") {
+				dateFrom = req.query.dateFrom ? new Date(req.query.dateFrom) : null;
+				dateTo = req.query.dateTo ? new Date(req.query.dateTo) : null;
+				if (dateFrom && Number.isNaN(dateFrom.getTime())) dateFrom = null;
+				if (dateTo && Number.isNaN(dateTo.getTime())) dateTo = null;
+			}
+			// period === 'all' -> aralık yok
+
+			const userObjectId = new mongoose.Types.ObjectId(id);
+			const dateMatch = {};
+			if (dateFrom) dateMatch.$gte = dateFrom;
+			if (dateTo) dateMatch.$lte = dateTo;
+			const withDateRange = (base) =>
+				Object.keys(dateMatch).length
+					? { ...base, createdAt: dateMatch }
+					: base;
+
+			const sumAmount = (rows) =>
+				rows.reduce((sum, row) => sum + Number(row.total || 0), 0);
+			const countRows = (rows) =>
+				rows.reduce((sum, row) => sum + Number(row.count || 0), 0);
+
+			const [
+				depositAgg,
+				withdrawalAgg,
+				cryptoAgg,
+				bankAgg,
+				forcelabAgg,
+				meelDevAgg,
+				galaxyPayAgg,
+				fluxKriptoAgg,
+				xPaymentsAgg,
+				manualCreditAgg,
+				manualDebitAgg,
+				manualBonusAgg,
+				bonusHistoryAgg,
+				transactionAgg,
+			] = await Promise.all([
+				Deposit.aggregate([
+					{ $match: withDateRange({ user: userObjectId, status: "approved" }) },
+					{ $group: { _id: null, total: { $sum: "$amount" }, count: { $sum: 1 } } },
+				]),
+				Withdrawal.aggregate([
+					{ $match: withDateRange({ user: userObjectId, status: "approved" }) },
+					{ $group: { _id: null, total: { $sum: "$amount" }, count: { $sum: 1 } } },
+				]),
+				CryptoTransaction.aggregate([
+					{
+						$match: withDateRange({
+							user: userObjectId,
+							state: { $in: ["completed", "success"] },
+						}),
+					},
+					{ $group: { _id: "$type", total: { $sum: "$amount" }, count: { $sum: 1 } } },
+				]),
+				BankTransfer.aggregate([
+					{ $match: withDateRange({ user: userObjectId, status: "approved" }) },
+					{ $group: { _id: "$type", total: { $sum: "$amount" }, count: { $sum: 1 } } },
+				]),
+				ForcelabFinanceTransaction.aggregate([
+					{ $match: withDateRange({ user: userObjectId, status: "approved" }) },
+					{
+						$group: {
+							_id: { $ifNull: ["$providerType", "deposit"] },
+							total: { $sum: "$amount" },
+							count: { $sum: 1 },
+						},
+					},
+				]),
+				MeelDevTransaction.aggregate([
+					{ $match: withDateRange({ user: userObjectId, status: "approved" }) },
+					{ $group: { _id: "$type", total: { $sum: "$amount" }, count: { $sum: 1 } } },
+				]),
+				GalaxyPayTransaction.aggregate([
+					{ $match: withDateRange({ user: userObjectId, status: "approved" }) },
+					{ $group: { _id: "$type", total: { $sum: "$amount" }, count: { $sum: 1 } } },
+				]),
+				FluxKriptoTransaction.aggregate([
+					{ $match: withDateRange({ user: userObjectId, status: "approved" }) },
+					{ $group: { _id: "$type", total: { $sum: "$amount" }, count: { $sum: 1 } } },
+				]),
+				XPaymentTransaction.aggregate([
+					{ $match: withDateRange({ user: userObjectId, status: "approved" }) },
+					{ $group: { _id: "$type", total: { $sum: "$amount" }, count: { $sum: 1 } } },
+				]),
+				AdminManualAdjustment.aggregate([
+					{
+						$match: withDateRange({
+							targetUser: userObjectId,
+							kind: "balance",
+							direction: "credit",
+						}),
+					},
+					{ $group: { _id: null, total: { $sum: "$appliedAmount" } } },
+				]),
+				AdminManualAdjustment.aggregate([
+					{
+						$match: withDateRange({
+							targetUser: userObjectId,
+							kind: "balance",
+							direction: "debit",
+						}),
+					},
+					{ $group: { _id: null, total: { $sum: "$appliedAmount" } } },
+				]),
+				AdminManualAdjustment.aggregate([
+					{
+						$match: withDateRange({
+							targetUser: userObjectId,
+							kind: "bonus",
+							direction: "credit",
+						}),
+					},
+					{ $group: { _id: null, total: { $sum: "$appliedAmount" } } },
+				]),
+				BonusHistory.aggregate([
+					{
+						$match: Object.keys(dateMatch).length
+							? { userId: userObjectId, claimedAt: dateMatch }
+							: { userId: userObjectId },
+					},
+					{ $group: { _id: null, total: { $sum: "$amount" } } },
+				]),
+				Transactions.aggregate([
+					{
+						$match: Object.keys(dateMatch).length
+							? { user_code: id, created_at: dateMatch }
+							: { user_code: id },
+					},
+					{
+						$group: {
+							_id: null,
+							totalBet: { $sum: { $ifNull: ["$bet_money", 0] } },
+							totalWin: { $sum: { $ifNull: ["$win_money", 0] } },
+						},
+					},
+				]),
+			]);
+
+			const splitByType = (rows, type) =>
+				rows.filter((row) => row._id === type);
+
+			const totalDeposit =
+				Number(depositAgg[0]?.total || 0) +
+				sumAmount(splitByType(cryptoAgg, "deposit")) +
+				sumAmount(splitByType(bankAgg, "deposit")) +
+				sumAmount(splitByType(forcelabAgg, "deposit")) +
+				sumAmount(splitByType(meelDevAgg, "deposit")) +
+				sumAmount(splitByType(galaxyPayAgg, "deposit")) +
+				sumAmount(splitByType(fluxKriptoAgg, "deposit")) +
+				sumAmount(splitByType(xPaymentsAgg, "deposit"));
+
+			const depositCount =
+				Number(depositAgg[0]?.count || 0) +
+				countRows(splitByType(cryptoAgg, "deposit")) +
+				countRows(splitByType(bankAgg, "deposit")) +
+				countRows(splitByType(forcelabAgg, "deposit")) +
+				countRows(splitByType(meelDevAgg, "deposit")) +
+				countRows(splitByType(galaxyPayAgg, "deposit")) +
+				countRows(splitByType(fluxKriptoAgg, "deposit")) +
+				countRows(splitByType(xPaymentsAgg, "deposit"));
+
+			const totalWithdrawal =
+				Number(withdrawalAgg[0]?.total || 0) +
+				sumAmount(splitByType(cryptoAgg, "withdraw")) +
+				sumAmount(splitByType(bankAgg, "withdraw")) +
+				sumAmount(splitByType(forcelabAgg, "withdraw")) +
+				sumAmount(splitByType(meelDevAgg, "withdraw")) +
+				sumAmount(splitByType(galaxyPayAgg, "withdraw")) +
+				sumAmount(splitByType(fluxKriptoAgg, "withdraw")) +
+				sumAmount(splitByType(xPaymentsAgg, "withdraw"));
+
+			const withdrawalCount =
+				Number(withdrawalAgg[0]?.count || 0) +
+				countRows(splitByType(cryptoAgg, "withdraw")) +
+				countRows(splitByType(bankAgg, "withdraw")) +
+				countRows(splitByType(forcelabAgg, "withdraw")) +
+				countRows(splitByType(meelDevAgg, "withdraw")) +
+				countRows(splitByType(galaxyPayAgg, "withdraw")) +
+				countRows(splitByType(fluxKriptoAgg, "withdraw")) +
+				countRows(splitByType(xPaymentsAgg, "withdraw"));
+
+			const manualReceivable = Number(manualCreditAgg[0]?.total || 0);
+			const manualDebt = Number(manualDebitAgg[0]?.total || 0);
+			const bonusTotal =
+				Number(manualBonusAgg[0]?.total || 0) +
+				Number(bonusHistoryAgg[0]?.total || 0);
+			const turnover = Number(transactionAgg[0]?.totalBet || 0);
+			const ggr =
+				Number(transactionAgg[0]?.totalBet || 0) -
+				Number(transactionAgg[0]?.totalWin || 0);
+			const netProfit = totalDeposit - totalWithdrawal;
+
+			res.status(200).json({
+				success: true,
+				data: {
+					period,
+					dateFrom,
+					dateTo,
+					totalDeposit,
+					depositCount,
+					totalWithdrawal,
+					withdrawalCount,
+					netProfit,
+					manualReceivable,
+					manualDebt,
+					bonusTotal,
+					turnover,
+					ggr,
+				},
+			});
+		} catch (error) {
+			console.error("Finansal rapor hatası:", error);
+			res.status(500).json({ success: false, message: "Sunucu hatası" });
+		}
+	},
+);
 
 // Kullanıcının bonus geçmişini döndürme
 router.get("/users/:id/bonus-history", checkPermission("users.read"), async (req, res) => {
@@ -2511,10 +3094,7 @@ router.get("/users/:id/transactions/fiat-crypto", checkPermission("users.read"),
 			.json({ success: false, message: "Geçersiz kullanıcı ID" });
 
 	try {
-		// ✅ SiteSettings'den EchoPayz adını al
 		const siteSettings = await SiteSettings.findOne().lean();
-		const echopayzMethodName =
-			siteSettings?.echopayz?.name || "EchoPayz Havale";
 		const meelDevMethodName = siteSettings?.meelDev?.name || "MeelDev";
 		const galaxyPayMethodName = siteSettings?.galaxyPay?.name || "GalaxyPay";
 		const fluxKriptoMethodName =
@@ -2599,21 +3179,6 @@ router.get("/users/:id/transactions/fiat-crypto", checkPermission("users.read"),
 				iban: tx.iban,
 				accountName: tx.accountName,
 			}));
-
-		// ✅ EchoPayz işlemleri
-		const echopayzRaw = await EchoPayzTransaction.find({ user: id }).lean();
-		const echopayzDeposits = echopayzRaw.map((tx) => ({
-			amount: tx.amount,
-			type: "echopayz",
-			transaction: tx.referenceId || tx._id.toString(),
-			method: echopayzMethodName,
-			status: tx.status,
-			createdAt: tx.createdAt,
-			bank: tx.bank,
-			iban: tx.iban,
-			holderName: tx.holderName,
-			echopayzTransactionId: tx.echopayzTransactionId,
-		}));
 
 		// ✅ Forcelab Finance işlemleri
 		const forcelabRaw = await ForcelabFinanceTransaction.find({
@@ -2757,7 +3322,6 @@ router.get("/users/:id/transactions/fiat-crypto", checkPermission("users.read"),
 			...cryptoDeposits,
 			...fiatDeposits,
 			...bankDeposits,
-			...echopayzDeposits,
 			...forcelabDeposits,
 			...meelDevDeposits,
 			...galaxyPayDeposits,
@@ -3442,7 +4006,7 @@ router.put(
 				if (!Number.isFinite(parsedRewardAmount)) {
 					return res.status(400).json({
 						success: false,
-						message: "Ödül bakiyesi geçerli sayı olmalıdır.",
+						message: "Ödül bakiyesi ge��erli sayı olmalıdır.",
 					});
 				}
 				updates.rewardAmount = parsedRewardAmount;
@@ -4285,7 +4849,6 @@ router.get(
 				userBetsAgg,
 				cryptoAggAll,
 				bankAggAll,
-				echopayzAggAll,
 				galaxyPayAggAll,
 				fluxKriptoAggAll,
 				xPaymentsAggAll,
@@ -4352,32 +4915,6 @@ router.get(
 								{
 									$group: {
 										_id: "$type",
-										total: { $sum: "$amount" },
-									},
-								},
-							],
-						},
-					},
-				]),
-
-				// EchoPayzTransaction toplamları (tümü + 24h tek sorguda)
-				EchoPayzTransaction.aggregate([
-					{ $match: { status: "approved" } },
-					{
-						$facet: {
-							all: [
-								{
-									$group: {
-										_id: null,
-										total: { $sum: "$amount" },
-									},
-								},
-							],
-							last24h: [
-								{ $match: { createdAt: { $gte: yesterday } } },
-								{
-									$group: {
-										_id: null,
 										total: { $sum: "$amount" },
 									},
 								},
@@ -4462,7 +4999,6 @@ router.get(
 			// Facet sonuçlarını parse et
 			const cryptoFacet = cryptoAggAll[0] || { all: [], last24h: [] };
 			const bankFacet = bankAggAll[0] || { all: [], last24h: [] };
-			const echopayzFacet = echopayzAggAll[0] || { all: [], last24h: [] };
 			const galaxyPayFacet = galaxyPayAggAll[0] || { all: [], last24h: [] };
 			const fluxKriptoFacet = fluxKriptoAggAll[0] || { all: [], last24h: [] };
 			const xPaymentsFacet = xPaymentsAggAll[0] || { all: [], last24h: [] };
@@ -4478,17 +5014,11 @@ router.get(
 			const xPaymentsAllTotals = parseAggResult(xPaymentsFacet.all);
 			const xPaymentsLast24hTotals = parseAggResult(xPaymentsFacet.last24h);
 
-			// EchoPayz toplamları (sadece deposit)
-			const echopayzAllDeposits = echopayzFacet.all[0]?.total || 0;
-			const echopayzLast24hDeposits =
-				echopayzFacet.last24h[0]?.total || 0;
-
-			// Toplam hesaplama (Crypto + Bank + EchoPayz)
+			// Toplam hesaplama (Crypto + Bank + diğer sağlayıcılar)
 			const allTotals = {
 				deposits:
 					cryptoAllTotals.deposits +
 					bankAllTotals.deposits +
-					echopayzAllDeposits +
 					galaxyPayAllTotals.deposits +
 					fluxKriptoAllTotals.deposits +
 					xPaymentsAllTotals.deposits,
@@ -4503,7 +5033,6 @@ router.get(
 				deposits:
 					cryptoLast24hTotals.deposits +
 					bankLast24hTotals.deposits +
-					echopayzLast24hDeposits +
 					galaxyPayLast24hTotals.deposits +
 					fluxKriptoLast24hTotals.deposits +
 					xPaymentsLast24hTotals.deposits,
@@ -4538,10 +5067,6 @@ router.get(
 				bankWithdrawalsTry: bankAllTotals.withdrawals,
 				bankDeposits24hTry: bankLast24hTotals.deposits,
 				bankWithdrawals24hTry: bankLast24hTotals.withdrawals,
-
-				// Finans detay - EchoPayz
-				echopayzDepositsTry: echopayzAllDeposits,
-				echopayzDeposits24hTry: echopayzLast24hDeposits,
 
 				// Finans detay - GalaxyPay
 				galaxyPayDepositsTry: galaxyPayAllTotals.deposits,
@@ -4586,17 +5111,16 @@ router.get(
 	},
 );
 
-// Son 5 transaction endpointi (Crypto + Bank + EchoPayz birleşik)
+// Son 5 transaction endpointi (Crypto + Bank + diğer sağlayıcılar birleşik)
 router.get(
 	"/analytics/last-transactions",
 	checkPermission("dashboard.read"),
 	async (req, res) => {
 		try {
-			// Her üç koleksiyondan paralel olarak sadece 5'er tane çek
+			// Her koleksiyondan paralel olarak sadece 5'er tane çek
 			const [
 				cryptoTxs,
 				bankTxs,
-				echopayzTxs,
 				galaxyPayTxs,
 				fluxKriptoTxs,
 				xPaymentTxs,
@@ -4609,12 +5133,6 @@ router.get(
 					.lean(),
 				BankTransfer.find()
 					.select("type amount status createdAt user bankName")
-					.populate("user", "username")
-					.sort({ createdAt: -1 })
-					.limit(5)
-					.lean(),
-				EchoPayzTransaction.find()
-					.select("amount status createdAt user bank referenceId")
 					.populate("user", "username")
 					.sort({ createdAt: -1 })
 					.limit(5)
@@ -4663,18 +5181,6 @@ router.get(
 				currency: "TRY",
 			}));
 
-			const formattedEchoPayz = echopayzTxs.map((tx) => ({
-				_id: tx._id,
-				type: "deposit",
-				amount: tx.amount,
-				status: tx.status,
-				createdAt: tx.createdAt,
-				user: tx.user,
-				source: "echopayz",
-				bankName: tx.bank || "EchoPayz",
-				currency: "TRY",
-			}));
-
 			const formattedGalaxyPay = galaxyPayTxs.map((tx) => ({
 				_id: tx._id,
 				type: tx.type,
@@ -4720,7 +5226,6 @@ router.get(
 			const allTxs = [
 				...formattedCrypto,
 				...formattedBank,
-				...formattedEchoPayz,
 				...formattedGalaxyPay,
 				...formattedFluxKripto,
 				...formattedXPayments,
@@ -5015,9 +5520,17 @@ const createUnifiedPaymentListHandler = (type) => async (req, res) => {
 		const now = new Date();
 		const last24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 		const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-		const filters = [];
-
-		if (status) filters.push({ status: String(status) });
+		// Onaylı/tamamlanmış kabul edilen statüler. İstatistik kartları
+		// (Toplam/24s/Aylık) her zaman bu statülere göre hesaplanır; tablodaki
+		// Durum filtresi ise sadece listelenen işlemleri filtreler, istatistik
+		// kartlarını etkilemez.
+		const approvedStatuses = ["approved", "completed", "success"];
+		// `baseFilters`: tablo VE istatistik hesaplamasına uygulanan ortak
+		// filtreler (arama, tarih aralığı). Durum filtresi buraya dahil
+		// edilmez; sadece tablo (transactions/totalCount) dallarında ayrıca
+		// uygulanır — istatistik kartları her zaman onaylı statüye göre
+		// hesaplanır.
+		const baseFilters = [];
 
 		const createdAt = {};
 		if (startDate && !Number.isNaN(new Date(startDate).getTime())) {
@@ -5028,7 +5541,9 @@ const createUnifiedPaymentListHandler = (type) => async (req, res) => {
 			inclusiveEndDate.setHours(23, 59, 59, 999);
 			createdAt.$lte = inclusiveEndDate;
 		}
-		if (Object.keys(createdAt).length) filters.push({ createdAt });
+		if (Object.keys(createdAt).length) {
+			baseFilters.push({ createdAt });
+		}
 
 		const trimmedSearch = String(q || "").trim();
 		const pipeline = buildUnifiedPaymentPipeline(type);
@@ -5046,7 +5561,8 @@ const createUnifiedPaymentListHandler = (type) => async (req, res) => {
 
 		if (trimmedSearch) {
 			const searchRegex = new RegExp(escapeRegex(trimmedSearch), "i");
-			filters.push({
+
+			baseFilters.push({
 				$or: [
 					{ "user.username": searchRegex },
 					{ "user.local.email": searchRegex },
@@ -5057,13 +5573,20 @@ const createUnifiedPaymentListHandler = (type) => async (req, res) => {
 			});
 		}
 
-		if (filters.length) pipeline.push({ $match: { $and: filters } });
+		// Sadece ortak filtreler (arama + tarih) burada uygulanır. Durum
+		// filtresi facet içinde ayrıca uygulanır, çünkü tablo listesi
+		// kullanıcının seçtiği duruma göre filtrelenmeli, ama istatistik
+		// kartları her zaman onaylı işlemlere göre hesaplanmalı.
+		if (baseFilters.length) pipeline.push({ $match: { $and: baseFilters } });
+
+		const statusMatchStage = status ? [{ $match: { status: String(status) } }] : [];
 
 		pipeline.push(
 			{ $sort: { createdAt: -1, _id: -1 } },
 			{
 				$facet: {
 					transactions: [
+						...statusMatchStage,
 						{ $skip: (pageNumber - 1) * limitNumber },
 						{ $limit: limitNumber },
 						{
@@ -5085,11 +5608,16 @@ const createUnifiedPaymentListHandler = (type) => async (req, res) => {
 							},
 						},
 					],
+					// Tablonun toplam kayıt sayısı (pagination) — kullanıcının
+					// seçtiği durum filtresine göre değişir.
+					totalCount: [...statusMatchStage, { $count: "count" }],
+					// İstatistik kartları — durum filtresinden bağımsız olarak
+					// her zaman sadece onaylı/tamamlanmış işlemlere göre hesaplanır.
 					summary: [
+						{ $match: { status: { $in: approvedStatuses } } },
 						{
 							$group: {
 								_id: null,
-								total: { $sum: 1 },
 								totalAmount: { $sum: { $ifNull: ["$amount", 0] } },
 								last24hAmount: {
 									$sum: {
@@ -5118,12 +5646,13 @@ const createUnifiedPaymentListHandler = (type) => async (req, res) => {
 
 		const [result = {}] = await CryptoTransaction.aggregate(pipeline);
 		const summary = result.summary?.[0] || {};
+		const total = result.totalCount?.[0]?.count || 0;
 
 		res.json({
 			success: true,
 			data: {
 				transactions: result.transactions || [],
-				total: summary.total || 0,
+				total,
 				page: pageNumber,
 				stats: {
 					totalAmount: summary.totalAmount || 0,
@@ -5744,7 +6273,7 @@ router.get("/blackjack/history", checkPermission("games.read"), async (req, res)
 			};
 		}
 
-		// 📦 Blackjack kayıtlarını getir
+		// 📦 Blackjack kayıtlar��nı getir
 		const bets = await Blackjackbet.find(query)
 			.populate("user", "username local.email")
 			.sort({ createdAt: -1 })
@@ -6930,6 +7459,126 @@ router.get("/sports-bets/:betId", checkPermission("sports.read"), async (req, re
 	}
 });
 
+// Get sports bets for a specific user (used by the user detail "Sports Bet History" tab)
+router.get(
+	"/users/:id/sports-bets",
+	checkPermission(["sports.read", "users.read"]),
+	async (req, res) => {
+		try {
+			const { id } = req.params;
+
+			if (!mongoose.Types.ObjectId.isValid(id)) {
+				return res
+					.status(400)
+					.json({ success: false, message: "Geçersiz kullanıcı ID" });
+			}
+
+			const {
+				page = 1,
+				limit = 20,
+				status,
+				search,
+				sortBy = "createdAt",
+				sortOrder = "desc",
+			} = req.query;
+
+			const query = { user: new mongoose.Types.ObjectId(id) };
+
+			if (
+				status &&
+				["pending", "won", "lost", "cancelled", "cashout"].includes(status)
+			) {
+				query.status = status;
+			}
+
+			if (search) {
+				query.$or = [
+					{ externalCouponId: { $regex: search, $options: "i" } },
+					{ externalBetId: { $regex: search, $options: "i" } },
+				];
+			}
+
+			const pageNum = Math.max(1, parseInt(page) || 1);
+			const limitNum = Math.min(200, Math.max(1, parseInt(limit) || 20));
+			const skip = (pageNum - 1) * limitNum;
+			const sortOptions = { [sortBy]: sortOrder === "desc" ? -1 : 1 };
+
+			const [bets, total, summaryAgg] = await Promise.all([
+				SportsBet.find(query)
+					.sort(sortOptions)
+					.skip(skip)
+					.limit(limitNum)
+					.lean(),
+				SportsBet.countDocuments(query),
+				SportsBet.aggregate([
+					{ $match: { user: new mongoose.Types.ObjectId(id) } },
+					{
+						$group: {
+							_id: null,
+							totalRecords: { $sum: 1 },
+							totalStake: { $sum: { $ifNull: ["$amount", 0] } },
+							totalWin: { $sum: { $ifNull: ["$actualWin", 0] } },
+							totalWon: {
+								$sum: { $cond: [{ $eq: ["$status", "won"] }, 1, 0] },
+							},
+							totalLost: {
+								$sum: { $cond: [{ $eq: ["$status", "lost"] }, 1, 0] },
+							},
+							totalPending: {
+								$sum: {
+									$cond: [{ $eq: ["$status", "pending"] }, 1, 0],
+								},
+							},
+						},
+					},
+				]),
+			]);
+
+			const betIds = bets.map((b) => b._id);
+			const allEvents = await SportsBetEvent.find({ bet: { $in: betIds } })
+				.sort({ createdAt: 1 })
+				.lean();
+
+			const eventsByBet = {};
+			allEvents.forEach((ev) => {
+				const betId = ev.bet.toString();
+				if (!eventsByBet[betId]) eventsByBet[betId] = [];
+				eventsByBet[betId].push(ev);
+			});
+
+			const betsWithEvents = bets.map((bet) => ({
+				...bet,
+				details: eventsByBet[bet._id.toString()] || [],
+			}));
+
+			const summaryRaw = summaryAgg?.[0] || {};
+			const totalStake = Number(summaryRaw.totalStake || 0);
+			const totalWin = Number(summaryRaw.totalWin || 0);
+
+			res.json({
+				success: true,
+				data: betsWithEvents,
+				total,
+				page: pageNum,
+				limit: limitNum,
+				totalPages: Math.ceil(total / limitNum),
+				summary: {
+					totalRecords: Number(summaryRaw.totalRecords || 0),
+					totalStake,
+					totalWin,
+					netProfit: totalWin - totalStake,
+					totalWon: Number(summaryRaw.totalWon || 0),
+					totalLost: Number(summaryRaw.totalLost || 0),
+					totalPending: Number(summaryRaw.totalPending || 0),
+				},
+			});
+		} catch (error) {
+			console.error("User sports bets fetch error:", error);
+			res.status(500).json({ success: false, message: "Sunucu hatası" });
+		}
+	},
+);
+
 // Get sports bets statistics for admin
 router.get("/sports-bets-stats", checkPermission("sports.read"), async (req, res) => {
 	try {
@@ -7453,7 +8102,7 @@ router.get("/my-permissions", authenticateAdmin, async (req, res) => {
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 🎨 SITE SETTINGS ENDPOINTS
-// ═══════════════════════════════════════════════════════════════════════════
+// ═════════════════════════════════════════════════════════════��═════════════
 
 // Get site settings
 const sanitizeAdminSiteSettings = (settings) => {
@@ -7978,7 +8627,7 @@ router.put(
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 🖼️ AVATAR MANAGEMENT ENDPOINTS
-// ═══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════��═══
 
 // Avatar upload directory
 const avatarUploadDir = path.join(__dirname, "..", "..", "uploads", "avatars");
@@ -8353,7 +9002,7 @@ router.get(
 	},
 );
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════���═══════════════════════════
 // 🎨 CUSTOM CSS/JS ENDPOINTS
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -8434,7 +9083,7 @@ router.put(
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 📁 FILE MANAGER ENDPOINTS
-// ═══════════════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════════��══════
 
 // List all files
 router.get("/files", checkPermission("platform.read"), async (req, res) => {
@@ -8638,7 +9287,7 @@ router.delete(
 
 const CATEGORY_ICONS = ["lobby", "originals", "favorites", "hot"];
 
-// Kategori ikonlarını listele
+// Kategori ikonların�� listele
 router.get(
 	"/category-icons",
 	checkPermission("platform.read"),
@@ -8759,7 +9408,7 @@ router.post(
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Provider Ayarları (SiteSettings içinde)
-// ═══════════════════════════════════════════════════════════════════════════
+// ═════════════════════════════════════════��═════════════════════════════════
 
 const DEFAULT_PROVIDER_DISPLAY_NAMES = {
 	drakon: "Drakon",
@@ -8902,7 +9551,7 @@ router.put(
 
 // ═══════════════════════════════════════════════════════════════════════════
 // SMS OTP Ayarları (SiteSettings içinde)
-// ═══════════════════════════════════════════════════════════════════════════
+// ════════════════════════════════════��══════════════════════════════════════
 
 const normalizePositiveInteger = (value, fallback = 0) => {
 	const parsed = Number.parseInt(value, 10);
@@ -9008,7 +9657,7 @@ router.put(
 // E-posta Şablonları (SiteSettings içinde)
 // SMTP credential bilgileri backend/.env üzerinden okunur, sadece şablonlar
 // ve gönderici görünen ad/adres burada yönetilir.
-// ═══════════════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════���══════════════════
 
 const buildEmailTemplatesPayload = (siteSettings) => {
 	const tpl = (siteSettings && siteSettings.emailTemplates) || {};
@@ -9341,249 +9990,6 @@ router.put(
 		}
 	},
 );
-
-// ═══════════════════════════════════════════════════════════════════════════
-// EchoPayz Ayarları (SiteSettings içinde)
-// ═══════════════════════════════════════════════════════════════════════════
-
-const EchoPayzTransaction = require("../../database/models/EchoPayzTransaction");
-
-// EchoPayz ayarlarını getir (site-settings'ten)
-router.get(
-	"/echopayz/settings",
-	checkPermission("platform.read"),
-	async (req, res) => {
-		try {
-			let siteSettings = await SiteSettings.findOne();
-			if (!siteSettings) {
-				siteSettings = new SiteSettings();
-				await siteSettings.save();
-			}
-
-			// Varsayılan değerlerle birleştir
-			const echopayz = {
-				isActive: false,
-				name: "EchoPayz Havale",
-				logo: "https://panel.echopayz.com/logo.png",
-				minAmount: 100,
-				maxAmount: 100000,
-				apiKey: "",
-				apiSecret: "",
-				apiUrl: "https://api.echopayz.com/api/v1",
-				...siteSettings.echopayz,
-			};
-
-			// Callback URL'yi otomatik ekle (sadece görüntüleme için)
-			echopayz.callbackUrl = `${process.env.SERVER_BACKEND_URL}/payment/echopayz/callback`;
-
-			res.status(200).json({ success: true, data: echopayz });
-		} catch (error) {
-			console.error("EchoPayz ayarları getirilirken hata:", error);
-			res.status(500).json({
-				success: false,
-				error: "Ayarlar getirilirken bir hata oluştu.",
-			});
-		}
-	},
-);
-
-// EchoPayz ayarlarını güncelle (site-settings içinde)
-router.put(
-	"/echopayz/settings",
-	checkPermission("platform.update"),
-	async (req, res) => {
-		try {
-			const {
-				name,
-				logo,
-				minAmount,
-				maxAmount,
-				apiKey,
-				apiSecret,
-				apiUrl,
-				isActive,
-			} = req.body;
-
-			let siteSettings = await SiteSettings.findOne();
-			if (!siteSettings) {
-				siteSettings = new SiteSettings();
-			}
-
-			// echopayz objesini oluştur/güncelle
-			if (!siteSettings.echopayz) {
-				siteSettings.echopayz = {};
-			}
-
-			// Alanları güncelle (callbackUrl ve telegram alanları kaldırıldı)
-			if (name !== undefined) siteSettings.echopayz.name = name;
-			if (logo !== undefined) siteSettings.echopayz.logo = logo;
-			if (minAmount !== undefined)
-				siteSettings.echopayz.minAmount = minAmount;
-			if (maxAmount !== undefined)
-				siteSettings.echopayz.maxAmount = maxAmount;
-			if (apiKey !== undefined) siteSettings.echopayz.apiKey = apiKey;
-			if (apiSecret !== undefined)
-				siteSettings.echopayz.apiSecret = apiSecret;
-			if (apiUrl !== undefined) siteSettings.echopayz.apiUrl = apiUrl;
-			if (isActive !== undefined)
-				siteSettings.echopayz.isActive = isActive;
-
-			await siteSettings.save();
-
-			res.status(200).json({
-				success: true,
-				message: "EchoPayz ayarları güncellendi.",
-				data: siteSettings.echopayz,
-			});
-		} catch (error) {
-			console.error("EchoPayz ayarları güncellenirken hata:", error);
-			res.status(500).json({
-				success: false,
-				error: "Ayarlar güncellenirken bir hata oluştu.",
-			});
-		}
-	},
-);
-
-// EchoPayz istatistiklerini getir
-router.get(
-	"/echopayz/stats",
-	checkPermission("finance.read"),
-	async (req, res) => {
-		try {
-			const [stats] = await EchoPayzTransaction.aggregate([
-				{
-					$facet: {
-						total: [{ $count: "count" }],
-						pending: [
-							{ $match: { status: "pending" } },
-							{ $count: "count" },
-						],
-						approved: [
-							{ $match: { status: "approved" } },
-							{ $count: "count" },
-						],
-						rejected: [
-							{ $match: { status: "rejected" } },
-							{ $count: "count" },
-						],
-						totalAmount: [
-							{ $match: { status: "approved" } },
-							{ $group: { _id: null, sum: { $sum: "$amount" } } },
-						],
-					},
-				},
-			]);
-
-			res.status(200).json({
-				total: stats.total[0]?.count || 0,
-				pending: stats.pending[0]?.count || 0,
-				approved: stats.approved[0]?.count || 0,
-				rejected: stats.rejected[0]?.count || 0,
-				totalAmount: stats.totalAmount[0]?.sum || 0,
-			});
-		} catch (error) {
-			console.error("EchoPayz istatistikleri alınırken hata:", error);
-			res.status(500).json({
-				success: false,
-				error: "İstatistikler alınırken bir hata oluştu.",
-			});
-		}
-	},
-);
-
-// EchoPayz işlemlerini listele
-router.get(
-	"/echopayz/transactions",
-	checkPermission("finance.read"),
-	async (req, res) => {
-		try {
-			const page = parseInt(req.query.page) || 1;
-			const limit = parseInt(req.query.limit) || 20;
-			const skip = (page - 1) * limit;
-			const status = req.query.status;
-			const userId = req.query.userId;
-
-			const query = {};
-			if (status) query.status = status;
-			if (userId) query.user = userId;
-
-			// Parallelize fetching transactions, count and stats
-			const [transactions, total, stats] = await Promise.all([
-				EchoPayzTransaction.find(query)
-					.select(
-						"referenceId echopayzTransactionId amount status paymentUrl createdAt updatedAt user",
-					)
-					.populate("user", "username name local.email phone")
-					.sort({ createdAt: -1 })
-					.skip(skip)
-					.limit(limit)
-					.lean(),
-				EchoPayzTransaction.countDocuments(query),
-				EchoPayzTransaction.aggregate([
-					{ $match: query },
-					{
-						$group: {
-							_id: "$status",
-							count: { $sum: 1 },
-							totalAmount: { $sum: "$amount" },
-						},
-					},
-				]),
-			]);
-
-			res.status(200).json({
-				success: true,
-				data: {
-					transactions,
-					pagination: {
-						page,
-						limit,
-						total,
-						pages: Math.ceil(total / limit),
-					},
-					stats,
-				},
-			});
-		} catch (error) {
-			console.error("EchoPayz işlemleri getirilirken hata:", error);
-			res.status(500).json({
-				success: false,
-				error: "İşlemler getirilirken bir hata oluştu.",
-			});
-		}
-	},
-);
-
-// EchoPayz işlem detayı
-router.get(
-	"/echopayz/transactions/:id",
-	checkPermission("finance.read"),
-	async (req, res) => {
-		try {
-			const transaction = await EchoPayzTransaction.findById(
-				req.params.id,
-			).populate("user", "username name local.email wallets currency");
-
-			if (!transaction) {
-				return res
-					.status(404)
-					.json({ success: false, error: "İşlem bulunamadı." });
-			}
-
-			res.status(200).json({ success: true, data: transaction });
-		} catch (error) {
-			console.error("EchoPayz işlem detayı getirilirken hata:", error);
-			res.status(500).json({
-				success: false,
-				error: "İşlem detayı getirilirken bir hata oluştu.",
-			});
-		}
-	},
-);
-
-// Manual approve/reject endpoints removed for EchoPayz because the integration is automatic.
-// Status changes must come from EchoPayz callbacks (webhooks) handled at /payment/echopayz/callback.
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Forcelab Finance Admin Endpoints
@@ -10358,7 +10764,7 @@ router.post(
 	},
 );
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════���═══════════════════════
 // MeelDev Admin Endpoints
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -10542,7 +10948,7 @@ router.get(
 			});
 		} catch (error) {
 			console.error("MeelDev admin list hatası:", error);
-			res.status(500).json({ success: false, error: "İşlemler listelenirken hata oluştu." });
+			res.status(500).json({ success: false, error: "İşlemler listelenirken hata olu��tu." });
 		}
 	},
 );
@@ -10700,5 +11106,75 @@ router.post(
 		}
 	},
 );
+
+// @desc    Admin bildirimlerini listele (son 50 + okunmamış sayısı)
+// @route   GET /admin/notifications
+// @access  Admin
+router.get("/notifications", async (req, res) => {
+	try {
+		const adminId = req.adminUser._id;
+
+		const notifications = await AdminNotification.find()
+			.sort({ createdAt: -1 })
+			.limit(50)
+			.lean();
+
+		const unreadCount = await AdminNotification.countDocuments({
+			readBy: { $ne: adminId },
+		});
+
+		res.status(200).json({
+			success: true,
+			data: notifications,
+			unreadCount,
+		});
+	} catch (error) {
+		console.error("Admin notifications list error:", error.message);
+		res.status(500).json({ success: false, message: "Bildirimler alınamadı." });
+	}
+});
+
+// @desc    Bir bildirimi okundu olarak işaretle
+// @route   POST /admin/notifications/:id/read
+// @access  Admin
+router.post("/notifications/:id/read", async (req, res) => {
+	try {
+		const { id } = req.params;
+		if (!mongoose.Types.ObjectId.isValid(id)) {
+			return res.status(400).json({ success: false, message: "Geçersiz bildirim ID." });
+		}
+
+		const adminId = req.adminUser._id;
+
+		await AdminNotification.updateOne(
+			{ _id: id },
+			{ $addToSet: { readBy: adminId } },
+		);
+
+		res.status(200).json({ success: true });
+	} catch (error) {
+		console.error("Admin notification read error:", error.message);
+		res.status(500).json({ success: false, message: "Bildirim güncellenemedi." });
+	}
+});
+
+// @desc    Tüm bildirimleri okundu olarak işaretle
+// @route   POST /admin/notifications/read-all
+// @access  Admin
+router.post("/notifications/read-all", async (req, res) => {
+	try {
+		const adminId = req.adminUser._id;
+
+		await AdminNotification.updateMany(
+			{ readBy: { $ne: adminId } },
+			{ $addToSet: { readBy: adminId } },
+		);
+
+		res.status(200).json({ success: true });
+	} catch (error) {
+		console.error("Admin notifications read-all error:", error.message);
+		res.status(500).json({ success: false, message: "Bildirimler güncellenemedi." });
+	}
+});
 
 module.exports = router;

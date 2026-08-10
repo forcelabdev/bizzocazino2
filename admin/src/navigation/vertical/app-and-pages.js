@@ -57,6 +57,28 @@ export default [
     ],
   },
 
+  // 📇 CRM
+  {
+    title: "crm.title",
+    icon: { icon: "tabler-address-book" },
+    action: "read",
+    subject: "users",
+    children: [
+      {
+        title: "crm.playerSegments",
+        to: "apps-crm-player-segments",
+        action: "read",
+        subject: "users",
+      },
+      {
+        title: "crm.tagManager",
+        to: "apps-crm-tag-manager",
+        action: "read",
+        subject: "users",
+      },
+    ],
+  },
+
   // 💰 Finance
   {
     title: "finance.title",
@@ -77,17 +99,21 @@ export default [
         subject: "finance.withdraws",
       },
       {
-        title: "finance.echopayzMenu",
-        to: "apps-finance-echopayz",
-        action: "read",
-        subject: "finance",
-      },
-      {
         title: "manualAdjustments.title",
         to: "apps-finance-manual-adjustments",
         action: "read",
         subject: "users",
       },
+    ],
+  },
+
+  // 🏷️ Promotions
+  {
+    title: "finance.promotionsGroup",
+    icon: { icon: "tabler-discount-2" },
+    action: "read",
+    subject: "finance.promo",
+    children: [
       {
         title: "platform.campaigns",
         to: "apps-campaigns",
@@ -105,6 +131,36 @@ export default [
         to: "apps-promo",
         action: "read",
         subject: "finance.promo",
+      },
+      {
+        title: "platform.bonusNames",
+        to: "apps-bonus-names",
+        action: "read",
+        subject: "finance.manualAdjustments",
+      },
+      {
+        title: "platform.lossBonus",
+        to: "apps-loss-bonus",
+        action: "read",
+        subject: "finance.lossBonus",
+      },
+      {
+        title: "platform.depositBonus",
+        to: "apps-deposit-bonus",
+        action: "read",
+        subject: "finance.depositBonus",
+      },
+      {
+        title: "platform.reloadBonus",
+        to: "apps-reload-bonus",
+        action: "read",
+        subject: "finance.reloadBonus",
+      },
+      {
+        title: "platform.freeSpinBonus",
+        to: "apps-free-spin-bonus",
+        action: "read",
+        subject: "controlGame",
       },
     ],
   },
@@ -216,7 +272,7 @@ export default [
     children: [
       {
         title: "betinoviReports.wagerIndex",
-        to: "apps-reports-betinovi-wager-index",
+        to: "apps-reports-betinovi-wager",
         action: "read",
         subject: "reports.betinovi",
       },
@@ -348,6 +404,46 @@ export default [
         to: "apps-bank-accounts",
         action: "read",
         subject: "finance.bankAccounts",
+      },
+    ],
+  },
+
+  // 💳 Payment Methods
+  {
+    title: "paymentMethods.title",
+    icon: { icon: "tabler-credit-card" },
+    action: "read",
+    subject: "platform",
+    children: [
+      {
+        title: "paymentMethods.forcelabFinance",
+        to: "apps-payment-methods-forcelab-finance",
+        action: "read",
+        subject: "platform",
+      },
+      {
+        title: "paymentMethods.meelDev",
+        to: "apps-payment-methods-meeldev",
+        action: "read",
+        subject: "platform",
+      },
+      {
+        title: "paymentMethods.galaxyPay",
+        to: "apps-payment-methods-galaxypay",
+        action: "read",
+        subject: "platform",
+      },
+      {
+        title: "paymentMethods.fluxKripto",
+        to: "apps-payment-methods-fluxkripto",
+        action: "read",
+        subject: "platform",
+      },
+      {
+        title: "paymentMethods.xPayments",
+        to: "apps-payment-methods-xpayments",
+        action: "read",
+        subject: "platform",
       },
     ],
   },

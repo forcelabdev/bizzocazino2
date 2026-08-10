@@ -69,7 +69,6 @@ const ignoredCollections = [
 	//
 	"giftcodes",
 	"futuresbets",
-	"echopayztransactions",
 	"duelsbets",
 	"duelsgames",
 ];

@@ -15,7 +15,7 @@ const route = useRoute()
 const ability = useAppAbility()
 const permissionStore = usePermissionStore()
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || ""
 
 const refVForm = ref()
 const otpCode = ref("")

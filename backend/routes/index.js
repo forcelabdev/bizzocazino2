@@ -12,7 +12,6 @@ const Setting = require("../database/models/Setting");
 const SiteSettings = require("../database/models/SiteSettings");
 const User = require("../database/models/User");
 const BankTransfer = require("../database/models/BankTransfer");
-const EchoPayzTransaction = require("../database/models/EchoPayzTransaction");
 const CampaignTransaction = require("../database/models/CampaignTransaction");
 const ForcelabFinanceTransaction = require("../database/models/ForcelabFinanceTransaction");
 const GalaxyPayTransaction = require("../database/models/GalaxyPayTransaction");
@@ -39,7 +38,6 @@ const binance = require("./binance");
 const gamehistory = require("./gamehistory/recent");
 const bonusSettingRoutes = require("./bonusSetting");
 const pixRoutes = require("./payment/pix");
-const echopayzRoutes = require("./payment/echopayz");
 const forcelabFinanceRoutes = require("./payment/forcelabFinance");
 const meelDevRoutes = require("./payment/meelDev");
 const galaxyPayRoutes = require("./payment/galaxyPay");
@@ -52,7 +50,6 @@ const pockersGamesRoute = require("./pokerApi");
 router.use("/poker_api", pockersGamesRoute);
 router.use("/bonus-settings", bonusSettingRoutes);
 router.use("/payment/pix", pixRoutes);
-router.use("/payment/echopayz", echopayzRoutes);
 router.use("/payment/forcelab-finance", forcelabFinanceRoutes);
 router.use("/payment/meeldev", meelDevRoutes);
 router.use("/payment/galaxypay", galaxyPayRoutes);
@@ -115,16 +112,6 @@ router.get("/site-settings", async (req, res) => {
 			customCSS: settings.customCSS || "",
 			customJS: settings.customJS || "",
 			customHTML: settings.customHTML || "",
-
-			// EchoPayz: expose only public display settings (no API keys)
-			echopayz: {
-				isActive: settings.echopayz?.isActive || false,
-				name: settings.echopayz?.name || "EchoPayz Havale",
-				logo: settings.echopayz?.logo || null,
-				minAmount: settings.echopayz?.minAmount || 0,
-				maxAmount: settings.echopayz?.maxAmount || 0,
-				// Intentionally DO NOT include apiKey/apiSecret/apiUrl
-			},
 
 			forcelabFinance: {
 				isActive: settings.forcelabFinance?.isActive || false,
@@ -382,33 +369,7 @@ router.get(
 			note: tx.note,
 		}));
 
-		// EchoPayz işlemleri - SiteSettings'den ismi al
 		const siteSettings = await SiteSettings.findOne().lean();
-		const echopayzMethodName =
-			siteSettings?.echopayz?.name || "EchoPayz Havale";
-
-		const echopayzTransactions = await EchoPayzTransaction.find({
-			user: userId,
-		})
-			.sort({ createdAt: -1 })
-			.lean();
-
-		const normalizedEchoPayz = echopayzTransactions.map((tx) => ({
-			_id: tx._id,
-			amount: tx.amount,
-			title: echopayzMethodName,
-			type: "deposit",
-			status: tx.status, // pending | approved | rejected | cancelled | expired
-			method: "echopayz",
-			createdAt: tx.createdAt,
-			updatedAt: tx.updatedAt,
-			referenceId: tx.referenceId,
-			echopayzTransactionId: tx.echopayzTransactionId,
-			bank: tx.bank,
-			iban: tx.iban,
-			holderName: tx.holderName,
-			paymentUrl: tx.paymentUrl,
-		}));
 
 		// Kampanya işlemleri
 		const campaignTransactions = await CampaignTransaction.find({
@@ -545,7 +506,6 @@ router.get(
 		const allTransactions = [
 			...normalizedCrypto,
 			...normalizedBank,
-			...normalizedEchoPayz,
 			...normalizedCampaign,
 			...normalizedForcelab,
 			...normalizedGalaxyPay,
@@ -729,6 +689,23 @@ module.exports = (io) => {
 	router.use("/telegram-settings", require("./telegramSettings"));
 
 	router.use("/telegram", require("./telegram"));
+
+	// TEŞHİS: Gerçek IP zincirini görmek için geçici endpoint. Sorun çözülünce kaldırılacak.
+	router.get("/debug-ip", (req, res) => {
+		const { getClientIp } = require("../utils/ip");
+		res.status(200).json({
+			resolvedIp: getClientIp(req),
+			headers: {
+				"cf-connecting-ip": req.headers["cf-connecting-ip"] || null,
+				"true-client-ip": req.headers["true-client-ip"] || null,
+				"x-forwarded-for": req.headers["x-forwarded-for"] || null,
+				"x-real-ip": req.headers["x-real-ip"] || null,
+			},
+			expressIp: req.ip,
+			expressIps: req.ips,
+			remoteAddress: req.socket?.remoteAddress || null,
+		});
+	});
 
 	// ⚠️ GÜVENLİK: 404 Handler
 	router.use((req, res, next) => {

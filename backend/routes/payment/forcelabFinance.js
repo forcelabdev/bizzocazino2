@@ -16,6 +16,8 @@ const {
 	toSmallestUnit,
 	verifyWebhookSignature,
 } = require("../../utils/forcelabFinance");
+const { createAdminNotification } = require("../../utils/adminNotification");
+const { assertWithdrawalNotBlocked } = require("../../utils/bonusLock");
 
 const getSettings = async (requireActive = true) => {
 	let siteSettings = await SiteSettings.findOne();
@@ -659,6 +661,20 @@ router.post("/withdraw", authorizeUser(true), async (req, res) => {
 			return res.status(404).json({ success: false, error: "Kullanıcı bulunamadı." });
 		}
 
+		try {
+			await assertWithdrawalNotBlocked(user);
+		} catch (lockErr) {
+			if (lockErr.code === "WAGERING_REQUIREMENT_NOT_MET") {
+				return res.status(400).json({
+					success: false,
+					error: lockErr.message,
+					code: lockErr.code,
+					wagering: lockErr.wagering,
+				});
+			}
+			throw lockErr;
+		}
+
 		const providers = await resolveProviderList(settings);
 		const selectedProvider = providers.find(
 			(provider) => provider.slug === providerSlug && provider.isActive
@@ -790,6 +806,14 @@ router.post("/withdraw", authorizeUser(true), async (req, res) => {
 				...(metadata?.network ? { destination_network: metadata.network } : {}),
 			},
 		});
+
+		createAdminNotification(
+			"withdraw",
+			"Yeni Çekim Talebi",
+			`${user.username} kullanıcısı ${amountValue} ₺ tutarında Forcelab Finance çekim talebi oluşturdu.`,
+			"/apps/finance/withdraw",
+			{ provider: "Forcelab Finance", amount: amountValue, username: user.username, userId: user._id },
+		);
 
 		res.json({
 			success: true,

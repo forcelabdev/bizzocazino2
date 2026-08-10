@@ -6,6 +6,7 @@ const axios = require('axios');
 const crypto = require('crypto');
 const { authorizeUser } = require("../../middleware/auth");
 const { authenticateAdmin } = require("../../middleware/permission");
+const { assertWithdrawalNotBlocked } = require("../../utils/bonusLock");
 
 // ⚠️ GÜVENLİK: API Bilgileri environment variable'dan alınmalı
 const MERCHANT_SID = process.env.MAKSIPARA_MERCHANT_SID;
@@ -31,6 +32,21 @@ router.post('/create', authorizeUser(true), async (req, res) => {
 
         if (!user.name || !user.local.email) {
             return res.status(400).json({ error: 'Kullanıcı bilgileri eksik. Lütfen "name" ve "email" alanlarını doldurun.' });
+        }
+
+        // ⚠️ BONUS ÇEVRİM KONTROLÜ: Tamamlanmamış bir bonus çevrim şartı
+        // varsa çekim talebi oluşturulamaz.
+        try {
+            await assertWithdrawalNotBlocked(user);
+        } catch (lockErr) {
+            if (lockErr.code === 'WAGERING_REQUIREMENT_NOT_MET') {
+                return res.status(400).json({
+                    error: lockErr.message,
+                    code: lockErr.code,
+                    wagering: lockErr.wagering,
+                });
+            }
+            throw lockErr;
         }
 
         // ⚠️ GÜVENLİK: Minimum/maksimum çekim limiti kontrolü

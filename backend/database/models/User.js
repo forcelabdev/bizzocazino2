@@ -204,6 +204,79 @@ const userSchema = new mongoose.Schema(
 			updatedAt: { type: Date },
 		},
 
+		// Admin panelindeki "Kontroller" sekmesi tarafından yönetilen
+		// hesap kısıtlamaları ve platform erişim izinleri.
+		controls: {
+			withdrawalBlocked: { type: Boolean, default: false },
+			depositBlocked: { type: Boolean, default: false },
+			gameBlocked: { type: Boolean, default: false },
+			tipBlocked: { type: Boolean, default: false },
+			categoryRestrictions: {
+				slots: { type: Boolean, default: false },
+				liveCasino: { type: Boolean, default: false },
+				sportsBook: { type: Boolean, default: false },
+				originals: { type: Boolean, default: false },
+			},
+			platformAccess: {
+				affiliatePanel: { type: Boolean, default: false },
+				partnerAccess: { type: Boolean, default: false },
+				contentEditor: { type: Boolean, default: false },
+				chatModerator: { type: Boolean, default: false },
+				streamer: { type: Boolean, default: false },
+			},
+			updatedAt: { type: Date },
+		},
+
+		// CRM: Tag Manager üzerinden atanan etiketler
+		tags: {
+			type: [{ type: mongoose.Schema.Types.ObjectId, ref: "Tag" }],
+			default: [],
+		},
+
+		// Kayıp Bonusu: son talep edilen dönemin bitiş tarihi.
+		// Bir sonraki dönem bu tarihten (yoksa createdAt'ten) başlar.
+		lossBonus: {
+			lastClaimAt: { type: Date },
+		},
+
+		// Yatırım Bonusu: son talep edilen dönemin bitiş tarihi.
+		depositBonus: {
+			lastClaimAt: { type: Date },
+		},
+
+		// Paylaşımlı bonus kilidi: bir bonus alındığında (örn. Yatırım Bonusu)
+		// diğer bonusların talep edilmesini VE gerçek para çekimini engeller.
+		// Herhangi bir bonus servisi bu alanı okuyup/yazabilir.
+		// - wageringRequired > 0 ise kilit, çevrim tamamlanana kadar aktif kalır
+		//   (blockedUntil'e bakılmaz).
+		// - wageringRequired === 0 ise eski davranış geçerlidir: kilit sadece
+		//   blockedUntil saatine kadar aktiftir (sadece diğer bonusları engeller,
+		//   çekimi engellemez).
+		bonusLock: {
+			source: { type: String, default: "" }, // "deposit_bonus" | "loss_bonus"
+			claimId: { type: mongoose.Schema.Types.ObjectId, default: null },
+			claimModel: { type: String, default: "" }, // "DepositBonusClaim" | "LossBonusClaim"
+			bonusAmount: { type: Number, default: 0 },
+			wageringMultiplier: { type: Number, default: 0 },
+			wageringRequired: { type: Number, default: 0 },
+			wageringSince: { type: Date, default: null },
+			blockedUntil: { type: Date },
+			completedAt: { type: Date, default: null },
+		},
+
+		// Reload Bonusu kilidi: bonusLock'tan tamamen bağımsızdır (Reload,
+		// Yatırım/Kayıp Bonusu'nu bloklamaz ve onlardan bloklanmaz). Aktif bir
+		// Reload ataması varken kullanıcı çekim yapamaz; çevrim tamamlanan
+		// veya süresi biten Reload'lar bu kilidi otomatik serbest bırakır.
+		reloadLock: {
+			assignmentId: { type: mongoose.Schema.Types.ObjectId, default: null },
+			totalAmount: { type: Number, default: 0 },
+			wageringMultiplier: { type: Number, default: 0 },
+			wageringRequired: { type: Number, default: 0 },
+			wageringSince: { type: Date, default: null },
+			completedAt: { type: Date, default: null },
+		},
+
 		rakeback: {
 			earned: { type: Number, default: 0 },
 			available: { type: Number, default: 0 },
@@ -329,6 +402,7 @@ userSchema.index({ "affiliates.code": 1 });
 userSchema.index({ "web3.address": 1 }, { unique: true, sparse: true });
 userSchema.index({ phone: 1 }, { unique: true, sparse: true });
 userSchema.index({ "mfa.enabled": 1 });
+userSchema.index({ tags: 1 });
 
 const User = mongoose.model("User", userSchema);
 

@@ -179,6 +179,7 @@ const SiteSettingsSchema = new mongoose.Schema(
 				},
 				timeoutMs: { type: Number, default: 30000 },
 				methods: {
+					vendors: { type: String, default: "GetVendors", trim: true },
 					onlineUsers: { type: String, default: "GetCurrentPlayers", trim: true },
 					callList: { type: String, default: "GetCallList", trim: true },
 					callHistory: { type: String, default: "GetCallHistory", trim: true },
@@ -188,6 +189,8 @@ const SiteSettingsSchema = new mongoose.Schema(
 					changeUserSetting: { type: String, default: "ChangeUserSetting", trim: true },
 					getAgentSetting: { type: String, default: "GetAgentSetting", trim: true },
 					changeAgentSetting: { type: String, default: "ChangeAgentSetting", trim: true },
+					agentInfo: { type: String, default: "GetAgentInfo", trim: true },
+					subAgentBalances: { type: String, default: "GetSubAgentBalances", trim: true },
 				},
 			},
 		},
@@ -236,50 +239,6 @@ const SiteSettingsSchema = new mongoose.Schema(
 				type: String,
 				default: "",
 				trim: true,
-			},
-		},
-
-		// EchoPayz Ödeme Sistemi Ayarları
-		echopayz: {
-			// Aktif mi?
-			isActive: {
-				type: Boolean,
-				default: false,
-			},
-			// Görünen isim
-			name: {
-				type: String,
-				default: "EchoPayz Havale",
-			},
-			// Logo URL
-			logo: {
-				type: String,
-				default: "https://panel.echopayz.com/logo.png",
-			},
-			// Minimum yatırım tutarı (TL)
-			minAmount: {
-				type: Number,
-				default: 100,
-			},
-			// Maksimum yatırım tutarı (TL)
-			maxAmount: {
-				type: Number,
-				default: 100000,
-			},
-			// API Key (pk_ ile başlar)
-			apiKey: {
-				type: String,
-				default: "",
-			},
-			// API Secret (sk_ ile başlar)
-			apiSecret: {
-				type: String,
-				default: "",
-			},
-			// API Base URL
-			apiUrl: {
-				type: String,
-				default: "https://api.echopayz.com/api/v1",
 			},
 		},
 

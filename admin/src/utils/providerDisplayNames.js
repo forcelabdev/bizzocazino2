@@ -2,7 +2,7 @@ export const DEFAULT_PROVIDER_DISPLAY_NAMES = {
 	drakon: "Drakon",
 	nexus: "Nexus",
 	nexusggr: "Nexus GGR",
-	betinovi: "Betinovi",
+	betinovi: "Forcelab",
 	betcolabs: "Betcolabs",
 };
 

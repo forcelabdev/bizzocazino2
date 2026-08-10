@@ -1,5 +1,6 @@
 <script setup>
 import { useUserListStore } from '@/views/apps/user/useUserListStore'
+import UserTabMfaCodes from '@/views/apps/user/view/UserTabMfaCodes.vue'
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
@@ -177,5 +178,13 @@ const toggleIdentityVerification = async () => {
       v-model:isDialogVisible="isTwoFactorDialogOpen"
       :sms-code="smsVerificationNumber"
     />
+
+    <!-- MFA Codes -->
+    <VCol cols="12">
+      <UserTabMfaCodes
+        :selected-user-id="userId"
+        @updated="fetchUser"
+      />
+    </VCol>
   </VRow>
 </template>

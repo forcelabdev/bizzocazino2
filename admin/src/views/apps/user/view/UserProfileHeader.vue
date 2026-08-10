@@ -3,7 +3,7 @@ import { useUserListStore } from "@/views/apps/user/useUserListStore"
 import { getRoles, assignRoleToUser } from "@/services/roleService"
 import ability from "@/plugins/casl/ability"
 import { usePermissionStore } from "@/stores/permissionStore"
-import { avatarText, kFormatter } from "@core/utils/formatters"
+import { avatarText } from "@core/utils/formatters"
 import { useI18n } from "vue-i18n"
 
 const props = defineProps({
@@ -12,6 +12,8 @@ const props = defineProps({
     required: true,
   },
 })
+
+const emit = defineEmits(["updated"])
 
 const { t } = useI18n()
 
@@ -28,19 +30,6 @@ function showSnackbar(message, color = "success") {
   snackbar.value.visible = true
 }
 
-const copyAccountNumber = async () => {
-  const numericId = userData.value?.numericId
-  if (numericId === null || numericId === undefined) return
-
-  try {
-    await navigator.clipboard.writeText(String(numericId))
-    showSnackbar(t("accountNumberCopied"), "success")
-  } catch (error) {
-    console.error("Hesap numarası panoya kopyalanamadı:", error)
-    showSnackbar(t("copyFailed"), "error")
-  }
-}
-
 const isUserInfoEditDialogVisible = ref(false)
 const isRoleDialogVisible = ref(false)
 const userListStore = useUserListStore()
@@ -51,6 +40,13 @@ const canAssignRole = computed(() => ability.can("update", "roles"))
 const suspensionLoading = ref(false)
 const betAccessLoading = ref(false)
 
+watch(
+  () => props.userData,
+  value => {
+    userData.value = value
+  },
+)
+
 const isUserSuspended = computed(() => {
   const expire = userData.value?.ban?.expire
   if (!expire) return false
@@ -59,6 +55,7 @@ const isUserSuspended = computed(() => {
 })
 
 const isBetAccessBlocked = computed(() => userData.value?.betAccess?.blocked === true)
+const isEmailVerified = computed(() => userData.value?.local?.emailVerified === true)
 
 // Role assignment
 const roles = ref([])
@@ -114,6 +111,7 @@ const handleAssignRole = async () => {
     const response = await userListStore.fetchUser(userData.value._id)
 
     userData.value = response?.data?.data || userData.value
+    emit("updated", userData.value)
   } catch (error) {
     console.error("Error assigning role:", error)
     showSnackbar(
@@ -150,6 +148,7 @@ const updateUser = async updatedUser => {
     const refreshedUser = await userListStore.fetchUser(userData.value._id)
 
     userData.value = refreshedUser?.data?.data || response?.data || userData.value
+    emit("updated", userData.value)
     showSnackbar(message || t("userUpdated"), "success")
   } catch (err) {
     console.error("Update error:", err)
@@ -181,6 +180,7 @@ const toggleSuspension = async () => {
     }
 
     userData.value = response?.data || userData.value
+    emit("updated", userData.value)
   } catch (error) {
     console.error("Suspension update error:", error)
     showSnackbar(error.response?.data?.message || t("updateFailed"), "error")
@@ -211,6 +211,7 @@ const toggleBetAccess = async () => {
     })
 
     userData.value = response?.data || userData.value
+    emit("updated", userData.value)
     showSnackbar(response?.message || t("success"), "success")
   } catch (error) {
     console.error("Bet access update error:", error)
@@ -235,297 +236,139 @@ const resolveUserRoleVariant = role => {
 </script>
 
 <template>
-  <VRow>
-    <VCol cols="12">
-      <VCard v-if="userData">
-        <!-- Avatar + Name -->
-        <VCardText class="text-center pt-10">
-          <VAvatar
-            rounded
-            :size="100"
-            :color="!userData.avatar ? 'primary' : undefined"
-            :variant="!userData.avatar ? 'tonal' : undefined"
+  <VCard v-if="userData">
+    <VCardText class="d-flex flex-wrap justify-space-between align-center gap-6 pa-6">
+      <div class="d-flex align-center gap-4">
+        <VAvatar
+          rounded
+          :size="72"
+          :color="!userData.avatar ? 'primary' : undefined"
+          :variant="!userData.avatar ? 'tonal' : undefined"
+        >
+          <VImg
+            v-if="userData.avatar"
+            :src="userData.avatar"
+          />
+          <span
+            v-else
+            class="text-h4 font-weight-medium"
           >
-            <VImg
-              v-if="userData.avatar"
-              :src="userData.avatar"
-            />
-            <span
-              v-else
-              class="text-5xl font-weight-medium"
+            {{ avatarText(userData.name) }}
+          </span>
+        </VAvatar>
+
+        <div>
+          <div class="d-flex align-center gap-2 flex-wrap">
+            <h5 class="text-h5">
+              {{ userData.name || userData.username }}
+            </h5>
+            <VChip
+              label
+              size="small"
+              :color="resolveUserRoleVariant(userData.rank).color"
+              class="text-capitalize"
             >
-              {{ avatarText(userData.name) }}
-            </span>
-          </VAvatar>
+              <VIcon
+                :icon="resolveUserRoleVariant(userData.rank).icon"
+                size="14"
+                class="me-1"
+              />
+              {{ userData.rank }}
+            </VChip>
+            <VChip
+              v-if="userData.rank === 'admin' && userData.adminRole"
+              size="small"
+              :color="userData.adminRole.color || 'primary'"
+            >
+              {{ userData.adminRole.displayName }}
+            </VChip>
+          </div>
 
-          <h6 class="text-h4 mt-4">
-            {{ userData.name }}
-          </h6>
+          <div class="d-flex align-center gap-2 flex-wrap mt-2">
+            <VChip
+              size="x-small"
+              variant="tonal"
+              :color="isUserSuspended ? 'error' : 'success'"
+            >
+              {{ isUserSuspended ? t("suspended") : t("active") }}
+            </VChip>
+            <VChip
+              size="x-small"
+              variant="tonal"
+              :color="isBetAccessBlocked ? 'warning' : 'success'"
+            >
+              <VIcon
+                :icon="isBetAccessBlocked ? 'tabler-device-gamepad-2-off' : 'tabler-device-gamepad-2'"
+                size="12"
+                class="me-1"
+              />
+              {{ isBetAccessBlocked ? t("betAccess.block") : t("betAccess.restore") }}
+            </VChip>
+            <VChip
+              size="x-small"
+              variant="tonal"
+              :color="isEmailVerified ? 'success' : 'secondary'"
+            >
+              <VIcon
+                icon="tabler-mail-check"
+                size="12"
+                class="me-1"
+              />
+              {{ isEmailVerified ? t("emailVerified") : t("emailNotVerified") }}
+            </VChip>
+          </div>
+        </div>
+      </div>
 
-          <VChip
-            label
-            :color="resolveUserRoleVariant(userData.rank).color"
-            size="small"
-            class="text-capitalize mt-3"
-          >
-            {{ t("totalBet") }}
-            {{ kFormatter(userData.stats?.bet || 0) }}
-            {{ userData.fiatCurrency }}
-          </VChip>
-        </VCardText>
-
-        <!-- Deposit & Withdraw -->
-        <VCardText>
-          <VRow class="text-center">
-            <VCol cols="6">
-              <VAvatar
-                size="38"
-                rounded
-                color="success"
-                variant="tonal"
-                class="mb-2"
-              >
-                <VIcon icon="tabler-currency-dollar" />
-              </VAvatar>
-              <h6 class="text-h6">
-                {{ kFormatter(userData.stats?.deposit || 0) }}
-                {{ userData.fiatCurrency }}
-              </h6>
-              <span class="text-sm">{{ t("deposit") }}</span>
-            </VCol>
-
-            <VCol cols="6">
-              <VAvatar
-                size="38"
-                rounded
-                color="error"
-                variant="tonal"
-                class="mb-2"
-              >
-                <VIcon icon="tabler-arrow-bar-to-down" />
-              </VAvatar>
-              <h6 class="text-h6">
-                {{ kFormatter(userData.stats?.withdraw || 0) }}
-                {{ userData.fiatCurrency }}
-              </h6>
-              <span class="text-sm">{{ t("withdraw") }}</span>
-            </VCol>
-          </VRow>
-        </VCardText>
-
-        <VDivider />
-
-        <!-- Details -->
-        <VCardText>
-          <p class="text-sm text-uppercase text-disabled mb-2">
-            {{ t("details") }}
-          </p>
-
-          <VTable density="compact">
-            <tbody>
-              <tr>
-                <td>
-                  <strong>{{ t("username") }}</strong>
-                </td>
-                <td>{{ userData.username }}</td>
-              </tr>
-              <tr>
-                <td>
-                  <strong>{{ t("accountNumber") }}</strong>
-                </td>
-                <td>
-                  <button
-                    v-if="userData.numericId !== null && userData.numericId !== undefined"
-                    type="button"
-                    class="d-inline-flex align-center text-body-2 account-number-copy"
-                    :title="t('copyAccountNumber')"
-                    :aria-label="t('copyAccountNumber')"
-                    @click="copyAccountNumber"
-                  >
-                    <span>{{ userData.numericId }}</span>
-                    <VIcon
-                      icon="tabler-copy"
-                      size="15"
-                      class="ms-1"
-                    />
-                  </button>
-                  <span v-else>—</span>
-                </td>
-              </tr>
-              <tr>
-                <td>
-                  <strong>{{ t("email") }}</strong>
-                </td>
-                <td>{{ userData.local?.email }}</td>
-              </tr>
-              <tr>
-                <td>
-                  <strong>{{ t("identity") }}</strong>
-                </td>
-                <td>{{ userData.identity?.idNumber }}</td>
-              </tr>
-              <tr>
-                <td>
-                  <strong>{{ t("phone") }}</strong>
-                </td>
-                <td>{{ userData.phone }}</td>
-              </tr>
-              <tr>
-                <td>
-                  <strong>{{ t("wallets.wallets") }}</strong>
-                </td>
-                <td>
-                  <VMenu>
-                    <template #activator="{ props: activatorProps }">
-                      <VChip
-                        v-bind="activatorProps"
-                        color="primary"
-                        size="small"
-                        label
-                        class="cursor-pointer"
-                      >
-                        {{
-                          userData.activeWallet
-                            ?.coinType
-                        }}:
-                        {{
-                          userData.activeWallet
-                            ?.balance
-                        }}
-                      </VChip>
-                    </template>
-
-                    <VList>
-                      <VListSubheader>
-                        {{
-                          t("allWallets")
-                        }}
-                      </VListSubheader>
-                      <VListItem
-                        v-for="wallet in userData.wallets"
-                        :key="
-                          wallet.coinType +
-                            wallet.chain +
-                            wallet.type
-                        "
-                      >
-                        <VListItemTitle>
-                          {{ wallet.coinType }} ({{
-                            wallet.chain
-                          }}
-                          - {{ wallet.type }}):
-                          {{ wallet.balance }}
-                        </VListItemTitle>
-                      </VListItem>
-                    </VList>
-                  </VMenu>
-                </td>
-              </tr>
-              <tr>
-                <td>
-                  <strong>{{ t("fiatCurrency") }}</strong>
-                </td>
-                <td>{{ userData.fiatCurrency }}</td>
-              </tr>
-              <tr>
-                <td>
-                  <strong>{{ t("shop.coinBalance") }}</strong>
-                </td>
-                <td>{{ userData.currency?.coins || 0 }}</td>
-              </tr>
-              <tr>
-                <td>
-                  <strong>{{ t("affiliates.redeemedCode") }}</strong>
-                </td>
-                <td>
-                  <VChip
-                    v-if="userData.affiliates?.redeemedCode"
-                    color="info"
-                    size="small"
-                    label
-                  >
-                    {{ userData.affiliates.redeemedCode }}
-                  </VChip>
-                  <span v-else>-</span>
-                </td>
-              </tr>
-              <tr>
-                <td>
-                  <strong>{{ t("role") }}</strong>
-                </td>
-                <td>
-                  {{ userData.rank }}
-                  <VChip
-                    v-if="
-                      userData.rank === 'admin' &&
-                        userData.adminRole
-                    "
-                    :color="
-                      userData.adminRole.color ||
-                        'primary'
-                    "
-                    size="x-small"
-                    class="ms-2"
-                  >
-                    {{ userData.adminRole.displayName }}
-                  </VChip>
-                </td>
-              </tr>
-            </tbody>
-          </VTable>
-        </VCardText>
-
-        <!-- Edit / Suspend / Role -->
-        <VCardText class="d-flex justify-center gap-3 flex-wrap">
-          <VBtn
-            v-if="canEditUser"
-            variant="elevated"
-            @click="isUserInfoEditDialogVisible = true"
-          >
-            {{ t("edit") }}
-          </VBtn>
-          <VBtn
-            v-if="userData.rank === 'admin' && canAssignRole"
-            variant="tonal"
-            color="info"
-            @click="openRoleDialog"
-          >
-            <VIcon
-              icon="tabler-shield-cog"
-              class="me-1"
-            />
-            {{ t("roles.assignRole") }}
-          </VBtn>
-          <VBtn
-            variant="tonal"
-            :color="isUserSuspended ? 'success' : 'error'"
-            :loading="suspensionLoading"
-            :disabled="!canEditUser"
-            @click="toggleSuspension"
-          >
-            <VIcon
-              :icon="isUserSuspended ? 'tabler-user-check' : 'tabler-user-pause'"
-              class="me-1"
-            />
-            {{ isUserSuspended ? t("unsuspend") : t("suspend") }}
-          </VBtn>
-          <VBtn
-            variant="tonal"
-            :color="isBetAccessBlocked ? 'success' : 'warning'"
-            :loading="betAccessLoading"
-            :disabled="!canEditUser"
-            @click="toggleBetAccess"
-          >
-            <VIcon
-              :icon="isBetAccessBlocked ? 'tabler-device-gamepad-2' : 'tabler-device-gamepad-2-off'"
-              class="me-1"
-            />
-            {{ isBetAccessBlocked ? t("betAccess.restore") : t("betAccess.block") }}
-          </VBtn>
-        </VCardText>
-      </VCard>
-    </VCol>
-  </VRow>
+      <div class="d-flex gap-3 flex-wrap">
+        <VBtn
+          v-if="canEditUser"
+          variant="elevated"
+          @click="isUserInfoEditDialogVisible = true"
+        >
+          {{ t("edit") }}
+        </VBtn>
+        <VBtn
+          v-if="userData.rank === 'admin' && canAssignRole"
+          variant="tonal"
+          color="info"
+          @click="openRoleDialog"
+        >
+          <VIcon
+            icon="tabler-shield-cog"
+            class="me-1"
+          />
+          {{ t("roles.assignRole") }}
+        </VBtn>
+        <VBtn
+          variant="tonal"
+          :color="isUserSuspended ? 'success' : 'error'"
+          :loading="suspensionLoading"
+          :disabled="!canEditUser"
+          @click="toggleSuspension"
+        >
+          <VIcon
+            :icon="isUserSuspended ? 'tabler-user-check' : 'tabler-user-pause'"
+            class="me-1"
+          />
+          {{ isUserSuspended ? t("unsuspend") : t("suspend") }}
+        </VBtn>
+        <VBtn
+          variant="tonal"
+          :color="isBetAccessBlocked ? 'success' : 'warning'"
+          :loading="betAccessLoading"
+          :disabled="!canEditUser"
+          @click="toggleBetAccess"
+        >
+          <VIcon
+            :icon="isBetAccessBlocked ? 'tabler-device-gamepad-2' : 'tabler-device-gamepad-2-off'"
+            class="me-1"
+          />
+          {{ isBetAccessBlocked ? t("betAccess.restore") : t("betAccess.block") }}
+        </VBtn>
+      </div>
+    </VCardText>
+  </VCard>
 
   <!-- Edit Dialog -->
   <UserInfoEditDialog
@@ -664,17 +507,3 @@ const resolveUserRoleVariant = role => {
     {{ snackbar.message }}
   </VSnackbar>
 </template>
-
-<style lang="scss" scoped>
-.cursor-pointer {
-	cursor: pointer;
-}
-
-.account-number-copy {
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-}
-</style>

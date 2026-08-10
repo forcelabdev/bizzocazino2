@@ -1,5 +1,6 @@
 <script setup>
 import { fetchTowersHistory } from '@/services/historyService'
+import { formatCoinType } from '@/utils/currency'
 import { onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { VDataTableServer } from 'vuetify/labs/VDataTable'
@@ -130,7 +131,7 @@ watch([page, itemsPerPage, search, startDate, endDate, state], loadData)
 
       <!-- 🪙 Coin Type -->
       <template #item.coinType="{ item }">
-        {{ item.raw.coinType || '—' }}
+        {{ formatCoinType(item.raw.coinType) || '—' }}
       </template>
 
       <!-- 🔗 Chain -->

@@ -16,6 +16,7 @@ const {
   cashierCryptoGetPrices,
   cashierCryptoGenerateAddress,
 } = require("../../../utils/cashier/crypto");
+const { createAdminNotification } = require("../../../utils/adminNotification");
 
 const cashierGetCryptoDataSocket = async (io, socket, user, data, callback) => {
   try {
@@ -168,6 +169,14 @@ const cashierSendCryptoWithdrawSocket = async (io, socket, user, data, callback)
       user: updatedUser,
       transaction: newTx.toObject()
     });
+
+    createAdminNotification(
+      "withdraw",
+      "Yeni Çekim Talebi",
+      `${freshUser.username || "Kullanıcı"} kullanıcısı ${amount} ₺ tutarında Kripto (${coinType.toUpperCase()}) çekim talebi oluşturdu.`,
+      "/apps/finance/withdraw",
+      { provider: "Kripto", amount, username: freshUser.username, userId: user._id, coinType }
+    );
 
     socketRemoveAntiSpam(user._id);
   } catch (err) {

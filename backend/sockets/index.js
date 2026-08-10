@@ -11,6 +11,7 @@ module.exports = (io) => {
 	require("./upgrader")(io);
 	require("./cashier")(io);
 	require("./admin")(io);
+	require("./adminPanel")(io);
 	require("./wingo")(io);
 	require("./turbo")(io);
 	require("./trade")(io);

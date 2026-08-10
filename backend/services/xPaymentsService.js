@@ -11,17 +11,19 @@ const {
 	normalizeXPaymentsSettings,
 } = require("../utils/xPayments");
 const {
-	emitUserBalance,
 	getActiveWallet,
 	updateUserBalance,
+	emitUserBalance,
 } = require("../utils/wallet");
+const { assertWithdrawalNotBlocked } = require("../utils/bonusLock");
 
 class XPaymentsServiceError extends Error {
-	constructor(message, statusCode = 400, code = "XPAYMENTS_ERROR") {
+	constructor(message, statusCode = 400, code = "XPAYMENTS_ERROR", details = null) {
 		super(message);
 		this.name = "XPaymentsServiceError";
 		this.statusCode = statusCode;
 		this.code = code;
+		this.details = details;
 	}
 }
 
@@ -97,6 +99,20 @@ const createPendingXPaymentsWithdraw = async ({
 					404,
 					"USER_NOT_FOUND",
 				);
+			}
+
+			try {
+				await assertWithdrawalNotBlocked(user);
+			} catch (lockErr) {
+				if (lockErr.code === "WAGERING_REQUIREMENT_NOT_MET") {
+					throw new XPaymentsServiceError(
+						lockErr.message,
+						400,
+						lockErr.code,
+						{ wagering: lockErr.wagering },
+					);
+				}
+				throw lockErr;
 			}
 
 			const activeWallet = getActiveWallet(user);

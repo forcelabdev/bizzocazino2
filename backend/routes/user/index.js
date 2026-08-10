@@ -23,6 +23,240 @@ const {
 } = require("../../services/mfaService");
 const { maskEmailAddress } = require("../../utils/mfa");
 const { RIVO_WALLET } = require("../../utils/rivoWallet");
+const lossBonusService = require("../../services/lossBonusService");
+const depositBonusService = require("../../services/depositBonusService");
+const reloadBonusService = require("../../services/reloadBonusService");
+const { evaluateBonusLock, evaluateReloadLock } = require("../../utils/bonusLock");
+
+const DEPOSIT_BONUS_ERROR_MESSAGES = {
+	USER_NOT_FOUND: "Kullanıcı bulunamadı.",
+	DEPOSIT_BONUS_DISABLED: "Yatırım bonusu şu anda aktif değil.",
+	OTHER_BONUS_BLOCKED:
+		"Yakın zamanda alınan bir bonus nedeniyle şu anda başka bonus talep edemezsiniz.",
+	BET_PLACED_SINCE_DEPOSIT:
+		"Yatırımınızdan sonra bir oyuna/bahse katıldığınız için bu bonusu talep edemezsiniz.",
+	NO_DEPOSIT_IN_PERIOD: "Talep edebileceğiniz bir yatırımınız bulunmuyor.",
+	DEPOSIT_BELOW_MINIMUM: "Yatırım tutarınız minimumun altında.",
+	DEPOSIT_ABOVE_MAXIMUM: "Yatırım tutarınız maksimumun üzerinde.",
+	CLAIM_IN_PROGRESS: "Talebiniz işleniyor, lütfen tekrar deneyin.",
+};
+
+const LOSS_BONUS_ERROR_MESSAGES = {
+	USER_NOT_FOUND: "Kullanıcı bulunamadı.",
+	LOSS_BONUS_DISABLED: "Kayıp bonusu şu anda aktif değil.",
+	NO_LOSS_IN_PERIOD:
+		"Bu dönemde kaybınız olmadığı için bonus talep edemezsiniz.",
+	LOSS_BELOW_MINIMUM: "Net kaybınız minimum tutarın altında.",
+	CLAIM_IN_PROGRESS: "Talebiniz işleniyor, lütfen tekrar deneyin.",
+};
+
+const RELOAD_BONUS_ERROR_MESSAGES = {
+	NO_ACTIVE_RELOAD: "Aktif bir Reload Bonusunuz bulunmuyor.",
+	RELOAD_EXPIRED: "Reload Bonusunuzun süresi doldu.",
+	RELOAD_FULLY_CLAIMED: "Reload Bonusunuzun tüm parçalarını zaten aldınız.",
+	CLAIM_NOT_YET_AVAILABLE: "Sıradaki parça için henüz zaman gelmedi.",
+	CLAIM_IN_PROGRESS: "Talebiniz işleniyor, lütfen tekrar deneyin.",
+};
+
+// Kayıp Bonusu: mevcut potansiyel bonusu sorgula
+// @route   GET /users/loss-bonus/potential
+router.get("/loss-bonus/potential", authorizeUser(true), async (req, res) => {
+	try {
+		const potential = await lossBonusService.getPotential(req.user._id);
+
+		res.status(200).json({
+			status: "success",
+			data: {
+				total_deposit: potential.totalDeposit,
+				total_withdrawal: potential.totalWithdrawal,
+				current_balance: potential.currentBalance,
+				net_loss: potential.netLoss,
+				bonus_rate: potential.percentage,
+				potential_bonus: potential.potentialBonus,
+				is_eligible: potential.eligible,
+				message: potential.message,
+			},
+		});
+	} catch (err) {
+		const message = LOSS_BONUS_ERROR_MESSAGES[err.message] || "Sunucu hatası.";
+		const status = LOSS_BONUS_ERROR_MESSAGES[err.message] ? 400 : 500;
+		if (status === 500) console.error("Loss bonus potential error:", err);
+		res.status(status).json({ status: "error", message });
+	}
+});
+
+// Kayıp Bonusu: talep et (kaydet ve dönemi sıfırla)
+// @route   POST /users/loss-bonus/claim
+router.post("/loss-bonus/claim", authorizeUser(true), async (req, res) => {
+	try {
+		const result = await lossBonusService.claim(req.user._id);
+		const isPending = result.claim.status === "pending";
+
+		res.status(200).json({
+			status: "success",
+			message: isPending
+				? "Kayıp bonusu talebiniz alındı, onay bekleniyor."
+				: "Kayıp bonusu başarıyla hesabınıza tanımlandı.",
+			data: {
+				claim_id: result.claim._id,
+				status: result.claim.status,
+				bonus_amount: result.claim.appliedAmount,
+				new_balance: result.newBalance,
+			},
+		});
+	} catch (err) {
+		const message = LOSS_BONUS_ERROR_MESSAGES[err.message] || "Sunucu hatası.";
+		const status = LOSS_BONUS_ERROR_MESSAGES[err.message] ? 400 : 500;
+		if (status === 500) console.error("Loss bonus claim error:", err);
+		res.status(status).json({ status: "error", message });
+	}
+});
+
+// Yatırım Bonusu: mevcut potansiyel bonusu sorgula
+// @route   GET /users/deposit-bonus/potential
+router.get(
+	"/deposit-bonus/potential",
+	authorizeUser(true),
+	async (req, res) => {
+		try {
+			const potential = await depositBonusService.getPotential(
+				req.user._id,
+			);
+
+			res.status(200).json({
+				status: "success",
+				data: {
+					total_deposit: potential.totalDeposit,
+					has_bet_since_deposit: potential.hasBet,
+					bonus_rate: potential.percentage,
+					potential_bonus: potential.potentialBonus,
+					is_eligible: potential.eligible,
+					message: potential.message,
+				},
+			});
+		} catch (err) {
+			const message =
+				DEPOSIT_BONUS_ERROR_MESSAGES[err.message] || "Sunucu hatası.";
+			const status = DEPOSIT_BONUS_ERROR_MESSAGES[err.message] ? 400 : 500;
+			if (status === 500)
+				console.error("Deposit bonus potential error:", err);
+			res.status(status).json({ status: "error", message });
+		}
+	},
+);
+
+// Yatırım Bonusu: talep et. Yatırımdan sonra HİÇBİR bahis/oyun kaydı
+// tespit edilmezse otomatik olarak (ayarlara göre) onaylanıp bakiyeye
+// eklenir; en ufak bir bahis kaydı varsa talep reddedilir.
+// @route   POST /users/deposit-bonus/claim
+router.post("/deposit-bonus/claim", authorizeUser(true), async (req, res) => {
+	try {
+		const result = await depositBonusService.claim(req.user._id);
+		const isPending = result.claim.status === "pending";
+
+		res.status(200).json({
+			status: "success",
+			message: isPending
+				? "Yatırım bonusu talebiniz alındı, onay bekleniyor."
+				: "Yatırım bonusu başarıyla hesabınıza tanımlandı.",
+			data: {
+				claim_id: result.claim._id,
+				status: result.claim.status,
+				bonus_amount: result.claim.appliedAmount,
+				new_balance: result.newBalance,
+			},
+		});
+	} catch (err) {
+		const message =
+			DEPOSIT_BONUS_ERROR_MESSAGES[err.message] || "Sunucu hatası.";
+		const status = DEPOSIT_BONUS_ERROR_MESSAGES[err.message] ? 400 : 500;
+		if (status === 500) console.error("Deposit bonus claim error:", err);
+		res.status(status).json({ status: "error", message });
+	}
+});
+
+// Reload Bonusu: aktif atamanın durumunu sorgula (kalan parça/tutar, bir
+// sonraki claim zamanı, çevrim ilerlemesi).
+// @route   GET /users/reload-bonus/status
+router.get("/reload-bonus/status", authorizeUser(true), async (req, res) => {
+	try {
+		const status = await reloadBonusService.getStatus(req.user._id);
+		res.status(200).json({ status: "success", data: status });
+	} catch (err) {
+		console.error("Reload bonus status error:", err);
+		res.status(500).json({ status: "error", message: "Sunucu hatası." });
+	}
+});
+
+// Reload Bonusu: sırası gelen parçayı claim et.
+// @route   POST /users/reload-bonus/claim
+router.post("/reload-bonus/claim", authorizeUser(true), async (req, res) => {
+	try {
+		const result = await reloadBonusService.claimNext(req.user._id);
+
+		res.status(200).json({
+			status: "success",
+			message: "Reload bonusu parçası başarıyla hesabınıza tanımlandı.",
+			data: {
+				claim_id: result.claim._id,
+				period_index: result.claim.periodIndex,
+				amount: result.claim.amount,
+				remaining_periods:
+					result.assignment.totalPeriods - result.assignment.claimedPeriods,
+				next_claim_at: result.assignment.nextClaimAt,
+				new_balance: result.newBalance,
+			},
+		});
+	} catch (err) {
+		const message =
+			RELOAD_BONUS_ERROR_MESSAGES[err.message] || "Sunucu hatası.";
+		const status = RELOAD_BONUS_ERROR_MESSAGES[err.message] ? 400 : 500;
+		if (status === 500) console.error("Reload bonus claim error:", err);
+		res.status(status).json({
+			status: "error",
+			message,
+			...(err.nextClaimAt ? { next_claim_at: err.nextClaimAt } : {}),
+		});
+	}
+});
+
+// Bonus çevrim (wagering) durumu: aktif bir Yatırım/Kayıp Bonusu çevrimi
+// (bonusLock) ve/veya bağımsız bir Reload Bonusu çevrimi (reloadLock) olup
+// olmadığını, ilerlemeyi ve çekimin engellenip engellenmediğini döner.
+// @route   GET /users/wagering-status
+router.get("/wagering-status", authorizeUser(true), async (req, res) => {
+	try {
+		const user = await User.findById(req.user._id).select(
+			"bonusLock reloadLock"
+		);
+		if (!user) {
+			return res
+				.status(404)
+				.json({ status: "error", message: "Kullanıcı bulunamadı." });
+		}
+
+		const [bonusStatus, reloadStatus] = await Promise.all([
+			evaluateBonusLock(user),
+			evaluateReloadLock(user),
+		]);
+
+		const withdrawalBlocked =
+			(bonusStatus.active && bonusStatus.type === "wagering") ||
+			reloadStatus.active;
+
+		res.status(200).json({
+			status: "success",
+			data: {
+				withdrawal_blocked: withdrawalBlocked,
+				bonus_lock: bonusStatus,
+				reload_lock: reloadStatus,
+			},
+		});
+	} catch (err) {
+		console.error("Wagering status error:", err);
+		res.status(500).json({ status: "error", message: "Sunucu hatası." });
+	}
+});
 
 // Update user information (email and password)
 // Update User Information
@@ -337,7 +571,7 @@ router.post("/switch-wallet", [authorizeUser(true)], async (req, res) => {
 // E-posta Değiştirme Akışı
 // Kullanıcı yeni e-postaya doğrulama linki ister, linke tıklayınca e-posta
 // değişir ve emailVerified=true olarak işaretlenir.
-// ═══════════════════════════════════════════════════════════════════════════
+// ���═════════════════════��════════════════════════════════════════════════════
 
 const EMAIL_CHANGE_TOKEN_TYPE = "email-change";
 const EMAIL_CHANGE_REQUEST_COOLDOWN_MS = 1000 * 60 * 5;

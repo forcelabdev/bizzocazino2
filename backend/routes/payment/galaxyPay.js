@@ -23,6 +23,8 @@ const {
 	generateGalaxyPayHash,
 	generateGalaxyPayCallbackHash,
 } = require("../../utils/galaxyPay");
+const { assertWithdrawalNotBlocked } = require("../../utils/bonusLock");
+const { createAdminNotification } = require("../../utils/adminNotification");
 
 
 
@@ -479,6 +481,27 @@ try{
 
 	const user = await User.findById(req.user._id);
 
+	if(!user){
+		return res.status(404).json({
+			success:false,
+			error:"Kullanıcı bulunamadı"
+		});
+	}
+
+	try{
+		await assertWithdrawalNotBlocked(user);
+	}catch(lockErr){
+		if(lockErr.code === "WAGERING_REQUIREMENT_NOT_MET"){
+			return res.status(400).json({
+				success:false,
+				error:lockErr.message,
+				code:lockErr.code,
+				wagering:lockErr.wagering
+			});
+		}
+		throw lockErr;
+	}
+
 
 	const settings = await getSettings(true);
 
@@ -761,8 +784,13 @@ try{
 	});
 
 
-
-
+	createAdminNotification(
+		"withdraw",
+		"Yeni Çekim Talebi",
+		`${user.username} kullanıcısı ${amount} ₺ tutarında GalaxyPay çekim talebi oluşturdu.`,
+		"/apps/finance/withdraw",
+		{ provider: "GalaxyPay", amount, username: user.username, userId: user._id },
+	);
 
 
 	return res.json({

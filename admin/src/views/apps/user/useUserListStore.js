@@ -117,7 +117,111 @@ export const useUserListStore = defineStore('UserListStore', {
         }
       })
     },
-    
+
+    // ✅ Kontroller sekmesi: dönemsel finansal rapor
+    fetchUserFinancialReport(userId, params = {}) {
+      return axios.get(`/admin/users/${userId}/financial-report`, { params }).then(res => res.data.data)
+    },
+
+    // ✅ Kontroller sekmesi: engelleme / kısıtlama / platform erişimi güncelleme
+    updateUserControls(userId, payload) {
+      return axios.patch(`/admin/users/${userId}/controls`, payload).then(res => res.data)
+    },
+
+    // ✅ Kontroller sekmesi: partnere ata
+    assignUserPartner(userId, identifier) {
+      return axios.patch(`/admin/users/${userId}/partner`, { identifier }).then(res => res.data)
+    },
+
+    // ✅ Kontroller sekmesi: partner bağlantısını kaldır
+    removeUserPartner(userId) {
+      return axios.delete(`/admin/users/${userId}/partner`).then(res => res.data)
+    },
+
+    // ✅ Kontroller sekmesi: etiket yönetimi (Tag Manager ile paylaşılan endpointler)
+    fetchTags() {
+      return axios.get('/admin/tags').then(res => res.data.data)
+    },
+
+    assignTagToUser(tagId, userId) {
+      return axios.post(`/admin/tags/${tagId}/assign`, { userIds: [userId] }).then(res => res.data)
+    },
+
+    unassignTagFromUser(tagId, userId) {
+      return axios.post(`/admin/tags/${tagId}/unassign`, { userIds: [userId] }).then(res => res.data)
+    },
+
+    // ✅ Kayıp Bonusu: kullanıcı özeti (Kontroller sekmesi için)
+    fetchUserLossBonusSummary(userId) {
+      return axios.get(`/admin/users/${userId}/loss-bonus`).then(res => res.data.data)
+    },
+
+    // ✅ Kayıp Bonusu: talebi onayla (Kontroller sekmesinden)
+    approveLossBonusClaim(claimId) {
+      return axios.post(`/admin/loss-bonus/claims/${claimId}/approve`).then(res => res.data)
+    },
+
+    // ✅ Kayıp Bonusu: talebi reddet (Kontroller sekmesinden)
+    rejectLossBonusClaim(claimId, reason = "") {
+      return axios.post(`/admin/loss-bonus/claims/${claimId}/reject`, { reason }).then(res => res.data)
+    },
+
+    // ✅ Yatırım Bonusu: kullanıcı özeti (Kontroller sekmesi için)
+    fetchUserDepositBonusSummary(userId) {
+      return axios.get(`/admin/users/${userId}/deposit-bonus`).then(res => res.data.data)
+    },
+
+    // ✅ Yatırım Bonusu: talebi onayla (Kontroller sekmesinden)
+    approveDepositBonusClaim(claimId) {
+      return axios.post(`/admin/deposit-bonus/claims/${claimId}/approve`).then(res => res.data)
+    },
+
+    // ✅ Yatırım Bonusu: talebi reddet (Kontroller sekmesinden)
+    rejectDepositBonusClaim(claimId, reason = "") {
+      return axios.post(`/admin/deposit-bonus/claims/${claimId}/reject`, { reason }).then(res => res.data)
+    },
+
+    // ✅ Reload Bonusu: genel ayarları getir
+    fetchReloadBonusSettings() {
+      return axios.get('/admin/reload-bonus/settings').then(res => res.data.data)
+    },
+
+    // ✅ Reload Bonusu: genel ayarları güncelle
+    updateReloadBonusSettings(payload) {
+      return axios.put('/admin/reload-bonus/settings', payload).then(res => res.data)
+    },
+
+    // ✅ Reload Bonusu: yeni atama önizlemesi (toplam tutar / parça başı tutar)
+    previewReloadBonusAssignment(payload) {
+      return axios.post('/admin/reload-bonus/preview', payload).then(res => res.data.data)
+    },
+
+    // ✅ Reload Bonusu: tüm atamaların listesi (sayfa geneli)
+    fetchReloadBonusAssignments(params = {}) {
+      return axios.get('/admin/reload-bonus/assignments', { params }).then(res => {
+        return {
+          assignments: res.data.data,
+          total: res.data.total,
+          page: res.data.page,
+          totalPages: res.data.totalPages,
+        }
+      })
+    },
+
+    // ✅ Reload Bonusu: bir atamayı iptal et
+    cancelReloadBonusAssignment(assignmentId) {
+      return axios.post(`/admin/reload-bonus/assignments/${assignmentId}/cancel`).then(res => res.data)
+    },
+
+    // ✅ Reload Bonusu: kullanıcı özeti (Bonuslar sekmesi için)
+    fetchUserReloadBonusSummary(userId) {
+      return axios.get(`/admin/users/${userId}/reload-bonus`).then(res => res.data.data)
+    },
+
+    // ✅ Reload Bonusu: kullanıcıya manuel atama oluştur
+    createUserReloadBonusAssignment(userId, payload) {
+      return axios.post(`/admin/users/${userId}/reload-bonus`, payload).then(res => res.data)
+    },
 
   },
 })

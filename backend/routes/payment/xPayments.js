@@ -31,6 +31,7 @@ const {
 	createPendingXPaymentsWithdraw,
 	getXPaymentsSettings,
 } = require("../../services/xPaymentsService");
+const { createAdminNotification } = require("../../utils/adminNotification");
 
 const router = express.Router();
 
@@ -100,6 +101,12 @@ const sendError = (res, error, fallback) => {
 	return res.status(statusCode).json({
 		success: false,
 		error: getXPaymentsErrorMessage(error, fallback),
+		...(error instanceof XPaymentsServiceError && error.code
+			? { code: error.code }
+			: {}),
+		...(error instanceof XPaymentsServiceError && error.details
+			? error.details
+			: {}),
 	});
 };
 
@@ -591,6 +598,14 @@ router.post("/withdraw", authorizeUser(true), async (req, res) => {
 			iban,
 			metadata: { customer },
 		});
+
+		createAdminNotification(
+			"withdraw",
+			"Yeni Çekim Talebi",
+			`${user.username} kullanıcısı ${amount} ₺ tutarında XPayment çekim talebi oluşturdu.`,
+			"/apps/finance/withdraw",
+			{ provider: "XPayment", amount, username: user.username, userId: user._id },
+		);
 
 		return res.json({
 			success: true,

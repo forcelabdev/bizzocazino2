@@ -9,37 +9,6 @@ const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || "";
 const isNewSiteMode =
 	String(import.meta.env.NEW_SITE_MODE ?? "true").toLowerCase() !== "false";
 
-// Callback URL preview for EchoPayz
-const callbackUrlPreview = computed(() => {
-	return apiBaseUrl + "/payment/echopayz/callback";
-});
-
-const forcelabCallbackUrlPreview = computed(() => {
-	return apiBaseUrl + "/payment/forcelab-finance/callback";
-});
-
-const meelDevCallbackUrlPreview = computed(() => {
-	return apiBaseUrl + "/payment/meeldev/callback";
-});
-
-const galaxyPayCallbackUrlPreview = computed(() => {
-	return apiBaseUrl + "/payment/galaxypay/callback";
-});
-
-const fluxKriptoCallbackUrlPreview = computed(() => {
-	return (
-		settings.value.fluxKripto?.callbackUrl ||
-		apiBaseUrl + "/payment/fluxkripto/callback"
-	);
-});
-
-const xPaymentsCallbackUrlPreview = computed(() => {
-	return (
-		settings.value.xPayments?.callbackUrl ||
-		apiBaseUrl + "/payment/xpayments/callback"
-	);
-});
-
 const canUpdatePlatform = computed(
 	() => ability.can("update", "platform") || ability.can("manage", "platform"),
 );
@@ -152,17 +121,21 @@ const settings = ref({
 			agentToken: "",
 			currencyCode: "TRY",
 			timeoutMs: 30000,
-			methods: {
-				onlineUsers: "GetCurrentPlayers",
-				callList: "GetCallList",
-				callHistory: "GetCallHistory",
-				applyCall: "CallApply",
-				cancelCall: "CallCancel",
-				getUserSetting: "GetUserSetting",
-				changeUserSetting: "ChangeUserSetting",
-				getAgentSetting: "GetAgentSetting",
-				changeAgentSetting: "ChangeAgentSetting",
-			},
+				methods: {
+					onlineUsers: "GetCurrentPlayers",
+					vendorGames: "GetVendorGames",
+					callList: "GetCallList",
+					callHistory: "GetCallHistory",
+					applyCall: "CallApply",
+					cancelCall: "CallCancel",
+					getUserSetting: "GetUserSetting",
+					changeUserSetting: "ChangeUserSetting",
+					getAgentSetting: "GetAgentSetting",
+					changeAgentSetting: "ChangeAgentSetting",
+					freeRoundList: "GetFreeRoundList",
+					applyFreeRound: "ApplyFreeRound",
+					cancelFreeRound: "CancelFreeRound",
+				},
 			envFallbacks: {},
 		},
 	},
@@ -174,101 +147,6 @@ const settings = ref({
 		maxAttempts: 5,
 		encryptionKey: "",
 		hashSecret: "",
-	},
-	echopayz: {
-		isActive: false,
-		name: "EchoPayz Havale",
-		logo: "https://panel.echopayz.com/logo.png",
-		minAmount: 100,
-		maxAmount: 100000,
-		apiKey: "",
-		apiSecret: "",
-		apiUrl: "https://api.echopayz.com/api/v1",
-	},
-	forcelabFinance: {
-		isActive: false,
-		name: "Forcelab Finance",
-		logo: "https://financeforcalabs.com/favicon.ico",
-		minAmount: 100,
-		maxAmount: 100000,
-		currency: "TRY",
-		apiKey: "",
-		webhookSecret: "",
-		apiUrl: "https://financeforcalabs.com/api/v1",
-	},
-	meelDev: {
-		isActive: false,
-		name: "MeelDev",
-		logo: "",
-		minAmount: 100,
-		maxAmount: 100000,
-		currency: "TRY",
-		apiKey: "",
-		apiSecret: "",
-		cbSecretKey: "",
-		apiUrl: "https://gateway.meeldev.com",
-	},
-	galaxyPay: {
-		isActive: false,
-		name: "GalaxyPay",
-		logo: "",
-		minAmount: 100,
-		maxAmount: 100000,
-		currency: "TRY",
-		lang: "tr",
-		apiId: "",
-		apiKey: "",
-		apiUrl: "https://galaxypay.dev",
-		methods: {
-			depositLobby: true,
-			depositBankTransfer: true,
-			depositPapara: true,
-			withdrawBankTransfer: true,
-			withdrawPapara: true,
-		},
-		returnUrlSuccess: "",
-		returnUrlFail: "",
-	},
-	fluxKripto: {
-		isActive: false,
-		name: "FluxKripto",
-		logo: "",
-		minAmount: 100,
-		maxAmount: 100000,
-		currency: "TRY",
-		apiUrl: "https://api.fluxkripto.com",
-		siteUrl: "",
-		apiKey: "",
-		secretKey: "",
-		apiKeyConfigured: false,
-		secretKeyConfigured: false,
-		callbackUrl: "",
-		methods: {
-			deposit: true,
-			withdraw: true,
-		},
-		currencies: {
-			trx: true,
-			usdt: true,
-		},
-	},
-	xPayments: {
-		isActive: false,
-		name: "XPayment",
-		logo: "",
-		minAmount: 100,
-		maxAmount: 100000,
-		currency: "TRY",
-		apiUrl: "https://api.xpaymentsystems.com",
-		apiKey: "",
-		secretKey: "",
-		apiKeyConfigured: false,
-		secretKeyConfigured: false,
-		callbackUrl: "",
-		methods: {
-			deposit: true,
-			withdraw: true,
-		},
 	},
 });
 
@@ -307,18 +185,12 @@ const allSettingsTabs = [
 	{ value: "provider-settings", label: "Provider", icon: "mdi-server" },
 	{
 		value: "api-settings",
-		label: "Betinovi API",
+		label: "ForceLab API",
 		icon: "mdi-api",
 		canView: () => canReadApiSettings.value,
 	},
 	{ value: "sms-otp", label: "SMS OTP", icon: "mdi-message-lock" },
 	{ value: "email-templates", label: "E-posta", icon: "mdi-email-edit" },
-	{ value: "forcelab-finance", label: "Forcelab Finance", icon: "mdi-bank-transfer" },
-	{ value: "meeldev", label: "MeelDev", icon: "mdi-credit-card-cog" },
-	{ value: "galaxypay", label: "GalaxyPay", icon: "mdi-credit-card-check" },
-	{ value: "fluxkripto", label: "FluxKripto", icon: "mdi-bitcoin" },
-	{ value: "xpayments", label: "XPayment", icon: "mdi-bank-transfer-in" },
-	{ value: "echopayz", label: "EchoPayz", icon: "mdi-cash-sync" },
 ];
 const settingsTabs = computed(() =>
 	allSettingsTabs.filter(
@@ -366,49 +238,6 @@ const normalizeApiSettings = (value = {}) => ({
 		value.controlGame,
 		settings.value.apiSettings.controlGame,
 	),
-});
-
-const normalizeFluxKriptoSettings = (value = {}) => ({
-	isActive: value.isActive ?? false,
-	name: value.name || "FluxKripto",
-	logo: value.logo || "",
-	minAmount: Number(value.minAmount ?? 100),
-	maxAmount: Number(value.maxAmount ?? 100000),
-	currency: "TRY",
-	apiUrl: value.apiUrl || "https://api.fluxkripto.com",
-	siteUrl: value.siteUrl || "",
-	apiKey: "",
-	secretKey: "",
-	apiKeyConfigured: Boolean(value.apiKeyConfigured),
-	secretKeyConfigured: Boolean(value.secretKeyConfigured),
-	callbackUrl: value.callbackUrl || "",
-	methods: {
-		deposit: value.methods?.deposit ?? true,
-		withdraw: value.methods?.withdraw ?? true,
-	},
-	currencies: {
-		trx: value.currencies?.trx ?? true,
-		usdt: value.currencies?.usdt ?? true,
-	},
-});
-
-const normalizeXPaymentsSettings = (value = {}) => ({
-	isActive: value.isActive ?? false,
-	name: value.name || "XPayment",
-	logo: value.logo || "",
-	minAmount: Number(value.minAmount ?? 100),
-	maxAmount: Number(value.maxAmount ?? 100000),
-	currency: "TRY",
-	apiUrl: value.apiUrl || "https://api.xpaymentsystems.com",
-	apiKey: "",
-	secretKey: "",
-	apiKeyConfigured: Boolean(value.apiKeyConfigured),
-	secretKeyConfigured: Boolean(value.secretKeyConfigured),
-	callbackUrl: value.callbackUrl || "",
-	methods: {
-		deposit: value.methods?.deposit ?? true,
-		withdraw: value.methods?.withdraw ?? true,
-	},
 });
 
 // Şablon bazında placeholder dokümantasyonu (admin paneli için)
@@ -486,8 +315,6 @@ const fetchSettings = async () => {
 		const response = await axios.get("/admin/site-settings");
 		settings.value = {
 			...response.data,
-			fluxKripto: normalizeFluxKriptoSettings(response.data?.fluxKripto),
-			xPayments: normalizeXPaymentsSettings(response.data?.xPayments),
 		};
 	} catch (error) {
 		console.error("Ayarlar yüklenirken hata:", error);
@@ -502,8 +329,7 @@ const saveSettings = async () => {
 
 	try {
 		loading.value = true;
-		const { fluxKripto, xPayments, ...siteSettingsPayload } = settings.value;
-		await axios.put("/admin/site-settings", siteSettingsPayload);
+		await axios.put("/admin/site-settings", settings.value);
 		alert("Ayarlar başarıyla kaydedildi!");
 	} catch (error) {
 		console.error("Ayarlar kaydedilirken hata:", error);
@@ -1004,12 +830,12 @@ const saveApiSettings = async () => {
 		if (response.data.success && response.data.data) {
 			settings.value.apiSettings = normalizeApiSettings(response.data.data);
 		}
-		alert("Betinovi API ayarları başarıyla kaydedildi!");
+		alert("ForceLab API ayarları başarıyla kaydedildi!");
 	} catch (error) {
-		console.error("Betinovi API ayarları kaydedilirken hata:", error);
+		console.error("ForceLab API ayarları kaydedilirken hata:", error);
 		alert(
 			error?.response?.data?.message ||
-				"Betinovi API ayarları kaydedilirken bir hata oluştu!",
+				"ForceLab API ayarları kaydedilirken bir hata oluştu!",
 		);
 	} finally {
 		loading.value = false;
@@ -1023,7 +849,7 @@ const fetchApiSettings = async () => {
 			settings.value.apiSettings = normalizeApiSettings(response.data.data);
 		}
 	} catch (error) {
-		console.error("Betinovi API ayarları yüklenirken hata:", error);
+		console.error("ForceLab API ayarları yüklenirken hata:", error);
 	}
 };
 
@@ -1138,199 +964,6 @@ const sendTestEmail = async () => {
 		);
 	} finally {
 		loading.value = false;
-	}
-};
-
-// EchoPayz ayarlarını kaydet
-const saveEchoPayzSettings = async () => {
-	if (!ensurePlatformUpdatePermission()) return;
-
-	try {
-		loading.value = true;
-		await axios.put("/admin/echopayz/settings", settings.value.echopayz);
-		alert("EchoPayz ayarları başarıyla kaydedildi!");
-	} catch (error) {
-		console.error("EchoPayz ayarları kaydedilirken hata:", error);
-		alert("EchoPayz ayarları kaydedilirken bir hata oluştu!");
-	} finally {
-		loading.value = false;
-	}
-};
-
-// EchoPayz ayarlarını getir
-const fetchEchoPayzSettings = async () => {
-	try {
-		const response = await axios.get("/admin/echopayz/settings");
-		if (response.data.success && response.data.data) {
-			settings.value.echopayz = response.data.data;
-		}
-	} catch (error) {
-		console.error("EchoPayz ayarları yüklenirken hata:", error);
-	}
-};
-
-const saveForcelabFinanceSettings = async () => {
-	if (!ensurePlatformUpdatePermission()) return;
-
-	try {
-		loading.value = true;
-		await axios.put(
-			"/admin/forcelab-finance/settings",
-			settings.value.forcelabFinance
-		);
-		alert("Forcelab Finance ayarları başarıyla kaydedildi!");
-	} catch (error) {
-		console.error("Forcelab Finance ayarları kaydedilirken hata:", error);
-		alert("Forcelab Finance ayarları kaydedilirken bir hata oluştu!");
-	} finally {
-		loading.value = false;
-	}
-};
-
-const fetchForcelabFinanceSettings = async () => {
-	try {
-		const response = await axios.get("/admin/forcelab-finance/settings");
-		if (response.data.success && response.data.data) {
-			settings.value.forcelabFinance = response.data.data;
-		}
-	} catch (error) {
-		console.error("Forcelab Finance ayarları yüklenirken hata:", error);
-	}
-};
-
-const saveMeelDevSettings = async () => {
-	if (!ensurePlatformUpdatePermission()) return;
-
-	try {
-		loading.value = true;
-		await axios.put("/admin/meeldev/settings", settings.value.meelDev);
-		alert("MeelDev ayarları başarıyla kaydedildi!");
-	} catch (error) {
-		console.error("MeelDev ayarları kaydedilirken hata:", error);
-		alert("MeelDev ayarları kaydedilirken bir hata oluştu!");
-	} finally {
-		loading.value = false;
-	}
-};
-
-const fetchMeelDevSettings = async () => {
-	try {
-		const response = await axios.get("/admin/meeldev/settings");
-		if (response.data.success && response.data.data) {
-			settings.value.meelDev = response.data.data;
-		}
-	} catch (error) {
-		console.error("MeelDev ayarları yüklenirken hata:", error);
-	}
-};
-
-const saveGalaxyPaySettings = async () => {
-	if (!ensurePlatformUpdatePermission()) return;
-
-	try {
-		loading.value = true;
-		await axios.put("/admin/galaxypay/settings", settings.value.galaxyPay);
-		alert("GalaxyPay ayarları başarıyla kaydedildi!");
-	} catch (error) {
-		console.error("GalaxyPay ayarları kaydedilirken hata:", error);
-		alert("GalaxyPay ayarları kaydedilirken bir hata oluştu!");
-	} finally {
-		loading.value = false;
-	}
-};
-
-const fetchGalaxyPaySettings = async () => {
-	try {
-		const response = await axios.get("/admin/galaxypay/settings");
-		if (response.data.success && response.data.data) {
-			settings.value.galaxyPay = response.data.data;
-		}
-	} catch (error) {
-		console.error("GalaxyPay ayarları yüklenirken hata:", error);
-	}
-};
-
-const saveFluxKriptoSettings = async () => {
-	if (!ensurePlatformUpdatePermission()) return;
-
-	const { apiKeyConfigured, secretKeyConfigured, ...payload } =
-		settings.value.fluxKripto;
-	delete payload.callbackUrl;
-	const apiKeyWasEntered = Boolean(payload.apiKey?.trim());
-	const secretKeyWasEntered = Boolean(payload.secretKey?.trim());
-
-	try {
-		loading.value = true;
-		const response = await axios.put("/admin/fluxkripto/settings", payload);
-		settings.value.fluxKripto = normalizeFluxKriptoSettings({
-			...settings.value.fluxKripto,
-			...(response.data?.data || {}),
-			apiKeyConfigured:
-				response.data?.data?.apiKeyConfigured ??
-				(apiKeyConfigured || apiKeyWasEntered),
-			secretKeyConfigured:
-				response.data?.data?.secretKeyConfigured ??
-				(secretKeyConfigured || secretKeyWasEntered),
-		});
-		alert("FluxKripto ayarları başarıyla kaydedildi!");
-	} catch (error) {
-		console.error("FluxKripto ayarları kaydedilirken hata:", error);
-		alert(error?.response?.data?.error || "FluxKripto ayarları kaydedilemedi.");
-	} finally {
-		loading.value = false;
-	}
-};
-
-const fetchFluxKriptoSettings = async () => {
-	try {
-		const response = await axios.get("/admin/fluxkripto/settings");
-		if (response.data?.success && response.data.data) {
-			settings.value.fluxKripto = normalizeFluxKriptoSettings(response.data.data);
-		}
-	} catch (error) {
-		console.error("FluxKripto ayarları yüklenirken hata:", error);
-	}
-};
-
-const saveXPaymentsSettings = async () => {
-	if (!ensurePlatformUpdatePermission()) return;
-
-	const { apiKeyConfigured, secretKeyConfigured, ...payload } =
-		settings.value.xPayments;
-	delete payload.callbackUrl;
-	const apiKeyWasEntered = Boolean(payload.apiKey?.trim());
-	const secretKeyWasEntered = Boolean(payload.secretKey?.trim());
-
-	try {
-		loading.value = true;
-		const response = await axios.put("/admin/xpayments/settings", payload);
-		settings.value.xPayments = normalizeXPaymentsSettings({
-			...settings.value.xPayments,
-			...(response.data?.data || {}),
-			apiKeyConfigured:
-				response.data?.data?.apiKeyConfigured ??
-				(apiKeyConfigured || apiKeyWasEntered),
-			secretKeyConfigured:
-				response.data?.data?.secretKeyConfigured ??
-				(secretKeyConfigured || secretKeyWasEntered),
-		});
-		alert("XPayment ayarları başarıyla kaydedildi!");
-	} catch (error) {
-		console.error("XPayment ayarları kaydedilirken hata:", error);
-		alert(error?.response?.data?.error || "XPayment ayarları kaydedilemedi.");
-	} finally {
-		loading.value = false;
-	}
-};
-
-const fetchXPaymentsSettings = async () => {
-	try {
-		const response = await axios.get("/admin/xpayments/settings");
-		if (response.data?.success && response.data.data) {
-			settings.value.xPayments = normalizeXPaymentsSettings(response.data.data);
-		}
-	} catch (error) {
-		console.error("XPayment ayarları yüklenirken hata:", error);
 	}
 };
 
@@ -1589,12 +1222,6 @@ onMounted(async () => {
 		await fetchProviderSettings();
 		await fetchSmsOtpSettings();
 		await fetchEmailTemplates();
-		fetchEchoPayzSettings();
-		fetchForcelabFinanceSettings();
-		fetchMeelDevSettings();
-		fetchGalaxyPaySettings();
-		fetchFluxKriptoSettings();
-		fetchXPaymentsSettings();
 		if (!isNewSiteMode) {
 			fetchCategoryIcons();
 			fetchAvatars();
@@ -2958,7 +2585,7 @@ console.log('Custom JS loaded');"
 					<VWindowItem v-if="canReadApiSettings" value="api-settings">
 						<VContainer>
 							<VAlert type="info" class="mb-4">
-								<strong>Betinovi API Ayarları</strong> - Rapor ve ControlGame ekranlarının kullanacağı endpoint, agent ve method bilgileri bu özel yetkili alandan yönetilir.
+								<strong>ForceLab API Ayarları</strong> - Rapor ve ControlGame ekranlarının kullanacağı endpoint, agent ve method bilgileri bu özel yetkili alandan yönetilir.
 							</VAlert>
 							<VRow>
 								<VCol cols="12">
@@ -3138,6 +2765,9 @@ console.log('Custom JS loaded');"
 									<VTextField v-model="settings.apiSettings.controlGame.methods.onlineUsers" label="Oyundaki kullanıcılar" />
 								</VCol>
 								<VCol cols="12" md="4">
+									<VTextField v-model="settings.apiSettings.controlGame.methods.vendorGames" label="Vendor oyun listesi" />
+								</VCol>
+								<VCol cols="12" md="4">
 									<VTextField v-model="settings.apiSettings.controlGame.methods.callList" label="Call listesi" />
 								</VCol>
 								<VCol cols="12" md="4">
@@ -3161,6 +2791,15 @@ console.log('Custom JS loaded');"
 								<VCol cols="12" md="4">
 									<VTextField v-model="settings.apiSettings.controlGame.methods.changeAgentSetting" label="Agent RTP değiştir" />
 								</VCol>
+								<VCol cols="12" md="4">
+									<VTextField v-model="settings.apiSettings.controlGame.methods.freeRoundList" label="Freeround listesi" />
+								</VCol>
+								<VCol cols="12" md="4">
+									<VTextField v-model="settings.apiSettings.controlGame.methods.applyFreeRound" label="Freeround uygula" />
+								</VCol>
+								<VCol cols="12" md="4">
+									<VTextField v-model="settings.apiSettings.controlGame.methods.cancelFreeRound" label="Freeround iptal" />
+								</VCol>
 
 								<VCol cols="12">
 									<VBtn
@@ -3169,7 +2808,7 @@ console.log('Custom JS loaded');"
 										:disabled="!canUpdateApiSettings"
 										:loading="loading"
 									>
-										Betinovi API Ayarlarını Kaydet
+										ForceLab API Ayarlarını Kaydet
 									</VBtn>
 								</VCol>
 							</VRow>
@@ -3649,657 +3288,7 @@ console.log('Custom JS loaded');"
 						</VContainer>
 					</VWindowItem>
 
-					<VWindowItem value="forcelab-finance">
-						<VContainer>
-							<VAlert type="info" class="mb-4">
-								<strong>Forcelab Finance</strong> ödeme sistemi entegrasyonu.
-								API token ve webhook secret bilgilerinizi buradan yönetebilirsiniz.
-								<br />
-								<strong>Callback URL:</strong>
-								<code>{{ forcelabCallbackUrlPreview }}</code>
-							</VAlert>
-							<VRow>
-								<VCol cols="12">
-									<VSwitch
-										v-model="settings.forcelabFinance.isActive"
-										label="Forcelab Finance Aktif"
-										color="success"
-									/>
-								</VCol>
-								<VCol cols="12" md="6">
-									<VTextField
-										v-model="settings.forcelabFinance.name"
-										label="Görünen İsim"
-										placeholder="Forcelab Finance"
-									/>
-								</VCol>
-								<VCol cols="12" md="6">
-									<VTextField
-										v-model="settings.forcelabFinance.logo"
-										label="Logo URL"
-										placeholder="https://financeforcalabs.com/favicon.ico"
-									/>
-								</VCol>
-								<VCol cols="12" md="4">
-									<VTextField
-										v-model.number="settings.forcelabFinance.minAmount"
-										label="Minimum Tutar"
-										type="number"
-										:min="0"
-									/>
-								</VCol>
-								<VCol cols="12" md="4">
-									<VTextField
-										v-model.number="settings.forcelabFinance.maxAmount"
-										label="Maksimum Tutar"
-										type="number"
-										:min="0"
-									/>
-								</VCol>
-								<VCol cols="12" md="4">
-									<VTextField
-										v-model="settings.forcelabFinance.currency"
-										label="Currency"
-										placeholder="TRY"
-									/>
-								</VCol>
-								<VCol cols="12">
-									<VDivider class="my-4" />
-									<h3 class="mb-3">API Ayarları</h3>
-								</VCol>
-								<VCol cols="12" md="6">
-									<VTextField
-										v-model="settings.forcelabFinance.apiKey"
-										label="API Key"
-										placeholder="Bearer token"
-										prepend-icon="mdi-key"
-									/>
-								</VCol>
-								<VCol cols="12" md="6">
-									<VTextField
-										v-model="settings.forcelabFinance.webhookSecret"
-										label="Webhook Secret"
-										type="password"
-										prepend-icon="mdi-lock"
-									/>
-								</VCol>
-								<VCol cols="12">
-									<VTextField
-										v-model="settings.forcelabFinance.apiUrl"
-										label="API URL"
-										placeholder="https://financeforcalabs.com/api/v1"
-									/>
-								</VCol>
-								<VCol cols="12">
-									<VBtn
-										color="primary"
-										@click="saveForcelabFinanceSettings"
-										:disabled="!canUpdatePlatform"
-										:loading="loading"
-									>
-										Forcelab Finance Ayarlarını Kaydet
-									</VBtn>
-								</VCol>
-							</VRow>
-						</VContainer>
-					</VWindowItem>
-
-					<!-- MeelDev Ödeme Sistemi -->
-					<VWindowItem value="meeldev">
-						<VContainer>
-							<VAlert type="info" class="mb-4">
-								<strong>MeelDev</strong> ödeme sistemi entegrasyonu.
-								API key, secret ve callback secret bilgilerinizi buradan yönetebilirsiniz.
-								<br />
-								<strong>Callback URL:</strong>
-								<code>{{ meelDevCallbackUrlPreview }}</code>
-							</VAlert>
-							<VRow>
-								<VCol cols="12">
-									<VSwitch
-										v-model="settings.meelDev.isActive"
-										label="MeelDev Aktif"
-										color="success"
-									/>
-								</VCol>
-								<VCol cols="12" md="6">
-									<VTextField
-										v-model="settings.meelDev.name"
-										label="Görünen İsim"
-										placeholder="MeelDev"
-									/>
-								</VCol>
-								<VCol cols="12" md="6">
-									<VTextField
-										v-model="settings.meelDev.logo"
-										label="Logo URL"
-										placeholder="https://example.com/logo.png"
-									/>
-								</VCol>
-								<VCol cols="12" md="4">
-									<VTextField
-										v-model.number="settings.meelDev.minAmount"
-										label="Minimum Tutar"
-										type="number"
-										:min="0"
-									/>
-								</VCol>
-								<VCol cols="12" md="4">
-									<VTextField
-										v-model.number="settings.meelDev.maxAmount"
-										label="Maksimum Tutar"
-										type="number"
-										:min="0"
-									/>
-								</VCol>
-								<VCol cols="12" md="4">
-									<VTextField
-										v-model="settings.meelDev.currency"
-										label="Currency"
-										placeholder="TRY"
-									/>
-								</VCol>
-								<VCol cols="12">
-									<VDivider class="my-4" />
-									<h3 class="mb-3">API Ayarları</h3>
-								</VCol>
-								<VCol cols="12" md="4">
-									<VTextField
-										v-model="settings.meelDev.apiKey"
-										label="API Key"
-										prepend-icon="mdi-key"
-									/>
-								</VCol>
-								<VCol cols="12" md="4">
-									<VTextField
-										v-model="settings.meelDev.apiSecret"
-										label="API Secret"
-										type="password"
-										prepend-icon="mdi-lock"
-									/>
-								</VCol>
-								<VCol cols="12" md="4">
-									<VTextField
-										v-model="settings.meelDev.cbSecretKey"
-										label="Callback Secret Key"
-										type="password"
-										prepend-icon="mdi-shield-key"
-									/>
-								</VCol>
-								<VCol cols="12">
-									<VTextField
-										v-model="settings.meelDev.apiUrl"
-										label="API URL"
-										placeholder="https://gateway.meeldev.com"
-									/>
-								</VCol>
-								<VCol cols="12">
-									<VBtn
-										color="primary"
-										@click="saveMeelDevSettings"
-										:disabled="!canUpdatePlatform"
-										:loading="loading"
-									>
-										MeelDev Ayarlarını Kaydet
-									</VBtn>
-								</VCol>
-							</VRow>
-						</VContainer>
-					</VWindowItem>
-
-					<!-- GalaxyPay Ödeme Sistemi -->
-					<VWindowItem value="galaxypay">
-						<VContainer>
-							<VAlert type="info" class="mb-4">
-								<strong>GalaxyPay</strong> ödeme sistemi entegrasyonu.
-								API ID ve API Key bilgilerinizi buradan yönetebilirsiniz.
-								<br />
-								<strong>Callback URL:</strong>
-								<code>{{ galaxyPayCallbackUrlPreview }}</code>
-							</VAlert>
-							<VRow>
-								<VCol cols="12">
-									<VSwitch
-										v-model="settings.galaxyPay.isActive"
-										label="GalaxyPay Aktif"
-										color="success"
-									/>
-								</VCol>
-								<VCol cols="12" md="6">
-									<VTextField
-										v-model="settings.galaxyPay.name"
-										label="Görünen İsim"
-										placeholder="GalaxyPay"
-									/>
-								</VCol>
-								<VCol cols="12" md="6">
-									<VTextField
-										v-model="settings.galaxyPay.logo"
-										label="Logo URL"
-										placeholder="https://example.com/logo.png"
-									/>
-								</VCol>
-								<VCol cols="12" md="3">
-									<VTextField
-										v-model.number="settings.galaxyPay.minAmount"
-										label="Minimum Tutar"
-										type="number"
-										:min="0"
-									/>
-								</VCol>
-								<VCol cols="12" md="3">
-									<VTextField
-										v-model.number="settings.galaxyPay.maxAmount"
-										label="Maksimum Tutar"
-										type="number"
-										:min="0"
-									/>
-								</VCol>
-								<VCol cols="12" md="3">
-									<VTextField
-										v-model="settings.galaxyPay.currency"
-										label="Currency"
-										placeholder="TRY"
-									/>
-								</VCol>
-								<VCol cols="12" md="3">
-									<VTextField
-										v-model="settings.galaxyPay.lang"
-										label="Dil"
-										placeholder="tr"
-									/>
-								</VCol>
-								<VCol cols="12">
-									<VDivider class="my-4" />
-									<h3 class="mb-3">API Ayarları</h3>
-								</VCol>
-								<VCol cols="12" md="4">
-									<VTextField
-										v-model="settings.galaxyPay.apiId"
-										label="API ID"
-										prepend-icon="mdi-identifier"
-									/>
-								</VCol>
-								<VCol cols="12" md="4">
-									<VTextField
-										v-model="settings.galaxyPay.apiKey"
-										label="API Key"
-										type="password"
-										prepend-icon="mdi-key"
-									/>
-								</VCol>
-								<VCol cols="12" md="4">
-									<VTextField
-										v-model="settings.galaxyPay.apiUrl"
-										label="API URL"
-										placeholder="https://galaxypay.dev"
-									/>
-								</VCol>
-								<VCol cols="12" md="6">
-									<VTextField
-										v-model="settings.galaxyPay.returnUrlSuccess"
-										label="Başarılı Dönüş URL"
-										placeholder="https://site.com/payment/success"
-									/>
-								</VCol>
-								<VCol cols="12" md="6">
-									<VTextField
-										v-model="settings.galaxyPay.returnUrlFail"
-										label="Başarısız Dönüş URL"
-										placeholder="https://site.com/payment/fail"
-									/>
-								</VCol>
-								<VCol cols="12">
-									<VDivider class="my-4" />
-									<h3 class="mb-3">Aktif Yöntemler</h3>
-								</VCol>
-								<VCol cols="12" md="4">
-									<VSwitch
-										v-model="settings.galaxyPay.methods.depositLobby"
-										label="Deposit Lobby"
-										color="success"
-									/>
-								</VCol>
-								<VCol cols="12" md="4">
-									<VSwitch
-										v-model="settings.galaxyPay.methods.depositBankTransfer"
-										label="Deposit Bank Transfer"
-										color="success"
-									/>
-								</VCol>
-								<VCol cols="12" md="4">
-									<VSwitch
-										v-model="settings.galaxyPay.methods.depositPapara"
-										label="Deposit Papara"
-										color="success"
-									/>
-								</VCol>
-								<VCol cols="12" md="4">
-									<VSwitch
-										v-model="settings.galaxyPay.methods.withdrawBankTransfer"
-										label="Withdraw Bank Transfer"
-										color="warning"
-									/>
-								</VCol>
-								<VCol cols="12" md="4">
-									<VSwitch
-										v-model="settings.galaxyPay.methods.withdrawPapara"
-										label="Withdraw Papara"
-										color="warning"
-									/>
-								</VCol>
-								<VCol cols="12">
-									<VBtn
-										color="primary"
-										@click="saveGalaxyPaySettings"
-										:disabled="!canUpdatePlatform"
-										:loading="loading"
-									>
-										GalaxyPay Ayarlarını Kaydet
-									</VBtn>
-								</VCol>
-							</VRow>
-						</VContainer>
-					</VWindowItem>
-
-					<!-- FluxKripto Native -->
-					<VWindowItem value="fluxkripto">
-						<VContainer>
-							<VAlert color="info" variant="tonal" icon="mdi-link-variant" class="mb-5">
-								<div class="d-flex flex-wrap align-center justify-space-between ga-3">
-									<div>
-										<div class="font-weight-bold">Native callback adresi</div>
-										<code>{{ fluxKriptoCallbackUrlPreview }}</code>
-									</div>
-									<VBtn variant="outlined" size="small" prepend-icon="mdi-content-copy" @click="copyPlaceholder(fluxKriptoCallbackUrlPreview)">
-										Kopyala
-									</VBtn>
-								</div>
-							</VAlert>
-
-							<VCard variant="outlined" class="mb-5">
-								<VCardTitle class="d-flex flex-wrap align-center justify-space-between ga-3">
-									<span>Servis durumu ve limitler</span>
-									<VChip :color="settings.fluxKripto.isActive ? 'success' : 'secondary'" size="small" variant="tonal">
-										{{ settings.fluxKripto.isActive ? "Aktif" : "Kapalı" }}
-									</VChip>
-								</VCardTitle>
-								<VCardText>
-									<VRow>
-										<VCol cols="12">
-											<VSwitch v-model="settings.fluxKripto.isActive" label="FluxKripto sağlayıcısını kullanıma aç" color="success" />
-										</VCol>
-										<VCol cols="12" md="6">
-											<VTextField v-model="settings.fluxKripto.name" label="Görünen isim" />
-										</VCol>
-										<VCol cols="12" md="6">
-											<VTextField v-model="settings.fluxKripto.logo" label="Logo URL" />
-										</VCol>
-										<VCol cols="12" md="4">
-											<VTextField v-model.number="settings.fluxKripto.minAmount" label="Minimum tutar" type="number" :min="0" suffix="TRY" />
-										</VCol>
-										<VCol cols="12" md="4">
-											<VTextField v-model.number="settings.fluxKripto.maxAmount" label="Maksimum tutar" type="number" :min="0" suffix="TRY" />
-										</VCol>
-										<VCol cols="12" md="4">
-											<VTextField v-model="settings.fluxKripto.currency" label="Muhasebe para birimi" readonly />
-										</VCol>
-									</VRow>
-								</VCardText>
-							</VCard>
-
-							<VCard variant="outlined" class="mb-5">
-								<VCardTitle>Native kanallar</VCardTitle>
-								<VCardSubtitle>Hosted ödeme sayfası kullanılmaz.</VCardSubtitle>
-								<VCardText>
-									<VRow>
-										<VCol cols="12" sm="6">
-											<VSwitch v-model="settings.fluxKripto.methods.deposit" label="Yatırım" color="success" />
-										</VCol>
-										<VCol cols="12" sm="6">
-											<VSwitch v-model="settings.fluxKripto.methods.withdraw" label="Çekim" color="warning" />
-										</VCol>
-										<VCol cols="12" sm="6">
-											<VSwitch v-model="settings.fluxKripto.currencies.trx" label="TRX" color="info" />
-										</VCol>
-										<VCol cols="12" sm="6">
-											<VSwitch v-model="settings.fluxKripto.currencies.usdt" label="USDT" color="info" />
-										</VCol>
-									</VRow>
-								</VCardText>
-							</VCard>
-
-							<VCard variant="outlined">
-								<VCardTitle>Bağlantı ve kimlik bilgileri</VCardTitle>
-								<VCardText>
-									<VRow>
-										<VCol cols="12" md="6">
-											<VTextField v-model="settings.fluxKripto.apiUrl" label="API URL" placeholder="https://api.fluxkripto.com" />
-										</VCol>
-										<VCol cols="12" md="6">
-											<VTextField v-model="settings.fluxKripto.siteUrl" label="Site URL" placeholder="https://site.example" />
-										</VCol>
-										<VCol cols="12" md="6">
-											<div class="d-flex align-center justify-space-between mb-2">
-												<span class="text-body-2 font-weight-medium">API Key</span>
-												<VChip :color="settings.fluxKripto.apiKeyConfigured ? 'success' : 'warning'" size="x-small" variant="tonal">
-													{{ settings.fluxKripto.apiKeyConfigured ? "Yapılandırıldı" : "Eksik" }}
-												</VChip>
-											</div>
-											<VTextField v-model="settings.fluxKripto.apiKey" type="password" autocomplete="new-password" placeholder="Değiştirmek için yeni değer girin" hint="Boş bırakırsanız mevcut değer korunur." persistent-hint />
-										</VCol>
-										<VCol cols="12" md="6">
-											<div class="d-flex align-center justify-space-between mb-2">
-												<span class="text-body-2 font-weight-medium">Secret Key</span>
-												<VChip :color="settings.fluxKripto.secretKeyConfigured ? 'success' : 'warning'" size="x-small" variant="tonal">
-													{{ settings.fluxKripto.secretKeyConfigured ? "Yapılandırıldı" : "Eksik" }}
-												</VChip>
-											</div>
-											<VTextField v-model="settings.fluxKripto.secretKey" type="password" autocomplete="new-password" placeholder="Değiştirmek için yeni değer girin" hint="Boş bırakırsanız mevcut değer korunur." persistent-hint />
-										</VCol>
-										<VCol cols="12" class="d-flex justify-end">
-											<VBtn color="primary" prepend-icon="mdi-content-save" :disabled="!canUpdatePlatform" :loading="loading" @click="saveFluxKriptoSettings">
-												FluxKripto ayarlarını kaydet
-											</VBtn>
-										</VCol>
-									</VRow>
-								</VCardText>
-							</VCard>
-						</VContainer>
-					</VWindowItem>
-
-					<!-- XPayment H2H -->
-					<VWindowItem value="xpayments">
-						<VContainer>
-							<VAlert color="info" variant="tonal" icon="mdi-bank-transfer" class="mb-5">
-								<div class="d-flex flex-wrap align-center justify-space-between ga-3">
-									<div>
-										<div class="font-weight-bold">H2H callback adresi</div>
-										<code>{{ xPaymentsCallbackUrlPreview }}</code>
-									</div>
-									<VBtn variant="outlined" size="small" prepend-icon="mdi-content-copy" @click="copyPlaceholder(xPaymentsCallbackUrlPreview)">
-										Kopyala
-									</VBtn>
-								</div>
-							</VAlert>
-
-							<VCard variant="outlined" class="mb-5">
-								<VCardTitle class="d-flex flex-wrap align-center justify-space-between ga-3">
-									<span>Servis durumu ve limitler</span>
-									<VChip :color="settings.xPayments.isActive ? 'success' : 'secondary'" size="small" variant="tonal">
-										{{ settings.xPayments.isActive ? "Aktif" : "Kapalı" }}
-									</VChip>
-								</VCardTitle>
-								<VCardText>
-									<VRow>
-										<VCol cols="12">
-											<VSwitch v-model="settings.xPayments.isActive" label="XPayment sağlayıcısını kullanıma aç" color="success" />
-										</VCol>
-										<VCol cols="12" md="6">
-											<VTextField v-model="settings.xPayments.name" label="Görünen isim" />
-										</VCol>
-										<VCol cols="12" md="6">
-											<VTextField v-model="settings.xPayments.logo" label="Logo URL" />
-										</VCol>
-										<VCol cols="12" md="4">
-											<VTextField v-model.number="settings.xPayments.minAmount" label="Minimum tutar" type="number" :min="0" suffix="TRY" />
-										</VCol>
-										<VCol cols="12" md="4">
-											<VTextField v-model.number="settings.xPayments.maxAmount" label="Maksimum tutar" type="number" :min="0" suffix="TRY" />
-										</VCol>
-										<VCol cols="12" md="4">
-											<VTextField v-model="settings.xPayments.currency" label="Muhasebe para birimi" readonly />
-										</VCol>
-									</VRow>
-								</VCardText>
-							</VCard>
-
-							<VCard variant="outlined" class="mb-5">
-								<VCardTitle>H2H işlem kanalları</VCardTitle>
-								<VCardSubtitle>Yatırım hesabı doğrudan frontend’e aktarılır; hosted ödeme sayfası kullanılmaz.</VCardSubtitle>
-								<VCardText>
-									<VRow>
-										<VCol cols="12" sm="6">
-											<VSwitch v-model="settings.xPayments.methods.deposit" label="H2H yatırım" color="success" />
-										</VCol>
-										<VCol cols="12" sm="6">
-											<VSwitch v-model="settings.xPayments.methods.withdraw" label="IBAN çekim" color="warning" />
-										</VCol>
-									</VRow>
-								</VCardText>
-							</VCard>
-
-							<VCard variant="outlined">
-								<VCardTitle>Bağlantı ve kimlik bilgileri</VCardTitle>
-								<VCardText>
-									<VRow>
-										<VCol cols="12">
-											<VTextField v-model="settings.xPayments.apiUrl" label="API URL" placeholder="https://api.xpaymentsystems.com" />
-										</VCol>
-										<VCol cols="12" md="6">
-											<div class="d-flex align-center justify-space-between mb-2">
-												<span class="text-body-2 font-weight-medium">API Key</span>
-												<VChip :color="settings.xPayments.apiKeyConfigured ? 'success' : 'warning'" size="x-small" variant="tonal">
-													{{ settings.xPayments.apiKeyConfigured ? "Yapılandırıldı" : "Eksik" }}
-												</VChip>
-											</div>
-											<VTextField v-model="settings.xPayments.apiKey" type="password" autocomplete="new-password" placeholder="Değiştirmek için yeni değer girin" hint="Boş bırakırsanız mevcut değer korunur." persistent-hint />
-										</VCol>
-										<VCol cols="12" md="6">
-											<div class="d-flex align-center justify-space-between mb-2">
-												<span class="text-body-2 font-weight-medium">Secret Key</span>
-												<VChip :color="settings.xPayments.secretKeyConfigured ? 'success' : 'warning'" size="x-small" variant="tonal">
-													{{ settings.xPayments.secretKeyConfigured ? "Yapılandırıldı" : "Eksik" }}
-												</VChip>
-											</div>
-											<VTextField v-model="settings.xPayments.secretKey" type="password" autocomplete="new-password" placeholder="Değiştirmek için yeni değer girin" hint="Boş bırakırsanız mevcut değer korunur." persistent-hint />
-										</VCol>
-										<VCol cols="12" class="d-flex justify-end">
-											<VBtn color="primary" prepend-icon="mdi-content-save" :disabled="!canUpdatePlatform" :loading="loading" @click="saveXPaymentsSettings">
-												XPayment ayarlarını kaydet
-											</VBtn>
-										</VCol>
-									</VRow>
-								</VCardText>
-							</VCard>
-						</VContainer>
-					</VWindowItem>
-
-					<!-- EchoPayz Ödeme Sistemi -->
-					<VWindowItem value="echopayz">
-						<VContainer>
-							<VAlert type="info" class="mb-4">
-								<strong>EchoPayz</strong> ödeme sistemi
-								entegrasyonu. API anahtarlarınızı EchoPayz
-								panelinden alabilirsiniz.
-								<br />
-								<strong>Callback URL:</strong>
-								<code>{{ callbackUrlPreview }}</code>
-							</VAlert>
-							<VRow>
-								<VCol cols="12">
-									<VSwitch
-										v-model="settings.echopayz.isActive"
-										label="EchoPayz Aktif"
-										color="success"
-									/>
-								</VCol>
-								<VCol cols="12" md="6">
-									<VTextField
-										v-model="settings.echopayz.name"
-										label="Görünen İsim"
-										placeholder="EchoPayz Havale"
-									/>
-								</VCol>
-								<VCol cols="12" md="6">
-									<VTextField
-										v-model="settings.echopayz.logo"
-										label="Logo URL"
-										placeholder="https://panel.echopayz.com/logo.png"
-									/>
-								</VCol>
-								<VCol cols="12" md="6">
-									<VTextField
-										v-model.number="
-											settings.echopayz.minAmount
-										"
-										label="Minimum Tutar (TL)"
-										type="number"
-										:min="0"
-									/>
-								</VCol>
-								<VCol cols="12" md="6">
-									<VTextField
-										v-model.number="
-											settings.echopayz.maxAmount
-										"
-										label="Maksimum Tutar (TL)"
-										type="number"
-										:min="0"
-									/>
-								</VCol>
-								<VCol cols="12">
-									<VDivider class="my-4" />
-									<h3 class="mb-3">API Ayarları</h3>
-								</VCol>
-								<VCol cols="12" md="6">
-									<VTextField
-										v-model="settings.echopayz.apiKey"
-										label="API Key"
-										placeholder="pk_..."
-										prepend-icon="mdi-key"
-									/>
-								</VCol>
-								<VCol cols="12" md="6">
-									<VTextField
-										v-model="settings.echopayz.apiSecret"
-										label="API Secret"
-										placeholder="sk_..."
-										type="password"
-										prepend-icon="mdi-lock"
-									/>
-								</VCol>
-								<VCol cols="12">
-									<VTextField
-										v-model="settings.echopayz.apiUrl"
-										label="API URL"
-										placeholder="https://api.echopayz.com/api/v1"
-									/>
-								</VCol>
-								<VCol cols="12">
-									<VBtn
-										color="primary"
-										@click="saveEchoPayzSettings"
-										:disabled="!canUpdatePlatform"
-										:loading="loading"
-									>
-										EchoPayz Ayarlarını Kaydet
-									</VBtn>
-								</VCol>
-							</VRow>
-						</VContainer>
-					</VWindowItem>
-						</VWindow>
+					</VWindow>
 					</VCol>
 				</VRow>
 			</VCardText>

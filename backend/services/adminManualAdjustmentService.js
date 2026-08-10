@@ -5,13 +5,17 @@ const ALLOWED_KINDS = new Set(["balance", "bonus"]);
 const ALLOWED_DIRECTIONS = new Set(["credit", "debit"]);
 const DEFAULT_BALANCE_ADJUSTMENT_CATEGORY = "MANUEL BAKIYE";
 
-const buildUserSnapshot = (user = {}) => ({
-	username: user.username || "",
-	name: user.name || "",
-	email: user.local?.email || "",
-	phone: user.phone || "",
-	rank: user.rank || "user",
-});
+const buildUserSnapshot = (user) => {
+	const safeUser = user || {};
+
+	return {
+		username: safeUser.username || "",
+		name: safeUser.name || "",
+		email: safeUser.local?.email || "",
+		phone: safeUser.phone || "",
+		rank: safeUser.rank || "user",
+	};
+};
 
 const buildWalletKey = (wallet = {}) => ({
 	coinType: String(wallet.coinType || "").trim(),
