@@ -14,6 +14,7 @@ const {
 	mapMeelDevStatus,
 } = require("../../utils/meelDev");
 const { createAdminNotification } = require("../../utils/adminNotification");
+const { assertWithdrawalNotBlocked } = require("../../utils/bonusLock");
 
 // ─── Settings Helper ───────────────────────────────────────────────────────
 const getSettings = async (requireActive = true) => {
@@ -271,6 +272,20 @@ router.post("/withdraw", authorizeUser(true), async (req, res) => {
 			return res.status(404).json({ success: false, error: "Kullanıcı bulunamadı." });
 		}
 
+		try {
+			await assertWithdrawalNotBlocked(user);
+		} catch (lockErr) {
+			if (lockErr.code === "WAGERING_REQUIREMENT_NOT_MET") {
+				return res.status(400).json({
+					success: false,
+					error: lockErr.message,
+					code: lockErr.code,
+					wagering: lockErr.wagering,
+				});
+			}
+			throw lockErr;
+		}
+
 		const activeWallet = getActiveWallet(user);
 		if (!activeWallet) {
 			console.error("MeelDev withdraw: aktif cüzdan bulunamadı", {
@@ -444,7 +459,7 @@ router.get("/status/:id", authorizeUser(false), async (req, res) => {
 	}
 });
 
-// ─── Callback (Deposit & Withdraw) ─────────────────────────────────────────
+// ─── Callback (Deposit & Withdraw) ─────────────────��───────────────────────
 // MeelDev sends form-urlencoded, but we accept both
 router.post(
 	"/callback",

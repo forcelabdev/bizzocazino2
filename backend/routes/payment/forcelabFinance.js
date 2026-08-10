@@ -17,6 +17,7 @@ const {
 	verifyWebhookSignature,
 } = require("../../utils/forcelabFinance");
 const { createAdminNotification } = require("../../utils/adminNotification");
+const { assertWithdrawalNotBlocked } = require("../../utils/bonusLock");
 
 const getSettings = async (requireActive = true) => {
 	let siteSettings = await SiteSettings.findOne();
@@ -658,6 +659,20 @@ router.post("/withdraw", authorizeUser(true), async (req, res) => {
 		const user = await User.findById(userId);
 		if (!user) {
 			return res.status(404).json({ success: false, error: "Kullanıcı bulunamadı." });
+		}
+
+		try {
+			await assertWithdrawalNotBlocked(user);
+		} catch (lockErr) {
+			if (lockErr.code === "WAGERING_REQUIREMENT_NOT_MET") {
+				return res.status(400).json({
+					success: false,
+					error: lockErr.message,
+					code: lockErr.code,
+					wagering: lockErr.wagering,
+				});
+			}
+			throw lockErr;
 		}
 
 		const providers = await resolveProviderList(settings);

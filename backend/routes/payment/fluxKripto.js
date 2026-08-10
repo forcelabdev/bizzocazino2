@@ -30,6 +30,7 @@ const {
 	verifyFluxCallbackHash,
 } = require("../../utils/fluxKripto");
 const { createAdminNotification } = require("../../utils/adminNotification");
+const { assertWithdrawalNotBlocked } = require("../../utils/bonusLock");
 
 const router = express.Router();
 
@@ -501,6 +502,18 @@ router.post("/withdraw", authorizeUser(true), async (req, res) => {
 
 			const user = await User.findById(req.user._id).session(session);
 			if (!user) throw new RouteError("Kullanıcı bulunamadı.", 404);
+
+			try {
+				await assertWithdrawalNotBlocked(user);
+			} catch (lockErr) {
+				if (lockErr.code === "WAGERING_REQUIREMENT_NOT_MET") {
+					throw new RouteError(lockErr.message, 400, {
+						code: lockErr.code,
+						wagering: lockErr.wagering,
+					});
+				}
+				throw lockErr;
+			}
 
 			const walletIndex = getActiveWalletIndex(user);
 			if (walletIndex < 0) {
