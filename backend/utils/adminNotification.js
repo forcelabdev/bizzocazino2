@@ -25,7 +25,7 @@ async function createAdminNotification(type, title, message, link, meta = {}) {
 
 		try {
 			const io = getIO();
-			io.emit("admin:notification", {
+			io.of("/admin-panel").to("admin-panel-room").emit("admin:notification", {
 				_id: notification._id,
 				type: notification.type,
 				title: notification.title,
