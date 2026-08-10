@@ -8,6 +8,7 @@ const {
 	createAdminManualAdjustment,
 } = require("./adminManualAdjustmentService");
 const { RIVO_WALLET } = require("../utils/rivoWallet");
+const { isBonusLocked } = require("../utils/bonusLock");
 
 const CATEGORY = "KAYIP BONUSU";
 const SOURCE = "loss_bonus";
@@ -111,7 +112,10 @@ const getPotential = async (userId) => {
 	const hasLoss = period.netLoss > 0;
 	const meetsMinimum =
 		hasLoss && period.netLoss >= (settings.minLossAmount || 0);
-	const eligible = Boolean(settings.enabled && meetsMinimum);
+	const blockedByOtherBonus = isBonusLocked(user);
+	const eligible = Boolean(
+		settings.enabled && meetsMinimum && !blockedByOtherBonus
+	);
 
 	const { appliedAmount } = hasLoss
 		? computeBonusAmount(period.netLoss, settings)
@@ -120,6 +124,8 @@ const getPotential = async (userId) => {
 	let message;
 	if (!settings.enabled) {
 		message = "Kayıp bonusu şu anda aktif değil.";
+	} else if (blockedByOtherBonus) {
+		message = "Yakın zamanda alınan bir bonus nedeniyle şu anda başka bonus talep edemezsiniz.";
 	} else if (!hasLoss) {
 		message = "Bu dönemde kaybınız olmadığı için bonus talep edemezsiniz.";
 	} else if (!meetsMinimum) {
@@ -151,6 +157,10 @@ const claim = async (userId) => {
 
 	const settings = await getSettings();
 	if (!settings.enabled) throw new Error("LOSS_BONUS_DISABLED");
+
+	if (isBonusLocked(user)) {
+		throw new Error("OTHER_BONUS_BLOCKED");
+	}
 
 	const period = await calculatePeriodLoss(user);
 	if (period.netLoss <= 0) throw new Error("NO_LOSS_IN_PERIOD");

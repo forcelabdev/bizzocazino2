@@ -29,8 +29,9 @@ const depositBonusSettingSchema = new mongoose.Schema(
 		// çevrim takibi yapılmıyor; admin panelinde referans olarak tutulur.
 		wageringMultiplier: { type: Number, default: 1, min: 0 },
 
-		// Yatırımdan sonra bonusun talep edilebileceği azami süre (saat).
-		// Bu süre içinde talep edilmezse veya bir bahis yapılırsa hak kaybolur.
+		// blockOtherBonuses açıkken, bu bonus alındığında diğer bonusların
+		// kaç saat boyunca engelleneceği. blockOtherBonuses kapalıyken
+		// kullanılmaz.
 		durationHours: { type: Number, default: 720, min: 0 },
 
 		// true: talep anında otomatik onaylanır ve bakiyeye geçer.

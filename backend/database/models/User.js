@@ -239,11 +239,17 @@ const userSchema = new mongoose.Schema(
 			lastClaimAt: { type: Date },
 		},
 
-		// Yatırım Bonusu: son talep edilen dönemin bitiş tarihi ve bu bonus
-		// alındığında diğer bonusların ne zamana kadar engelli olduğu.
+		// Yatırım Bonusu: son talep edilen dönemin bitiş tarihi.
 		depositBonus: {
 			lastClaimAt: { type: Date },
-			otherBonusesBlockedUntil: { type: Date },
+		},
+
+		// Paylaşımlı bonus kilidi: bir bonus alındığında (örn. Yatırım Bonusu)
+		// belirli bir süre boyunca diğer bonusların talep edilmesini engeller.
+		// Herhangi bir bonus servisi bu alanı okuyup/yazabilir.
+		bonusLock: {
+			blockedUntil: { type: Date },
+			source: { type: String, default: "" },
 		},
 
 		rakeback: {

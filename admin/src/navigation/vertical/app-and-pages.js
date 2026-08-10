@@ -144,6 +144,12 @@ export default [
         action: "read",
         subject: "finance.lossBonus",
       },
+      {
+        title: "platform.depositBonus",
+        to: "apps-deposit-bonus",
+        action: "read",
+        subject: "finance.depositBonus",
+      },
     ],
   },
 

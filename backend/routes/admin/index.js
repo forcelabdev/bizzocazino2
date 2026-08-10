@@ -8,6 +8,7 @@ const upload = require("../../middleware/upload");
 const adminWingoController = require("../../controllers/adminWingoController");
 const manualBonusCategoryController = require("../../controllers/admin/manualBonusCategoryController");
 const lossBonusController = require("../../controllers/admin/lossBonusController");
+const depositBonusController = require("../../controllers/admin/depositBonusController");
 const playerSegmentsController = require("../../controllers/admin/playerSegments");
 const tagsController = require("../../controllers/admin/tags");
 const { generalGetChatOnlineCount } = require("../../utils/general/chat");
@@ -2278,6 +2279,47 @@ router.get(
 	"/users/:id/loss-bonus",
 	checkPermission(["finance.lossBonus.read", "finance.lossBonus.manage", "users.read"]),
 	lossBonusController.getUserSummary,
+);
+
+// Yatırım Bonusu (Deposit Bonus)
+router.get(
+	"/deposit-bonus/settings",
+	checkPermission(["finance.depositBonus.read", "finance.depositBonus.manage"]),
+	depositBonusController.getSettings,
+);
+
+router.put(
+	"/deposit-bonus/settings",
+	checkPermission("finance.depositBonus.manage"),
+	depositBonusController.updateSettings,
+);
+
+router.get(
+	"/deposit-bonus/claims",
+	checkPermission(["finance.depositBonus.read", "finance.depositBonus.manage"]),
+	depositBonusController.listClaims,
+);
+
+router.post(
+	"/deposit-bonus/claims/:id/approve",
+	checkPermission("finance.depositBonus.manage"),
+	depositBonusController.approveClaim,
+);
+
+router.post(
+	"/deposit-bonus/claims/:id/reject",
+	checkPermission("finance.depositBonus.manage"),
+	depositBonusController.rejectClaim,
+);
+
+router.get(
+	"/users/:id/deposit-bonus",
+	checkPermission([
+		"finance.depositBonus.read",
+		"finance.depositBonus.manage",
+		"users.read",
+	]),
+	depositBonusController.getUserSummary,
 );
 
 router.get(
@@ -8916,7 +8958,7 @@ router.get(
 	},
 );
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════���═══════════════════════════
 // 🎨 CUSTOM CSS/JS ENDPOINTS
 // ═══════════════════════════════════════════════════════════════════════════
 

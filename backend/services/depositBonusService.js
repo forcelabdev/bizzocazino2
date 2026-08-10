@@ -9,6 +9,11 @@ const {
 	createAdminManualAdjustment,
 } = require("./adminManualAdjustmentService");
 const { RIVO_WALLET } = require("../utils/rivoWallet");
+const {
+	isBonusLocked,
+	getBonusLockInfo,
+	applyBonusLock,
+} = require("../utils/bonusLock");
 
 const CATEGORY = "YATIRIM BONUSU";
 const SOURCE = "deposit_bonus";
@@ -107,11 +112,6 @@ const computeBonusAmount = (totalDeposit, settings) => {
 	return { calculatedAmount, appliedAmount };
 };
 
-const isUserCurrentlyBlocked = (user) => {
-	const blockedUntil = user?.depositBonus?.otherBonusesBlockedUntil;
-	return Boolean(blockedUntil && new Date(blockedUntil) > new Date());
-};
-
 /**
  * Oyuncunun şu an talep edebileceği potansiyel yatırım bonusunu hesaplar.
  * Bakiyeyi/veritabanını DEĞİŞTİRMEZ, sadece önizleme amaçlıdır.
@@ -130,7 +130,7 @@ const getPotential = async (userId) => {
 		!settings.maxDepositAmount ||
 		settings.maxDepositAmount <= 0 ||
 		period.totalDeposit <= settings.maxDepositAmount;
-	const blockedByOtherBonus = isUserCurrentlyBlocked(user);
+	const blockedByOtherBonus = isBonusLocked(user);
 	const eligible = Boolean(
 		settings.enabled &&
 			meetsMinimum &&
@@ -147,7 +147,11 @@ const getPotential = async (userId) => {
 	if (!settings.enabled) {
 		message = "Yatırım bonusu şu anda aktif değil.";
 	} else if (blockedByOtherBonus) {
-		message = "Yakın zamanda alınan bir bonus nedeniyle şu anda başka bonus talep edemezsiniz.";
+		const lockInfo = getBonusLockInfo(user);
+		const until = lockInfo?.blockedUntil
+			? new Date(lockInfo.blockedUntil).toLocaleString("tr-TR")
+			: "";
+		message = `Yakın zamanda alınan bir bonus nedeniyle ${until} tarihine kadar başka bonus talep edemezsiniz.`;
 	} else if (!hasDeposit) {
 		message = "Talep edebileceğiniz bir yatırımınız bulunmuyor.";
 	} else if (period.hasBet) {
@@ -182,7 +186,7 @@ const claim = async (userId) => {
 	const settings = await getSettings();
 	if (!settings.enabled) throw new Error("DEPOSIT_BONUS_DISABLED");
 
-	if (isUserCurrentlyBlocked(user)) {
+	if (isBonusLocked(user)) {
 		throw new Error("OTHER_BONUS_BLOCKED");
 	}
 
@@ -207,10 +211,6 @@ const claim = async (userId) => {
 		settings
 	);
 
-	const blockedUntil = settings.blockOtherBonuses
-		? new Date(Date.now() + Math.max(settings.durationHours || 0, 0) * 60 * 60 * 1000)
-		: null;
-
 	const previousClaimAt = user.depositBonus?.lastClaimAt || null;
 	const lockedUser = await User.findOneAndUpdate(
 		{
@@ -220,9 +220,6 @@ const claim = async (userId) => {
 		{
 			$set: {
 				"depositBonus.lastClaimAt": period.periodEnd,
-				...(blockedUntil
-					? { "depositBonus.otherBonusesBlockedUntil": blockedUntil }
-					: {}),
 			},
 		},
 		{ new: true }
@@ -231,6 +228,14 @@ const claim = async (userId) => {
 	if (!lockedUser) {
 		throw new Error("CLAIM_IN_PROGRESS");
 	}
+
+	const blockedUntil = settings.blockOtherBonuses
+		? await applyBonusLock(
+				lockedUser._id,
+				Math.max(settings.durationHours || 0, 0),
+				SOURCE
+			)
+		: null;
 
 	const claimDoc = await DepositBonusClaim.create({
 		user: lockedUser._id,
@@ -267,7 +272,6 @@ const claim = async (userId) => {
 			amount: appliedAmount,
 			source: SOURCE,
 			sourceRef: { claimId: claimDoc._id },
-			bypassBonusLock: true,
 		});
 
 		claimDoc.adjustmentRef = result.adjustment._id;
@@ -293,6 +297,8 @@ const approveClaim = async (claimId, actorUser) => {
 	const user = await User.findById(claimDoc.user);
 	if (!user) throw new Error("USER_NOT_FOUND");
 
+	const settings = await getSettings();
+
 	const result = await createAdminManualAdjustment({
 		targetUser: user,
 		actorUser,
@@ -304,17 +310,18 @@ const approveClaim = async (claimId, actorUser) => {
 		amount: claimDoc.appliedAmount,
 		source: SOURCE,
 		sourceRef: { claimId: claimDoc._id },
-		bypassBonusLock: true,
 	});
 
-	if (claimDoc.otherBonusesBlockedUntil) {
-		await User.findByIdAndUpdate(user._id, {
-			$set: {
-				"depositBonus.otherBonusesBlockedUntil": claimDoc.otherBonusesBlockedUntil,
-			},
-		});
+	let blockedUntil = null;
+	if (settings.blockOtherBonuses) {
+		blockedUntil = await applyBonusLock(
+			user._id,
+			Math.max(settings.durationHours || 0, 0),
+			SOURCE
+		);
 	}
 
+	claimDoc.otherBonusesBlockedUntil = blockedUntil;
 	claimDoc.status = "approved";
 	claimDoc.reviewedBy = actorUser?._id || null;
 	claimDoc.reviewedAt = new Date();
