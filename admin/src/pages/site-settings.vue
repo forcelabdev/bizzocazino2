@@ -9,11 +9,6 @@ const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || "";
 const isNewSiteMode =
 	String(import.meta.env.NEW_SITE_MODE ?? "true").toLowerCase() !== "false";
 
-// Callback URL preview for EchoPayz
-const callbackUrlPreview = computed(() => {
-	return apiBaseUrl + "/payment/echopayz/callback";
-});
-
 const forcelabCallbackUrlPreview = computed(() => {
 	return apiBaseUrl + "/payment/forcelab-finance/callback";
 });
@@ -175,16 +170,6 @@ const settings = ref({
 		encryptionKey: "",
 		hashSecret: "",
 	},
-	echopayz: {
-		isActive: false,
-		name: "EchoPayz Havale",
-		logo: "https://panel.echopayz.com/logo.png",
-		minAmount: 100,
-		maxAmount: 100000,
-		apiKey: "",
-		apiSecret: "",
-		apiUrl: "https://api.echopayz.com/api/v1",
-	},
 	forcelabFinance: {
 		isActive: false,
 		name: "Forcelab Finance",
@@ -318,7 +303,6 @@ const allSettingsTabs = [
 	{ value: "galaxypay", label: "GalaxyPay", icon: "mdi-credit-card-check" },
 	{ value: "fluxkripto", label: "FluxKripto", icon: "mdi-bitcoin" },
 	{ value: "xpayments", label: "XPayment", icon: "mdi-bank-transfer-in" },
-	{ value: "echopayz", label: "EchoPayz", icon: "mdi-cash-sync" },
 ];
 const settingsTabs = computed(() =>
 	allSettingsTabs.filter(
@@ -1141,34 +1125,6 @@ const sendTestEmail = async () => {
 	}
 };
 
-// EchoPayz ayarlarını kaydet
-const saveEchoPayzSettings = async () => {
-	if (!ensurePlatformUpdatePermission()) return;
-
-	try {
-		loading.value = true;
-		await axios.put("/admin/echopayz/settings", settings.value.echopayz);
-		alert("EchoPayz ayarları başarıyla kaydedildi!");
-	} catch (error) {
-		console.error("EchoPayz ayarları kaydedilirken hata:", error);
-		alert("EchoPayz ayarları kaydedilirken bir hata oluştu!");
-	} finally {
-		loading.value = false;
-	}
-};
-
-// EchoPayz ayarlarını getir
-const fetchEchoPayzSettings = async () => {
-	try {
-		const response = await axios.get("/admin/echopayz/settings");
-		if (response.data.success && response.data.data) {
-			settings.value.echopayz = response.data.data;
-		}
-	} catch (error) {
-		console.error("EchoPayz ayarları yüklenirken hata:", error);
-	}
-};
-
 const saveForcelabFinanceSettings = async () => {
 	if (!ensurePlatformUpdatePermission()) return;
 
@@ -1589,7 +1545,6 @@ onMounted(async () => {
 		await fetchProviderSettings();
 		await fetchSmsOtpSettings();
 		await fetchEmailTemplates();
-		fetchEchoPayzSettings();
 		fetchForcelabFinanceSettings();
 		fetchMeelDevSettings();
 		fetchGalaxyPaySettings();
@@ -4205,101 +4160,7 @@ console.log('Custom JS loaded');"
 						</VContainer>
 					</VWindowItem>
 
-					<!-- EchoPayz Ödeme Sistemi -->
-					<VWindowItem value="echopayz">
-						<VContainer>
-							<VAlert type="info" class="mb-4">
-								<strong>EchoPayz</strong> ödeme sistemi
-								entegrasyonu. API anahtarlarınızı EchoPayz
-								panelinden alabilirsiniz.
-								<br />
-								<strong>Callback URL:</strong>
-								<code>{{ callbackUrlPreview }}</code>
-							</VAlert>
-							<VRow>
-								<VCol cols="12">
-									<VSwitch
-										v-model="settings.echopayz.isActive"
-										label="EchoPayz Aktif"
-										color="success"
-									/>
-								</VCol>
-								<VCol cols="12" md="6">
-									<VTextField
-										v-model="settings.echopayz.name"
-										label="Görünen İsim"
-										placeholder="EchoPayz Havale"
-									/>
-								</VCol>
-								<VCol cols="12" md="6">
-									<VTextField
-										v-model="settings.echopayz.logo"
-										label="Logo URL"
-										placeholder="https://panel.echopayz.com/logo.png"
-									/>
-								</VCol>
-								<VCol cols="12" md="6">
-									<VTextField
-										v-model.number="
-											settings.echopayz.minAmount
-										"
-										label="Minimum Tutar (TL)"
-										type="number"
-										:min="0"
-									/>
-								</VCol>
-								<VCol cols="12" md="6">
-									<VTextField
-										v-model.number="
-											settings.echopayz.maxAmount
-										"
-										label="Maksimum Tutar (TL)"
-										type="number"
-										:min="0"
-									/>
-								</VCol>
-								<VCol cols="12">
-									<VDivider class="my-4" />
-									<h3 class="mb-3">API Ayarları</h3>
-								</VCol>
-								<VCol cols="12" md="6">
-									<VTextField
-										v-model="settings.echopayz.apiKey"
-										label="API Key"
-										placeholder="pk_..."
-										prepend-icon="mdi-key"
-									/>
-								</VCol>
-								<VCol cols="12" md="6">
-									<VTextField
-										v-model="settings.echopayz.apiSecret"
-										label="API Secret"
-										placeholder="sk_..."
-										type="password"
-										prepend-icon="mdi-lock"
-									/>
-								</VCol>
-								<VCol cols="12">
-									<VTextField
-										v-model="settings.echopayz.apiUrl"
-										label="API URL"
-										placeholder="https://api.echopayz.com/api/v1"
-									/>
-								</VCol>
-								<VCol cols="12">
-									<VBtn
-										color="primary"
-										@click="saveEchoPayzSettings"
-										:disabled="!canUpdatePlatform"
-										:loading="loading"
-									>
-										EchoPayz Ayarlarını Kaydet
-									</VBtn>
-								</VCol>
-							</VRow>
-						</VContainer>
-					</VWindowItem>
-						</VWindow>
+					</VWindow>
 					</VCol>
 				</VRow>
 			</VCardText>

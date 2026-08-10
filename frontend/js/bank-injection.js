@@ -10,8 +10,6 @@
 
 	/* ── state ─────────────────────────────────────────────────── */
 	let currentTab = "deposit"; // "deposit" | "withdraw"
-	let echoPayzInfo = null;
-	let echoPayzInfoPromise = null;
 	let forcelabMethodsInfo = null;
 	let forcelabMethodsPromise = null;
 	let activeModal = null; // overlay modals (bank details, coming soon, etc.)
@@ -71,27 +69,6 @@
 	};
 
 	/* ── API calls ─────────────────────────────────────────────── */
-	const fetchEchoPayzInfo = async () => {
-		if (echoPayzInfo !== null) return echoPayzInfo;
-		if (!echoPayzInfoPromise) {
-			echoPayzInfoPromise = fetch("https://apibizzocasino.site/payment/echopayz/info")
-				.then((r) => r.json().catch(() => ({})))
-				.then((j) => {
-					echoPayzInfo = j.success && j.data ? j.data : {available: false};
-					return echoPayzInfo;
-				})
-				.catch((err) => {
-					console.error("echopayz/info error:", err);
-					echoPayzInfo = {available: false};
-					return echoPayzInfo;
-				})
-				.finally(() => {
-					echoPayzInfoPromise = null;
-				});
-		}
-		return echoPayzInfoPromise;
-	};
-
 	const fetchForcelabMethods = async () => {
 		if (forcelabMethodsInfo !== null) return forcelabMethodsInfo;
 		if (!forcelabMethodsPromise) {
@@ -121,17 +98,7 @@
 	let withdrawalMethods = [];
 
 	const buildDepositMethods = () => {
-		depositMethods = [
-			{
-				id: "echopayz-deposit",
-				label: "EchoPayz",
-				type: "Havale",
-				image: "/img/havale.png",
-				color: "#10b981",
-				action: openEchoPayzModal,
-				dynamic: true,
-			},
-		];
+		depositMethods = [];
 	};
 
 	const buildWithdrawalMethods = () => {
@@ -140,7 +107,6 @@
 
 	/* window API for external updates */
 	window.updateOtherPaymentMethods = (autoRemount = true) => {
-		echoPayzInfo = null;
 		forcelabMethodsInfo = null;
 		buildDepositMethods();
 		if (autoRemount) rerenderContent();
@@ -472,86 +438,6 @@
 			'<button class="js-close" style="width:100%;padding:13px;background:rgba(148,163,184,.04);color:#94a3b8;border:1px solid rgba(148,163,184,.1);border-radius:12px;font-weight:600;font-size:14px;cursor:pointer;transition:all .2s">Tamam</button>'
 		);
 		overlay.querySelector(".js-close").addEventListener("click", closeOverlay);
-	};
-
-	/* ── EchoPayz deposit ──────────────────────────────────────── */
-	const openEchoPayzModal = async () => {
-		closeSiteModal();
-		if (!isUserAuthenticated()) {
-			notify("error", "EchoPayz ile yatırım yapmak için giriş yapmalısınız.");
-			return;
-		}
-		let info;
-		try {
-			info = await fetchEchoPayzInfo();
-			if (!info?.available) {
-				notify("error", "EchoPayz şu anda kullanılamıyor.");
-				return;
-			}
-		} catch (_) {
-			notify("error", "EchoPayz bilgileri alınamadı.");
-			return;
-		}
-		const minAmt = info.minAmount || 100;
-		const maxAmt = info.maxAmount || 100000;
-
-		const overlay = createOverlay(
-			'<h2>' + (info.name || "EchoPayz Havale") + '</h2>' +
-			'<p>Yatırmak istediğiniz tutarı giriniz.</p>' +
-			'<p style="font-size:12px;color:#64748b">Min: ₺' + minAmt.toLocaleString("tr-TR") + ' — Max: ₺' + maxAmt.toLocaleString("tr-TR") + '</p>' +
-			'<label class="bs-label">Tutar (₺)</label>' +
-			'<input type="number" min="' + minAmt + '" max="' + maxAmt + '" step="1" class="bs-input js-amount" placeholder="örn. 500" />' +
-			'<div class="bs-actions">' +
-				'<button type="button" class="bs-btn-primary js-submit">Devam Et</button>' +
-				'<button type="button" class="bs-btn-secondary js-cancel">İptal</button>' +
-			'</div>'
-		);
-
-		overlay.querySelector(".js-cancel").addEventListener("click", closeOverlay);
-		const submitBtn = overlay.querySelector(".js-submit");
-		const input = overlay.querySelector(".js-amount");
-
-		submitBtn.addEventListener("click", async () => {
-			const amount = parseFloat(input.value);
-			if (!amount || amount < minAmt) {
-				notify("error", "Minimum yatırım tutarı: ₺" + minAmt.toLocaleString("tr-TR"));
-				return;
-			}
-			if (amount > maxAmt) {
-				notify("error", "Maksimum yatırım tutarı: ₺" + maxAmt.toLocaleString("tr-TR"));
-				return;
-			}
-			submitBtn.disabled = true;
-			submitBtn.textContent = "İşleniyor...";
-			const token = localStorage.getItem("token");
-			if (!token) {
-				notify("error", "Lütfen giriş yapınız.");
-				submitBtn.disabled = false;
-				submitBtn.textContent = "Devam Et";
-				return;
-			}
-			try {
-				const res = await fetch("https://apibizzocasino.site/payment/echopayz/create", {
-					method: "POST",
-					headers: {"Content-Type": "application/json", "x-auth-token": token},
-					body: JSON.stringify({amount}),
-				});
-				const json = await res.json().catch(() => ({}));
-				if (!res.ok || !json.success) throw new Error(json.error || "İşlem başarısız oldu.");
-				if (json.data?.paymentUrl) {
-					closeOverlay();
-					notify("success", "Ödeme sayfasına yönlendiriliyorsunuz...");
-					window.open(json.data.paymentUrl, "_blank");
-				} else {
-					throw new Error("Ödeme URL'si alınamadı.");
-				}
-			} catch (err) {
-				console.error("echopayz/create error:", err);
-				submitBtn.disabled = false;
-				submitBtn.textContent = "Devam Et";
-				notify("error", err.message || "Bir hata oluştu");
-			}
-		});
 	};
 
 	const openForcelabFinanceModal = async (method) => {
@@ -991,36 +877,11 @@
 		const grid = document.createElement("div");
 		grid.className = "bs-grid";
 
-		let echoPayzData = null;
 		let forcelabData = null;
-		try {
-			echoPayzData = await fetchEchoPayzInfo();
-		} catch (_) {
-			echoPayzData = {available: false};
-		}
-
 		try {
 			forcelabData = await fetchForcelabMethods();
 		} catch (_) {
 			forcelabData = {available: false, methods: []};
-		}
-
-		for (const m of depositMethods) {
-			if (m.dynamic && m.id === "echopayz-deposit") {
-				if (!echoPayzData?.available) continue;
-				m.label = echoPayzData.name || "EchoPayz";
-				m.image = echoPayzData.logo || "/img/havale.png";
-			}
-			grid.appendChild(
-				renderCard({
-					id: m.id,
-					label: m.label,
-					type: m.type,
-					image: m.image,
-					color: m.color,
-					action: m.action,
-				})
-			);
 		}
 
 		if (forcelabData?.available && Array.isArray(forcelabData.methods)) {

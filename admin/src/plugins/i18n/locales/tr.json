@@ -1017,7 +1017,6 @@
 		"balance": "Bakiye",
 		"bankTransfers": "Yatırım (Banka)",
 		"bankTransfersWithdraw": "Çekim (Banka)",
-		"echopayzMenu": "EchoPayz İşlemleri",
 		"promotionsGroup": "Promosyonlar",
 		"bankTransfer": {
 			"title": "Banka Transfer Talepleri (Yatırım)",
@@ -1060,44 +1059,6 @@
 			"confirmProcessing": "Bu çekim talebini ödeme aşamasına almak istediğinize emin misiniz?",
 			"confirmApprove": "Bu çekim talebini onaylamak istediğinize emin misiniz?",
 			"balanceWarning": "Bu işlem kullanıcının bakiyesinden ${amount} düşecektir."
-		},
-		"echopayz": {
-			"title": "EchoPayz İşlemleri",
-			"details": "İşlem Detayları",
-			"search": "Kullanıcı, referans ID veya banka ara",
-			"statusFilter": "Duruma göre filtrele",
-			"referenceId": "Referans ID",
-			"echopayzTransactionId": "EchoPayz İşlem ID",
-			"bank": "Banka",
-			"holderName": "Hesap Sahibi",
-			"callbackData": "Callback Verisi",
-			"noData": "Filtrelerinize uyan EchoPayz işlemi bulunamadı.",
-			"stats": {
-				"total": "Toplam İşlem",
-				"pending": "Bekleyen",
-				"approved": "Onaylanan",
-				"totalAmount": "Toplam Tutar"
-			},
-			"statusOptions": {
-				"pending": "Beklemede",
-				"approved": "Onaylandı",
-				"rejected": "Reddedildi",
-				"cancelled": "İptal Edildi",
-				"expired": "Süresi Doldu"
-			},
-			"actions": {
-				"approve": "Onayla",
-				"reject": "Reddet",
-				"confirmTitle": "Durumu Güncelle",
-				"confirmApprove": "Bu işlemi onaylamak istediğinize emin misiniz? Kullanıcının bakiyesine yatırım yapılacaktır.",
-				"confirmReject": "Bu işlemi reddetmek istediğinize emin misiniz?"
-			},
-			"messages": {
-				"updateSuccess": "İşlem durumu güncellendi.",
-				"updateError": "İşlem durumu güncellenemedi.",
-				"fetchError": "İşlemler yüklenemedi.",
-				"copied": "Panoya kopyalandı."
-			}
 		},
 		"deposit": {
 			"title": "Yatırım İşlemleri",
