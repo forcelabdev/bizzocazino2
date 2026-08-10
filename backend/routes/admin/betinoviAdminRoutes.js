@@ -22,7 +22,7 @@ const REPORT_METHOD_KEYS = {
 const CONTROL_GAME_METHOD_KEYS = {
 	"online-users": "onlineUsers",
 	"call-list": "callList",
-	"call-result": "callList",
+	"call-result": "callHistory",
 	"call-history": "callHistory",
 	"apply-call": "applyCall",
 	"give-call": "applyCall",

@@ -12,7 +12,8 @@ const toUtcDateTimeLocal = (date) => {
 };
 
 const now = new Date();
-const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+// Referans panelde varsayılan periyot 3 gün (72 saat) geriye gidiyor.
+const threeDaysAgo = new Date(now.getTime() - 72 * 60 * 60 * 1000);
 
 const activeTab = ref("online-users");
 const loading = ref(false);
@@ -49,10 +50,9 @@ const fetchVendors = async () => {
 	}
 };
 
-// ---- Realtime: Oyundaki kullanıcılar + Call Result ----
+// ---- Realtime: Oyundaki kullanıcılar ----
 const livePlayers = ref([]);
 const livePendingCallCount = ref(0);
-const liveCallResults = ref([]);
 const liveUpdatedAt = ref(null);
 const liveConnected = ref(false);
 const liveError = ref("");
@@ -65,7 +65,6 @@ const subscribeToPlayers = (vendorCode) => {
 		adminPanelSocket.emit("control-game:unsubscribe-players", { vendorCode: subscribedVendor.value });
 	}
 	livePlayers.value = [];
-	liveCallResults.value = [];
 	liveUpdatedAt.value = null;
 	subscribedVendor.value = vendorCode;
 	adminPanelSocket.emit("control-game:subscribe-players", { vendorCode });
@@ -83,9 +82,6 @@ const setupRealtimeListeners = () => {
 		liveError.value = "";
 		if (subscribedVendor.value) {
 			adminPanelSocket.emit("control-game:subscribe-players", { vendorCode: subscribedVendor.value });
-		}
-		if (activeTab.value === "agent-balance") {
-			adminPanelSocket.emit("control-game:subscribe-balance");
 		}
 	});
 
@@ -105,40 +101,135 @@ const setupRealtimeListeners = () => {
 		liveUpdatedAt.value = payload.updatedAt;
 	});
 
-	adminPanelSocket.on("control-game:call-results", (payload) => {
-		if (payload.vendorCode !== subscribedVendor.value) return;
-		liveCallResults.value = payload.callResults || [];
-	});
-
-	adminPanelSocket.on("control-game:agent-balance", (payload) => {
-		agentBalance.value = payload;
-	});
-
 	adminPanelSocket.on("control-game:error", (payload) => {
 		liveError.value = payload.message || "Anlık veri alınırken bir hata oluştu.";
 	});
 };
 
-// ---- Agent bakiyesi (realtime) ----
-const agentBalance = ref(null);
-const balanceSubscribed = ref(false);
-
-const subscribeToBalance = () => {
-	if (balanceSubscribed.value) return;
-	balanceSubscribed.value = true;
-	adminPanelSocket.emit("control-game:subscribe-balance");
+// ---- Call Result & Call Geçmişi ortak yardımcılar ----
+// Vendor API'sinin dönüş alan adları (userCode/user_code, callAmount/amount vb.)
+// belgelenmediği için elimizdeki olası anahtarların hepsini deniyoruz.
+const pickField = (row, keys, fallback = "-") => {
+	for (const key of keys) {
+		const value = row?.[key];
+		if (value !== undefined && value !== null && value !== "") return value;
+	}
+	return fallback;
 };
 
-const unsubscribeFromBalance = () => {
-	if (!balanceSubscribed.value) return;
-	balanceSubscribed.value = false;
-	adminPanelSocket.emit("control-game:unsubscribe-balance");
+// GetCallHistory yanıtı data.rows / data.list / data.history / data.calls gibi
+// farklı anahtarlarda gelebilir; hiçbiri tutmazsa ilk array değerini kullanırız.
+const extractListFromResponse = (payload) => {
+	if (!payload) return [];
+	if (Array.isArray(payload)) return payload;
+	const preferredKeys = ["rows", "list", "history", "calls", "callHistory", "items", "results"];
+	for (const key of preferredKeys) {
+		if (Array.isArray(payload[key])) return payload[key];
+	}
+	for (const value of Object.values(payload)) {
+		if (Array.isArray(value)) return value;
+	}
+	return [];
+};
+
+const isWaitingStatus = (status) => /wait|bekli/i.test(String(status || ""));
+const isCancelledStatus = (status) => /cancel|iptal/i.test(String(status || ""));
+
+const statusColor = (status) => {
+	if (isWaitingStatus(status)) return "warning";
+	if (isCancelledStatus(status)) return "error";
+	return "success";
+};
+
+const normalizeCallRow = (row, index) => {
+	const userCode = pickField(row, ["userCode", "user_code"]);
+	const vendorCode = pickField(row, ["vendorCode", "vendor_code"]);
+	const gameCode = pickField(row, ["gameCode", "game_code"]);
+	const status = pickField(row, ["status", "callStatus", "call_status", "state"]);
+
+	return {
+		_rowId: index,
+		_raw: row,
+		no: index + 1,
+		requestDate: pickField(row, ["requestDate", "applyDate", "request_date", "apply_date", "createdAt", "created_at"]),
+		processingDay: pickField(row, ["processingDay", "processDate", "processing_day", "updatedAt", "updated_at"]),
+		userCode,
+		nickName: pickField(row, ["nickName", "nickname", "username", "nick_name"]),
+		vendorCode,
+		vendorName: pickField(row, ["vendorName", "vendor_name"], vendorNameByCode.value[vendorCode] || vendorCode),
+		gameCode,
+		gameName: pickField(row, ["gameName", "game_name"], gameCode),
+		bet: formatNumber(pickField(row, ["betAmount", "bet", "bet_amount"], null)),
+		callType: pickField(row, ["callType", "requestType", "call_type"]),
+		callAmount: formatNumber(pickField(row, ["callAmount", "amount", "call_amount"], null)),
+		callAmountRate: pickField(row, ["callAmountRate", "callRate", "rate", "call_amount_rate", "callRtp"]),
+		status,
+		callId: pickField(row, ["callId", "call_id"], ""),
+		callRtp: pickField(row, ["callRtp", "callAmountRate", "rate"], ""),
+		currencyCode: pickField(row, ["currencyCode", "currency_code"], "TRY"),
+	};
+};
+
+// ---- Call Result (Bekleyen / tamamlanan callar, iptal kontrolü burada) ----
+const callResultRows = ref([]);
+const callResultLoading = ref(false);
+const cancelingRowId = ref(null);
+
+const fetchCallResults = async () => {
+	const vendorCode = selectedVendor.value;
+	if (!vendorCode) return;
+
+	callResultLoading.value = true;
+	lastError.value = "";
+	try {
+		const { data } = await axios.post("/admin/betinovi-admin/control-game/call-result", {
+			vendorCode,
+			startTime: toUtcDateTimeLocal(threeDaysAgo),
+			endTime: toUtcDateTimeLocal(now),
+			offset: 0,
+			limit: 100,
+		});
+		rawResponse.value = data.data || null;
+		const list = extractListFromResponse(data.data);
+		callResultRows.value = list.map((row, index) => normalizeCallRow(row, index));
+	} catch (error) {
+		console.error("Call result hatası:", error);
+		lastError.value = error?.response?.data?.message || "Call sonuçları alınırken bir hata oluştu.";
+		callResultRows.value = [];
+	} finally {
+		callResultLoading.value = false;
+	}
+};
+
+const cancelCallRow = async (row) => {
+	if (!canManageControlGame.value) return;
+
+	cancelingRowId.value = row._rowId;
+	lastError.value = "";
+	try {
+		await axios.post("/admin/betinovi-admin/control-game/cancel-call", {
+			userCode: row.userCode,
+			vendorCode: row.vendorCode,
+			gameCode: row.gameCode,
+			currencyCode: row.currencyCode,
+			callRtp: row.callRtp,
+			betAmount: pickField(row._raw, ["betAmount", "bet", "bet_amount"], undefined),
+			callId: row.callId,
+		});
+		successMessage.value = `Call iptal edildi: ${row.userCode}`;
+		await fetchCallResults();
+	} catch (error) {
+		console.error("Call iptal hatası:", error);
+		lastError.value = error?.response?.data?.message || "Call iptal edilirken bir hata oluştu.";
+	} finally {
+		cancelingRowId.value = null;
+	}
 };
 
 // ---- Call geçmişi (statik REST, GetCallHistory) ----
 const historyFilters = ref({
 	vendorCode: "",
-	startTime: toUtcDateTimeLocal(oneHourAgo),
+	startTime: toUtcDateTimeLocal(threeDaysAgo),
 	endTime: toUtcDateTimeLocal(now),
 	offset: 0,
 	limit: 100,
@@ -162,8 +253,8 @@ const fetchCallHistory = async () => {
 			},
 		);
 		rawResponse.value = data.data || null;
-		const list = data.data?.rows || data.data?.list || data.data?.history || [];
-		historyRows.value = Array.isArray(list) ? list : [];
+		const list = extractListFromResponse(data.data);
+		historyRows.value = list.map((row, index) => normalizeCallRow(row, index));
 	} catch (error) {
 		console.error("Call geçmişi hatası:", error);
 		lastError.value = error?.response?.data?.message || "Call geçmişi alınırken bir hata oluştu.";
@@ -272,17 +363,7 @@ const applySelectedCall = async () => {
 	}
 };
 
-// ---- Call iptal / RTP formları (mevcut mantık korunuyor) ----
-const cancelCallForm = ref({
-	userCode: "",
-	vendorCode: "",
-	gameCode: "",
-	currencyCode: "TRY",
-	callRtp: "",
-	betAmount: "",
-	callId: "",
-});
-
+// ---- RTP formu (Call iptali artık Call Result tablosunda satır bazlı yapılıyor) ----
 const rtpForm = ref({
 	scope: "user",
 	userCode: "",
@@ -344,73 +425,6 @@ const saveRtpSetting = async () => {
 	await submitControlAction(type, buildRtpPayload());
 };
 
-// ---- Tablo yardımcıları ----
-const labelMap = {
-	userCode: "Kullanıcı Kodu",
-	username: "Kullanıcı",
-	vendorCode: "Vendor",
-	gameCode: "Oyun Kodu",
-	gameName: "Oyun",
-	callType: "Call Tipi",
-	requestType: "Talep Tipi",
-	hasPendingCall: "Bekleyen Call",
-	spinCount: "Spin",
-	targetRtp: "Hedef RTP",
-	rtp: "RTP",
-	betAmount: "Bahis",
-	winAmount: "Kazanç",
-	roundCount: "Round",
-	status: "Durum",
-	message: "Mesaj",
-	calledMoney: "Uygulanan Tutar",
-	canceledMoney: "İptal Tutarı",
-	callRtp: "Call RTP",
-	callId: "Call ID",
-	createdAt: "Tarih",
-	updatedAt: "Güncelleme",
-	expireAt: "Bitiş",
-	note: "Not",
-};
-
-const formatHeaderTitle = (key) => {
-	if (labelMap[key]) return labelMap[key];
-	return String(key)
-		.replace(/([A-Z])/g, " $1")
-		.replace(/_/g, " ")
-		.replace(/^./, (value) => value.toUpperCase());
-};
-
-const normalizeCell = (value) => {
-	if (value === null || value === undefined || value === "") return "-";
-	if (typeof value === "boolean") return value ? "Evet" : "Hayır";
-	if (Array.isArray(value)) return value.length ? JSON.stringify(value) : "-";
-	if (typeof value === "object") return JSON.stringify(value);
-	return value;
-};
-
-const buildTableRows = (list) =>
-	list.map((row, index) => {
-		if (!row || typeof row !== "object" || Array.isArray(row)) {
-			return { _rowId: index, value: normalizeCell(row) };
-		}
-		const normalized = { _rowId: index };
-		for (const [key, value] of Object.entries(row)) {
-			normalized[key] = normalizeCell(value);
-		}
-		return normalized;
-	});
-
-const buildHeaders = (rows) => {
-	const keys = new Set();
-	for (const row of rows.slice(0, 20)) {
-		Object.keys(row)
-			.filter((key) => key !== "_rowId")
-			.forEach((key) => keys.add(key));
-	}
-	if (!keys.size) keys.add("value");
-	return [...keys].map((key) => ({ title: formatHeaderTitle(key), key, sortable: true }));
-};
-
 // Referans tasarımdaki sabit kolonlu oyuncu tablosu (No, Kullanıcı Kodu, Nick Name,
 // Vendor, Oyun, Bakiye, Bahis, Tip, Toplam Bahis, Toplam Kazanım, Gerçek RTP, Kontrol).
 const playersHeaders = [
@@ -445,37 +459,47 @@ const playersTableRows = computed(() =>
 	})),
 );
 
-const callResultTableRows = computed(() =>
-	buildTableRows(
-		liveCallResults.value.map((entry) => ({
-			userCode: entry.player?.userCode,
-			username: entry.player?.username,
-			gameCode: entry.player?.gameCode,
-			requestType: entry.player?.requestType,
-			callId: entry.call?.callId,
-			status: entry.call?.status,
-			message: entry.call?.message,
-		})),
-	),
-);
-const callResultHeaders = computed(() => buildHeaders(callResultTableRows.value));
+// Referans tasarımdaki Call Result kolonları: Apply Date, User Code, Nick Name,
+// Vendor Code, Game Code, Bet, Call Type, Call Amount, Call Amount Rate, Status, Control.
+const callResultHeaders = [
+	{ title: "No", key: "no", sortable: false, width: 56 },
+	{ title: "Talep Tarihi", key: "requestDate" },
+	{ title: "Kullanıcı Kodu", key: "userCode" },
+	{ title: "Nick Name", key: "nickName" },
+	{ title: "Vendor Kodu", key: "vendorCode" },
+	{ title: "Oyun Kodu", key: "gameCode" },
+	{ title: "Bahis", key: "bet" },
+	{ title: "Call Tipi", key: "callType" },
+	{ title: "Call Tutarı", key: "callAmount" },
+	{ title: "Call Oranı", key: "callAmountRate" },
+	{ title: "Durum", key: "status" },
+	{ title: "Kontrol", key: "actions", sortable: false, align: "end" },
+];
 
-const historyTableRows = computed(() => buildTableRows(historyRows.value));
-const historyHeaders = computed(() => buildHeaders(historyTableRows.value));
+// Referans tasarımdaki Call History kolonları: Request Date, Processing Day, User Code,
+// Nick Name, Vendor Name, Game Name, Bet, Call Amount, Status.
+const historyHeaders = [
+	{ title: "No", key: "no", sortable: false, width: 56 },
+	{ title: "Talep Tarihi", key: "requestDate" },
+	{ title: "İşlem Tarihi", key: "processingDay" },
+	{ title: "Kullanıcı Kodu", key: "userCode" },
+	{ title: "Nick Name", key: "nickName" },
+	{ title: "Vendor", key: "vendorName" },
+	{ title: "Oyun", key: "gameName" },
+	{ title: "Bahis", key: "bet" },
+	{ title: "Call Tutarı", key: "callAmount" },
+	{ title: "Durum", key: "status" },
+];
 
 const tabs = [
 	{ value: "online-users", title: "Oyundaki Kullanıcılar", icon: "tabler-users" },
 	{ value: "call-result", title: "Call Result", icon: "tabler-target-arrow" },
 	{ value: "call-history", title: "Call Geçmişi", icon: "tabler-history" },
-	{ value: "agent-balance", title: "Agent Bakiyesi", icon: "tabler-wallet" },
 ];
 
-watch(activeTab, (tab, previousTab) => {
-	if (previousTab === "agent-balance" && tab !== "agent-balance") {
-		unsubscribeFromBalance();
-	}
-	if (tab === "agent-balance") {
-		subscribeToBalance();
+watch(activeTab, (tab) => {
+	if (tab === "call-result") {
+		fetchCallResults();
 	}
 	if (tab === "call-history" && !historyFilters.value.vendorCode) {
 		historyFilters.value.vendorCode = selectedVendor.value;
@@ -484,8 +508,11 @@ watch(activeTab, (tab, previousTab) => {
 });
 
 watch(selectedVendor, (vendorCode) => {
-	if (activeTab.value === "online-users" || activeTab.value === "call-result") {
+	if (activeTab.value === "online-users") {
 		subscribeToPlayers(vendorCode);
+	}
+	if (activeTab.value === "call-result") {
+		fetchCallResults();
 	}
 });
 
@@ -500,13 +527,10 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
 	unsubscribeFromPlayers();
-	unsubscribeFromBalance();
 	adminPanelSocket.off("connect");
 	adminPanelSocket.off("disconnect");
 	adminPanelSocket.off("connect_error");
 	adminPanelSocket.off("control-game:players");
-	adminPanelSocket.off("control-game:call-results");
-	adminPanelSocket.off("control-game:agent-balance");
 	adminPanelSocket.off("control-game:error");
 });
 </script>
@@ -551,7 +575,7 @@ onBeforeUnmount(() => {
 					</VTab>
 				</VTabs>
 
-				<VRow v-if="activeTab === 'online-users' || activeTab === 'call-result'" align="center">
+				<VRow v-if="activeTab === 'online-users'" align="center">
 					<VCol cols="12" md="4">
 						<VSelect
 							v-model="selectedVendor"
@@ -571,6 +595,24 @@ onBeforeUnmount(() => {
 						<span v-if="liveUpdatedAt" class="text-caption text-medium-emphasis ms-auto">
 							Son güncelleme: {{ new Date(liveUpdatedAt).toLocaleTimeString('tr-TR') }}
 						</span>
+					</VCol>
+				</VRow>
+
+				<VRow v-if="activeTab === 'call-result'" align="center">
+					<VCol cols="12" md="4">
+						<VSelect
+							v-model="selectedVendor"
+							:items="vendorOptions"
+							:loading="vendorsLoading"
+							label="Vendor"
+							density="compact"
+						/>
+					</VCol>
+					<VCol cols="12" md="2" class="d-flex align-center">
+						<VBtn color="primary" :loading="callResultLoading" block @click="fetchCallResults">
+							<VIcon start icon="tabler-eye" size="16" />
+							Göster
+						</VBtn>
 					</VCol>
 				</VRow>
 
@@ -595,19 +637,7 @@ onBeforeUnmount(() => {
 					</VCol>
 				</VRow>
 
-				<VRow v-if="activeTab === 'agent-balance'">
-					<VCol cols="12" class="d-flex align-center gap-2">
-						<VChip color="info" variant="tonal">
-							<VIcon start icon="tabler-refresh" size="16" />
-							Bakiye her 15 saniyede bir otomatik güncellenir
-						</VChip>
-						<span v-if="agentBalance?.updatedAt" class="text-caption text-medium-emphasis ms-auto">
-							Son güncelleme: {{ new Date(agentBalance.updatedAt).toLocaleTimeString('tr-TR') }}
-						</span>
-					</VCol>
-				</VRow>
-
-				<VRow v-if="activeTab !== 'agent-balance'">
+				<VRow>
 					<VCol cols="12" class="d-flex flex-wrap gap-2">
 						<VBtn variant="text" color="secondary" @click="showRaw = !showRaw">
 							<VIcon start icon="tabler-code" />
@@ -619,43 +649,6 @@ onBeforeUnmount(() => {
 		</VCard>
 
 		<VRow v-if="canManageControlGame" class="mb-4">
-			<VCol cols="12" lg="6">
-				<VCard>
-					<VCardTitle>Call İptal</VCardTitle>
-					<VCardText>
-						<VRow>
-							<VCol cols="12" md="6">
-								<VTextField v-model="cancelCallForm.userCode" label="Kullanıcı Kodu" density="compact" />
-							</VCol>
-							<VCol cols="12" md="6">
-								<VTextField v-model="cancelCallForm.vendorCode" label="Vendor Kodu" density="compact" />
-							</VCol>
-							<VCol cols="12" md="6">
-								<VTextField v-model="cancelCallForm.gameCode" label="Oyun Kodu" density="compact" />
-							</VCol>
-							<VCol cols="12" md="6">
-								<VTextField v-model="cancelCallForm.currencyCode" label="Para Birimi" density="compact" />
-							</VCol>
-							<VCol cols="12" md="6">
-								<VTextField v-model="cancelCallForm.callRtp" label="Call RTP" type="number" density="compact" />
-							</VCol>
-							<VCol cols="12" md="6">
-								<VTextField v-model="cancelCallForm.betAmount" label="Bahis Tutarı" type="number" density="compact" />
-							</VCol>
-							<VCol cols="12" md="6">
-								<VTextField v-model="cancelCallForm.callId" label="Call ID" type="number" density="compact" />
-							</VCol>
-							<VCol cols="12">
-								<VBtn color="warning" :loading="actionLoading === 'cancel-call'" @click="submitControlAction('cancel-call', cancelCallForm)">
-									<VIcon start icon="tabler-ban" />
-									Call İptal
-								</VBtn>
-							</VCol>
-						</VRow>
-					</VCardText>
-				</VCard>
-			</VCol>
-
 			<VCol cols="12" lg="6">
 				<VCard>
 					<VCardTitle>RTP Ayarı</VCardTitle>
@@ -811,19 +804,41 @@ onBeforeUnmount(() => {
 			</VCard>
 		</VDialog>
 
-		<!-- Call Result -->
+		<!-- Call Result: Bekleyen/tamamlanan callar, iptal kontrolü satır bazlı -->
 		<VCard v-if="activeTab === 'call-result'">
 			<VCardText>
-				<p v-if="!callResultTableRows.length" class="text-medium-emphasis mb-0">
-					Şu anda bekleyen call talebi bulunan oyuncu yok.
+				<p v-if="!callResultRows.length" class="text-medium-emphasis mb-0">
+					Seçili vendor ve tarih aralığında call bulunamadı.
 				</p>
 				<VDataTable
 					v-else
 					:headers="callResultHeaders"
-					:items="callResultTableRows"
+					:items="callResultRows"
+					:loading="callResultLoading"
 					item-value="_rowId"
 					class="text-no-wrap"
-				/>
+				>
+					<template #item.status="{ item }">
+						<VChip size="small" :color="statusColor((item.raw || item).status)" variant="tonal">
+							{{ (item.raw || item).status }}
+						</VChip>
+					</template>
+					<template #item.actions="{ item }">
+						<VBtn
+							v-if="isWaitingStatus((item.raw || item).status)"
+							size="small"
+							color="error"
+							variant="tonal"
+							:disabled="!canManageControlGame"
+							:loading="cancelingRowId === (item.raw || item)._rowId"
+							@click="cancelCallRow(item.raw || item)"
+						>
+							<VIcon start icon="tabler-ban" size="16" />
+							Call İptal
+						</VBtn>
+						<span v-else class="text-medium-emphasis">-</span>
+					</template>
+				</VDataTable>
 			</VCardText>
 		</VCard>
 
@@ -832,43 +847,19 @@ onBeforeUnmount(() => {
 			<VCardText>
 				<VDataTable
 					:headers="historyHeaders"
-					:items="historyTableRows"
+					:items="historyRows"
 					:loading="historyLoading"
 					item-value="_rowId"
 					class="text-no-wrap"
-				/>
+				>
+					<template #item.status="{ item }">
+						<VChip size="small" :color="statusColor((item.raw || item).status)" variant="tonal">
+							{{ (item.raw || item).status }}
+						</VChip>
+					</template>
+				</VDataTable>
 			</VCardText>
 		</VCard>
-
-		<!-- Agent Bakiyesi -->
-		<VRow v-if="activeTab === 'agent-balance'">
-			<VCol cols="12" md="6">
-				<VCard>
-					<VCardTitle>Agent Bilgisi</VCardTitle>
-					<VCardText>
-						<VTextarea
-							:model-value="JSON.stringify(agentBalance?.agentInfo || {}, null, 2)"
-							rows="12"
-							readonly
-							style="font-family: monospace;"
-						/>
-					</VCardText>
-				</VCard>
-			</VCol>
-			<VCol cols="12" md="6">
-				<VCard>
-					<VCardTitle>Alt Hesap Bakiyeleri</VCardTitle>
-					<VCardText>
-						<VTextarea
-							:model-value="JSON.stringify(agentBalance?.subAgentBalances || {}, null, 2)"
-							rows="12"
-							readonly
-							style="font-family: monospace;"
-						/>
-					</VCardText>
-				</VCard>
-			</VCol>
-		</VRow>
 
 		<VCard v-if="showRaw" class="mt-4">
 			<VCardText>
