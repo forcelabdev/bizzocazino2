@@ -30,6 +30,7 @@ const tabs = [
   { icon: "tabler-device-gamepad-2", title: t("userDetail.tabs.gameHistory") },
   { icon: "tabler-ball-football", title: t("userDetail.tabs.sportsBetHistory") },
   { icon: "tabler-history", title: t("userDetail.tabs.balanceAdjustment") },
+  { icon: "tabler-adjustments", title: t("userDetail.tabs.controls") },
   { icon: "tabler-lock", title: t("userDetail.tabs.security") },
   { icon: "tabler-bell", title: t("userDetail.tabs.notifications") },
 
@@ -130,6 +131,12 @@ watch(
         </VWindowItem>
         <VWindowItem>
           <UserTabManualAdjustments :selected-user-id="userData._id" />
+        </VWindowItem>
+        <VWindowItem>
+          <UserTabControls
+            :user-data="userData"
+            @updated="userData = { ...userData, ...$event }"
+          />
         </VWindowItem>
         <VWindowItem>
           <UserTabSecurity :user-data="userData" />

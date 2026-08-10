@@ -30,6 +30,7 @@
 			"gameHistory": "Oyun Geçmişi",
 			"sportsBetHistory": "Spor Bahis Geçmişi",
 			"balanceAdjustment": "Bakiye Düzeltme",
+			"controls": "Kontroller",
 			"security": "Güvenlik",
 			"notifications": "Bildirimler"
 		},
@@ -1397,6 +1398,95 @@
 			"update": "Güncelle",
 			"delete": "Sil",
 			"manage": "Tam Yetki"
+		}
+	},
+	"userControls": {
+		"periods": {
+			"daily": "Günlük",
+			"weekly": "Haftalık",
+			"monthly": "Aylık",
+			"all": "Tümü",
+			"custom": "Özel"
+		},
+		"report": {
+			"title": "Finansal rapor",
+			"subtitle": "Bu oyuncu için yatırım, çekim ve marjlar.",
+			"dateFrom": "Başlangıç",
+			"dateTo": "Bitiş",
+			"apply": "Uygula",
+			"count": "Adet: {count}",
+			"deposits": "Yatırımlar",
+			"withdrawals": "Çekimler",
+			"netProfit": "Net kâr",
+			"manualReceivable": "Manuel alacak",
+			"manualDebt": "Manuel borç",
+			"bonusTotal": "Bonus toplamı",
+			"turnover": "Çevrim",
+			"ggr": "GGR"
+		},
+		"blocks": {
+			"withdrawal": {
+				"title": "Çekimi engelle",
+				"subtitle": "Bu oyuncunun para çekmesini engelle."
+			},
+			"deposit": {
+				"title": "Yatırımı engelle",
+				"subtitle": "Yeni yatırımları engelle."
+			},
+			"game": {
+				"title": "Oyunu engelle",
+				"subtitle": "Oyun oynamayı devre dışı bırak."
+			},
+			"tip": {
+				"title": "Bahşişi engelle",
+				"subtitle": "Bahşiş göndermeyi devre dışı bırak."
+			}
+		},
+		"categories": {
+			"title": "Kategori kısıtlamaları",
+			"subtitle": "Oyuncuyu belirli oyun kategorilerinden engelle.",
+			"slots": "Slotlar",
+			"liveCasino": "Canlı casino",
+			"sportsBook": "Spor bahisleri",
+			"originals": "Özgün oyunlar"
+		},
+		"platform": {
+			"title": "Platform erişimi",
+			"subtitle": "Yönetim / partner panel rolleri ver.",
+			"affiliatePanel": {
+				"title": "Affiliate paneli",
+				"subtitle": "Affiliate paneline erişim."
+			},
+			"partnerAccess": {
+				"title": "Partner erişimi",
+				"subtitle": "Özel oranlı anlaşmalı ortak."
+			},
+			"contentEditor": {
+				"title": "İçerik editörü",
+				"subtitle": "Site içeriğini yönet."
+			},
+			"chatModerator": {
+				"title": "Sohbet moderatörü",
+				"subtitle": "Canlı sohbeti yönet."
+			},
+			"streamer": {
+				"title": "Yayıncı",
+				"subtitle": "Casino oyunlarını yayıncı agent hesabı ile açar."
+			}
+		},
+		"partner": {
+			"title": "Partnere ata",
+			"subtitle": "Bu oyuncuyu bir partnerin/affiliate'in altına ata. Partnerin referans kodu veya kullanıcı ID'si ile arayabilirsin; mevcut bağlantının üzerine yazılır.",
+			"inputLabel": "Referans kodu / kullanıcı ID",
+			"inputPlaceholder": "örn. RVAB12CD",
+			"assign": "Ata",
+			"remove": "Bağlantıyı kaldır",
+			"assignFailed": "Partner atanamadı."
+		},
+		"tags": {
+			"title": "Etiketler",
+			"subtitle": "Segmentasyon için serbest yönetici etiketleri.",
+			"empty": "Henüz etiket oluşturulmadı."
 		}
 	}
 }
