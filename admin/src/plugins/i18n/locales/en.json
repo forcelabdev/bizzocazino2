@@ -952,6 +952,8 @@
 		"balance": "Balance",
 		"bankTransfers": "Deposit (Bank)",
 		"bankTransfersWithdraw": "Withdrawal (Bank)",
+		"echopayzMenu": "EchoPayz Transactions",
+		"promotionsGroup": "Promotions",
 		"bankTransfer": {
 			"title": "Bank Transfer Requests (Deposit)",
 			"details": "Transfer Details",

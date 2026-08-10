@@ -438,7 +438,7 @@
 	"gamestitle": "Oyunlar",
 	"gamesall": "Tümü",
 	"gameshistorytitle": "Oyun Geçmişi",
-	"gamesproviders": "Sa����layıcılar",
+	"gamesproviders": "Sa�����layıcılar",
 	"gameshistoryfutures": "Futures Geçmişi",
 	"gameshistoryturbo": "Turbo Geçmişi",
 	"gameshistorywingo": "Wingo Geçmişi",
@@ -976,6 +976,7 @@
 		"bankTransfers": "Yatırım (Banka)",
 		"bankTransfersWithdraw": "Çekim (Banka)",
 		"echopayzMenu": "EchoPayz İşlemleri",
+		"promotionsGroup": "Promosyonlar",
 		"bankTransfer": {
 			"title": "Banka Transfer Talepleri (Yatırım)",
 			"details": "Transfer Detayları",
