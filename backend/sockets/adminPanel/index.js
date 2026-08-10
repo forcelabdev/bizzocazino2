@@ -49,7 +49,7 @@ module.exports = (io) => {
 			}
 
 			socket.adminUserId = user._id.toString();
-			socket.isSuperAdmin = user.adminRole?.isSuperAdmin || !user.adminRole;
+			socket.isSuperAdmin = user.adminRole?.isSuperAdmin || false;
 			socket.userPermissions = extractPermissions(user, !user.adminRole);
 			next();
 		} catch (err) {
@@ -61,9 +61,13 @@ module.exports = (io) => {
 		socket.join("admin-panel-room");
 
 		const canReadControlGame = () =>
-			socket.isSuperAdmin ||
-			socket.userPermissions?.includes("*") ||
-			hasPermission({ isSuperAdmin: socket.isSuperAdmin, userPermissions: socket.userPermissions || [] }, "controlGame.read");
+			hasPermission(
+				{
+					isSuperAdmin: socket.isSuperAdmin,
+					userPermissions: socket.userPermissions || [],
+				},
+				"controlGame.read",
+			);
 
 		socket.on("control-game:subscribe-players", (payload) => {
 			const vendorCode = String(payload?.vendorCode || "").trim();
