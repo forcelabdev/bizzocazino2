@@ -1,5 +1,6 @@
 <script setup>
 import { useRouter } from 'vue-router'
+import Notifications from '@core/components/Notifications.vue'
 import { useAdminNotifications } from '@/composables/useAdminNotifications'
 
 const router = useRouter()

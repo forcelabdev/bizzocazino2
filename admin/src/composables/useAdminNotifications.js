@@ -34,6 +34,21 @@ const getAccessToken = () => {
   }
 }
 
+// `VITE_API_BASE_URL` .env dosyalarında tanımlı değilse (örn. yerel geliştirme
+// ortamında) socket.io'ya "undefined/admin-panel" gibi geçersiz bir adres
+// verilir ve bağlantı asla kurulmaz. Vite proxy'si sadece HTTP isteklerini
+// backend'e yönlendirir, WebSocket için gerçek backend origin'i gerekir.
+const resolveSocketBaseUrl = () => {
+  const envUrl = import.meta.env.VITE_API_BASE_URL
+  if (envUrl)
+    return envUrl.replace(/\/$/, '')
+
+  if (import.meta.env.DEV)
+    return `${window.location.protocol}//${window.location.hostname}:5000`
+
+  return window.location.origin
+}
+
 const getCurrentAdminId = () => {
   try {
     const userData = JSON.parse(localStorage.getItem('userData') || 'null')
@@ -147,9 +162,13 @@ export function useAdminNotifications() {
     if (!token)
       return
 
-    socketInstance = io(`${import.meta.env.VITE_API_BASE_URL}/admin-panel`, {
+    socketInstance = io(`${resolveSocketBaseUrl()}/admin-panel`, {
       transports: ['websocket'],
       auth: { token },
+    })
+
+    socketInstance.on('connect_error', error => {
+      console.error('❌ Admin panel socket bağlantı hatası:', error.message)
     })
 
     socketInstance.on('admin:notification', notification => {
