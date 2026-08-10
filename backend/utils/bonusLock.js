@@ -127,10 +127,105 @@ const evaluateBonusLock = async (user) => {
 };
 
 /**
+ * Reload Bonusu için ÇEVRİM BAZLI bağımsız kilit uygular. `bonusLock`
+ * (Yatırım/Kayıp Bonusu) alanından tamamen ayrıdır: Reload diğer bonusları
+ * bloklamaz ve onlardan bloklanmaz — her ikisi de aynı anda aktif olabilir
+ * ve çekim, ikisinden HERHANGİ biri aktifse engellenir. `wageringMultiplier`
+ * 0 ise kilit uygulanmaz (null döner).
+ *
+ * Reload'un doğası nedeniyle çevrim gereksinimi zamanla ARTAR: her claim
+ * yeni bir çevrim şartı ekler (mevcut `wageringRequired` üzerine eklenir),
+ * `wageringSince` ise ilk claim anında sabitlenir ki tüm dönem boyunca
+ * yapılan bahisler toplam çevrime sayılsın.
+ */
+const applyReloadWageringLock = async (
+	userId,
+	{ assignmentId, claimAmount, wageringMultiplier }
+) => {
+	const addedRequirement = roundMoney(
+		Number(claimAmount || 0) * Number(wageringMultiplier || 0)
+	);
+	if (addedRequirement <= 0) return null;
+
+	const user = await User.findById(userId).select("reloadLock");
+	const existingLock = user?.reloadLock;
+	const alreadyActive = Boolean(
+		existingLock &&
+			existingLock.wageringRequired > 0 &&
+			!existingLock.completedAt &&
+			String(existingLock.assignmentId || "") === String(assignmentId)
+	);
+
+	const wageringSince = alreadyActive
+		? existingLock.wageringSince
+		: new Date();
+	const totalAmount = roundMoney(
+		(alreadyActive ? existingLock.totalAmount : 0) + Number(claimAmount || 0)
+	);
+	const wageringRequired = roundMoney(
+		(alreadyActive ? existingLock.wageringRequired : 0) + addedRequirement
+	);
+
+	await User.findByIdAndUpdate(userId, {
+		$set: {
+			reloadLock: {
+				assignmentId,
+				totalAmount,
+				wageringMultiplier: Number(wageringMultiplier || 0),
+				wageringRequired,
+				wageringSince,
+				completedAt: null,
+			},
+		},
+	});
+
+	return { wageringRequired, wageringSince };
+};
+
+/**
+ * `reloadLock` alanının tek doğruluk kaynağı. `evaluateBonusLock` ile aynı
+ * mantığı izler ama tamamen bağımsız bir alan üzerinde çalışır.
+ */
+const evaluateReloadLock = async (user) => {
+	const lock = user?.reloadLock;
+	const wageringRequired = Number(lock?.wageringRequired || 0);
+	if (!lock || wageringRequired <= 0) {
+		return { active: false };
+	}
+
+	if (lock.completedAt) {
+		return { active: false };
+	}
+
+	const wageringProgress = await sumUserBetsSince(user._id, lock.wageringSince);
+
+	if (wageringProgress >= wageringRequired) {
+		await User.findByIdAndUpdate(user._id, {
+			$set: { "reloadLock.completedAt": new Date() },
+		});
+		return { active: false, justCompleted: true };
+	}
+
+	return {
+		active: true,
+		type: "wagering",
+		source: "reload_bonus",
+		assignmentId: lock.assignmentId,
+		totalAmount: lock.totalAmount,
+		wageringMultiplier: lock.wageringMultiplier,
+		wageringRequired,
+		wageringProgress: roundMoney(wageringProgress),
+		wageringRemaining: roundMoney(wageringRequired - wageringProgress),
+		wageringSince: lock.wageringSince,
+	};
+};
+
+/**
  * Gerçek para çekim taleplerinin oluşturulduğu TÜM uç noktalarda kullanılır.
- * Aktif bir çevrim (wagering) kilidi varsa hata fırlatır. Zaman bazlı eski
- * kilit tipi (`type === "time"`) çekimi ENGELLEMEZ — o sadece diğer
- * bonusları engellemek için var olan geriye dönük davranıştır.
+ * Aktif bir çevrim (wagering) kilidi varsa (bonusLock VEYA reloadLock,
+ * hangisi önce bulunursa) hata fırlatır. Zaman bazlı eski kilit tipi
+ * (`type === "time"`) çekimi ENGELLEMEZ — o sadece diğer bonusları
+ * engellemek için var olan geriye dönük davranıştır.
  */
 const assertWithdrawalNotBlocked = async (user) => {
 	const status = await evaluateBonusLock(user);
@@ -142,6 +237,17 @@ const assertWithdrawalNotBlocked = async (user) => {
 		err.wagering = status;
 		throw err;
 	}
+
+	const reloadStatus = await evaluateReloadLock(user);
+	if (reloadStatus.active) {
+		const err = new Error(
+			`Devam eden bir Reload Bonusu çevrim şartınız var. Çekim yapabilmek için ${reloadStatus.wageringRemaining} TL daha çevrim yapmanız gerekiyor.`
+		);
+		err.code = "WAGERING_REQUIREMENT_NOT_MET";
+		err.wagering = reloadStatus;
+		throw err;
+	}
+
 	return status;
 };
 
@@ -149,5 +255,7 @@ module.exports = {
 	applyBonusLock,
 	applyWageringLock,
 	evaluateBonusLock,
+	applyReloadWageringLock,
+	evaluateReloadLock,
 	assertWithdrawalNotBlocked,
 };

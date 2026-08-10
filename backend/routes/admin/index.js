@@ -9,6 +9,7 @@ const adminWingoController = require("../../controllers/adminWingoController");
 const manualBonusCategoryController = require("../../controllers/admin/manualBonusCategoryController");
 const lossBonusController = require("../../controllers/admin/lossBonusController");
 const depositBonusController = require("../../controllers/admin/depositBonusController");
+const reloadBonusController = require("../../controllers/admin/reloadBonusController");
 const playerSegmentsController = require("../../controllers/admin/playerSegments");
 const tagsController = require("../../controllers/admin/tags");
 const { generalGetChatOnlineCount } = require("../../utils/general/chat");
@@ -2279,6 +2280,49 @@ router.get(
 	"/users/:id/loss-bonus",
 	checkPermission(["finance.lossBonus.read", "finance.lossBonus.manage", "users.read"]),
 	lossBonusController.getUserSummary,
+);
+
+// Reload Bonusu (Reload Bonus)
+router.get(
+	"/reload-bonus/settings",
+	checkPermission(["finance.reloadBonus.read", "finance.reloadBonus.manage"]),
+	reloadBonusController.getSettings,
+);
+
+router.put(
+	"/reload-bonus/settings",
+	checkPermission("finance.reloadBonus.manage"),
+	reloadBonusController.updateSettings,
+);
+
+router.post(
+	"/reload-bonus/preview",
+	checkPermission(["finance.reloadBonus.read", "finance.reloadBonus.manage"]),
+	reloadBonusController.preview,
+);
+
+router.get(
+	"/reload-bonus/assignments",
+	checkPermission(["finance.reloadBonus.read", "finance.reloadBonus.manage"]),
+	reloadBonusController.listAssignments,
+);
+
+router.post(
+	"/reload-bonus/assignments/:id/cancel",
+	checkPermission("finance.reloadBonus.manage"),
+	reloadBonusController.cancelAssignment,
+);
+
+router.get(
+	"/users/:id/reload-bonus",
+	checkPermission(["finance.reloadBonus.read", "finance.reloadBonus.manage", "users.read"]),
+	reloadBonusController.getUserSummary,
+);
+
+router.post(
+	"/users/:id/reload-bonus",
+	checkPermission("finance.reloadBonus.manage"),
+	reloadBonusController.createAssignment,
 );
 
 // Yatırım Bonusu (Deposit Bonus)
@@ -8058,7 +8102,7 @@ router.get("/my-permissions", authenticateAdmin, async (req, res) => {
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 🎨 SITE SETTINGS ENDPOINTS
-// ═══════════════════════════════════════════════════════════════════════════
+// ═════════════════════════════════════════════════════════════��═════════════
 
 // Get site settings
 const sanitizeAdminSiteSettings = (settings) => {
@@ -9364,7 +9408,7 @@ router.post(
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Provider Ayarları (SiteSettings içinde)
-// ═══════════════════════════════════════════════════════════════════════════
+// ═════════════════════════════════════════��═════════════════════════════════
 
 const DEFAULT_PROVIDER_DISPLAY_NAMES = {
 	drakon: "Drakon",

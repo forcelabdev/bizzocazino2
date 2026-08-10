@@ -25,7 +25,8 @@ const { maskEmailAddress } = require("../../utils/mfa");
 const { RIVO_WALLET } = require("../../utils/rivoWallet");
 const lossBonusService = require("../../services/lossBonusService");
 const depositBonusService = require("../../services/depositBonusService");
-const { evaluateBonusLock } = require("../../utils/bonusLock");
+const reloadBonusService = require("../../services/reloadBonusService");
+const { evaluateBonusLock, evaluateReloadLock } = require("../../utils/bonusLock");
 
 const DEPOSIT_BONUS_ERROR_MESSAGES = {
 	USER_NOT_FOUND: "Kullanıcı bulunamadı.",
@@ -46,6 +47,14 @@ const LOSS_BONUS_ERROR_MESSAGES = {
 	NO_LOSS_IN_PERIOD:
 		"Bu dönemde kaybınız olmadığı için bonus talep edemezsiniz.",
 	LOSS_BELOW_MINIMUM: "Net kaybınız minimum tutarın altında.",
+	CLAIM_IN_PROGRESS: "Talebiniz işleniyor, lütfen tekrar deneyin.",
+};
+
+const RELOAD_BONUS_ERROR_MESSAGES = {
+	NO_ACTIVE_RELOAD: "Aktif bir Reload Bonusunuz bulunmuyor.",
+	RELOAD_EXPIRED: "Reload Bonusunuzun süresi doldu.",
+	RELOAD_FULLY_CLAIMED: "Reload Bonusunuzun tüm parçalarını zaten aldınız.",
+	CLAIM_NOT_YET_AVAILABLE: "Sıradaki parça için henüz zaman gelmedi.",
 	CLAIM_IN_PROGRESS: "Talebiniz işleniyor, lütfen tekrar deneyin.",
 };
 
@@ -163,6 +172,89 @@ router.post("/deposit-bonus/claim", authorizeUser(true), async (req, res) => {
 		const status = DEPOSIT_BONUS_ERROR_MESSAGES[err.message] ? 400 : 500;
 		if (status === 500) console.error("Deposit bonus claim error:", err);
 		res.status(status).json({ status: "error", message });
+	}
+});
+
+// Reload Bonusu: aktif atamanın durumunu sorgula (kalan parça/tutar, bir
+// sonraki claim zamanı, çevrim ilerlemesi).
+// @route   GET /users/reload-bonus/status
+router.get("/reload-bonus/status", authorizeUser(true), async (req, res) => {
+	try {
+		const status = await reloadBonusService.getStatus(req.user._id);
+		res.status(200).json({ status: "success", data: status });
+	} catch (err) {
+		console.error("Reload bonus status error:", err);
+		res.status(500).json({ status: "error", message: "Sunucu hatası." });
+	}
+});
+
+// Reload Bonusu: sırası gelen parçayı claim et.
+// @route   POST /users/reload-bonus/claim
+router.post("/reload-bonus/claim", authorizeUser(true), async (req, res) => {
+	try {
+		const result = await reloadBonusService.claimNext(req.user._id);
+
+		res.status(200).json({
+			status: "success",
+			message: "Reload bonusu parçası başarıyla hesabınıza tanımlandı.",
+			data: {
+				claim_id: result.claim._id,
+				period_index: result.claim.periodIndex,
+				amount: result.claim.amount,
+				remaining_periods:
+					result.assignment.totalPeriods - result.assignment.claimedPeriods,
+				next_claim_at: result.assignment.nextClaimAt,
+				new_balance: result.newBalance,
+			},
+		});
+	} catch (err) {
+		const message =
+			RELOAD_BONUS_ERROR_MESSAGES[err.message] || "Sunucu hatası.";
+		const status = RELOAD_BONUS_ERROR_MESSAGES[err.message] ? 400 : 500;
+		if (status === 500) console.error("Reload bonus claim error:", err);
+		res.status(status).json({
+			status: "error",
+			message,
+			...(err.nextClaimAt ? { next_claim_at: err.nextClaimAt } : {}),
+		});
+	}
+});
+
+// Bonus çevrim (wagering) durumu: aktif bir Yatırım/Kayıp Bonusu çevrimi
+// (bonusLock) ve/veya bağımsız bir Reload Bonusu çevrimi (reloadLock) olup
+// olmadığını, ilerlemeyi ve çekimin engellenip engellenmediğini döner.
+// @route   GET /users/wagering-status
+router.get("/wagering-status", authorizeUser(true), async (req, res) => {
+	try {
+		const user = await User.findById(req.user._id).select(
+			"bonusLock reloadLock"
+		);
+		if (!user) {
+			return res
+				.status(404)
+				.json({ status: "error", message: "Kullanıcı bulunamadı." });
+		}
+
+		const [bonusStatus, reloadStatus] = await Promise.all([
+			evaluateBonusLock(user),
+			evaluateReloadLock(user),
+		]);
+
+		const withdrawalBlocked =
+			(bonusStatus.active && bonusStatus.type === "wagering") ||
+			reloadStatus.active;
+
+		res.status(200).json({
+			status: "success",
+			data: {
+				withdrawal_blocked: withdrawalBlocked,
+				bonus_lock: bonusStatus,
+				reload_lock: reloadStatus,
+			},
+		});
+	} catch (err) {
+		console.error("Wagering status error:", err);
+		res.status(500).json({ status: "error", message: "Sunucu hatası." });
 	}
 });
 
@@ -479,7 +571,7 @@ router.post("/switch-wallet", [authorizeUser(true)], async (req, res) => {
 // E-posta Değiştirme Akışı
 // Kullanıcı yeni e-postaya doğrulama linki ister, linke tıklayınca e-posta
 // değişir ve emailVerified=true olarak işaretlenir.
-// ══════════════════════��════════════════════════════════════════════════════
+// ���═════════════════════��════════════════════════════════════════════════════
 
 const EMAIL_CHANGE_TOKEN_TYPE = "email-change";
 const EMAIL_CHANGE_REQUEST_COOLDOWN_MS = 1000 * 60 * 5;
