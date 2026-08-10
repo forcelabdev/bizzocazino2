@@ -155,20 +155,42 @@ export function useAdminNotifications() {
   }
 
   const connectSocket = () => {
-    if (socketInstance)
+    // Önceki bağlantı koptuysa (backend yeniden başladı, ağ kesildi vb.)
+    // eski instance'ı temizleyip sıfırdan kurulmasına izin ver. Sadece
+    // hâlâ bağlı/bağlanmakta olan bir socket varsa tekrar oluşturmayı atla.
+    if (socketInstance && (socketInstance.connected || socketInstance.active))
       return
 
     const token = getAccessToken()
     if (!token)
       return
 
+    if (socketInstance) {
+      socketInstance.removeAllListeners()
+      socketInstance.disconnect()
+    }
+
     socketInstance = io(`${resolveSocketBaseUrl()}/admin-panel`, {
       transports: ['websocket'],
       auth: { token },
+      reconnection: true,
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 10000,
+    })
+
+    socketInstance.on('connect', () => {
+      // Yeniden bağlanınca kaçırılmış olabilecek bildirimleri de yakalamak
+      // için listeyi tazele.
+      fetchNotifications()
     })
 
     socketInstance.on('connect_error', error => {
       console.error('❌ Admin panel socket bağlantı hatası:', error.message)
+    })
+
+    socketInstance.on('disconnect', reason => {
+      console.warn('⚠️ Admin panel socket bağlantısı kesildi:', reason)
     })
 
     socketInstance.on('admin:notification', notification => {
@@ -184,8 +206,13 @@ export function useAdminNotifications() {
   }
 
   const init = () => {
-    if (isInitialized.value)
+    if (isInitialized.value) {
+      // Composable zaten başlatılmış (örn. HMR sırasında modül state'i
+      // korunmuş) ama socket bağlı değilse yeniden bağlanmayı dene.
+      connectSocket()
+
       return
+    }
     isInitialized.value = true
 
     fetchNotifications()
