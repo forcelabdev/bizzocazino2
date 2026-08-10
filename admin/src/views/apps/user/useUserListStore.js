@@ -181,5 +181,47 @@ export const useUserListStore = defineStore('UserListStore', {
       return axios.post(`/admin/deposit-bonus/claims/${claimId}/reject`, { reason }).then(res => res.data)
     },
 
+    // ✅ Reload Bonusu: genel ayarları getir
+    fetchReloadBonusSettings() {
+      return axios.get('/admin/reload-bonus/settings').then(res => res.data.data)
+    },
+
+    // ✅ Reload Bonusu: genel ayarları güncelle
+    updateReloadBonusSettings(payload) {
+      return axios.put('/admin/reload-bonus/settings', payload).then(res => res.data)
+    },
+
+    // ✅ Reload Bonusu: yeni atama önizlemesi (toplam tutar / parça başı tutar)
+    previewReloadBonusAssignment(payload) {
+      return axios.post('/admin/reload-bonus/preview', payload).then(res => res.data.data)
+    },
+
+    // ✅ Reload Bonusu: tüm atamaların listesi (sayfa geneli)
+    fetchReloadBonusAssignments(params = {}) {
+      return axios.get('/admin/reload-bonus/assignments', { params }).then(res => {
+        return {
+          assignments: res.data.data,
+          total: res.data.total,
+          page: res.data.page,
+          totalPages: res.data.totalPages,
+        }
+      })
+    },
+
+    // ✅ Reload Bonusu: bir atamayı iptal et
+    cancelReloadBonusAssignment(assignmentId) {
+      return axios.post(`/admin/reload-bonus/assignments/${assignmentId}/cancel`).then(res => res.data)
+    },
+
+    // ✅ Reload Bonusu: kullanıcı özeti (Bonuslar sekmesi için)
+    fetchUserReloadBonusSummary(userId) {
+      return axios.get(`/admin/users/${userId}/reload-bonus`).then(res => res.data.data)
+    },
+
+    // ✅ Reload Bonusu: kullanıcıya manuel atama oluştur
+    createUserReloadBonusAssignment(userId, payload) {
+      return axios.post(`/admin/users/${userId}/reload-bonus`, payload).then(res => res.data)
+    },
+
   },
 })
