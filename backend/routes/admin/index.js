@@ -5033,9 +5033,17 @@ const createUnifiedPaymentListHandler = (type) => async (req, res) => {
 		const now = new Date();
 		const last24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 		const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-		const filters = [];
-
-		if (status) filters.push({ status: String(status) });
+		// Onaylı/tamamlanmış kabul edilen statüler. İstatistik kartları
+		// (Toplam/24s/Aylık) her zaman bu statülere göre hesaplanır; tablodaki
+		// Durum filtresi ise sadece listelenen işlemleri filtreler, istatistik
+		// kartlarını etkilemez.
+		const approvedStatuses = ["approved", "completed", "success"];
+		// `baseFilters`: tablo VE istatistik hesaplamasına uygulanan ortak
+		// filtreler (arama, tarih aralığı). Durum filtresi buraya dahil
+		// edilmez; sadece tablo (transactions/totalCount) dallarında ayrıca
+		// uygulanır — istatistik kartları her zaman onaylı statüye göre
+		// hesaplanır.
+		const baseFilters = [];
 
 		const createdAt = {};
 		if (startDate && !Number.isNaN(new Date(startDate).getTime())) {
@@ -5046,7 +5054,9 @@ const createUnifiedPaymentListHandler = (type) => async (req, res) => {
 			inclusiveEndDate.setHours(23, 59, 59, 999);
 			createdAt.$lte = inclusiveEndDate;
 		}
-		if (Object.keys(createdAt).length) filters.push({ createdAt });
+		if (Object.keys(createdAt).length) {
+			baseFilters.push({ createdAt });
+		}
 
 		const trimmedSearch = String(q || "").trim();
 		const pipeline = buildUnifiedPaymentPipeline(type);
@@ -5064,7 +5074,8 @@ const createUnifiedPaymentListHandler = (type) => async (req, res) => {
 
 		if (trimmedSearch) {
 			const searchRegex = new RegExp(escapeRegex(trimmedSearch), "i");
-			filters.push({
+
+			baseFilters.push({
 				$or: [
 					{ "user.username": searchRegex },
 					{ "user.local.email": searchRegex },
@@ -5075,13 +5086,20 @@ const createUnifiedPaymentListHandler = (type) => async (req, res) => {
 			});
 		}
 
-		if (filters.length) pipeline.push({ $match: { $and: filters } });
+		// Sadece ortak filtreler (arama + tarih) burada uygulanır. Durum
+		// filtresi facet içinde ayrıca uygulanır, çünkü tablo listesi
+		// kullanıcının seçtiği duruma göre filtrelenmeli, ama istatistik
+		// kartları her zaman onaylı işlemlere göre hesaplanmalı.
+		if (baseFilters.length) pipeline.push({ $match: { $and: baseFilters } });
+
+		const statusMatchStage = status ? [{ $match: { status: String(status) } }] : [];
 
 		pipeline.push(
 			{ $sort: { createdAt: -1, _id: -1 } },
 			{
 				$facet: {
 					transactions: [
+						...statusMatchStage,
 						{ $skip: (pageNumber - 1) * limitNumber },
 						{ $limit: limitNumber },
 						{
@@ -5103,11 +5121,16 @@ const createUnifiedPaymentListHandler = (type) => async (req, res) => {
 							},
 						},
 					],
+					// Tablonun toplam kayıt sayısı (pagination) — kullanıcının
+					// seçtiği durum filtresine göre değişir.
+					totalCount: [...statusMatchStage, { $count: "count" }],
+					// İstatistik kartları — durum filtresinden bağımsız olarak
+					// her zaman sadece onaylı/tamamlanmış işlemlere göre hesaplanır.
 					summary: [
+						{ $match: { status: { $in: approvedStatuses } } },
 						{
 							$group: {
 								_id: null,
-								total: { $sum: 1 },
 								totalAmount: { $sum: { $ifNull: ["$amount", 0] } },
 								last24hAmount: {
 									$sum: {
@@ -5136,12 +5159,13 @@ const createUnifiedPaymentListHandler = (type) => async (req, res) => {
 
 		const [result = {}] = await CryptoTransaction.aggregate(pipeline);
 		const summary = result.summary?.[0] || {};
+		const total = result.totalCount?.[0]?.count || 0;
 
 		res.json({
 			success: true,
 			data: {
 				transactions: result.transactions || [],
-				total: summary.total || 0,
+				total,
 				page: pageNumber,
 				stats: {
 					totalAmount: summary.totalAmount || 0,
