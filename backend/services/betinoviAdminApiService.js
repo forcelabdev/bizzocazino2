@@ -25,6 +25,7 @@ const DEFAULT_ADMIN_API_SETTINGS = {
 		currencyCode: "TRY",
 		timeoutMs: 30000,
 		methods: {
+			vendors: "GetVendors",
 			onlineUsers: "GetCurrentPlayers",
 			callList: "GetCallList",
 			callHistory: "GetCallHistory",
@@ -34,6 +35,8 @@ const DEFAULT_ADMIN_API_SETTINGS = {
 			changeUserSetting: "ChangeUserSetting",
 			getAgentSetting: "GetAgentSetting",
 			changeAgentSetting: "ChangeAgentSetting",
+			agentInfo: "GetAgentInfo",
+			subAgentBalances: "GetSubAgentBalances",
 		},
 	},
 };
@@ -419,6 +422,10 @@ const buildControlGamePayload = (methodName, payload = {}, config = {}) => {
 	const defaultStart = new Date(now.getTime() - 60 * 60 * 1000);
 
 	switch (methodName) {
+		case "GetVendors":
+		case "GetAgentInfo":
+		case "GetSubAgentBalances":
+			return {};
 		case "GetCurrentPlayers": {
 			const nextPayload = { vendorCode: source.vendorCode };
 			ensureRequired(nextPayload, ["vendorCode"]);
@@ -591,9 +598,128 @@ const betinoviAdminRequest = async (sectionKey, method, payload = {}) => {
 	return response.data;
 };
 
+// Vendor adı vendor API'sinden bazen JSON string olarak gelir: '{"en":"Pragmatic Play"}'
+const parseVendorName = (rawName, fallbackCode) => {
+	const text = normalizeString(rawName);
+	if (!text) return fallbackCode;
+
+	if (text.startsWith("{")) {
+		try {
+			const parsed = JSON.parse(text);
+			return parsed.en || parsed.tr || Object.values(parsed)[0] || fallbackCode;
+		} catch {
+			return text;
+		}
+	}
+
+	return text;
+};
+
+const SLOT_GAME_TYPE = 1;
+
+/**
+ * Slot Call & RTP paneli için vendor listesini getirir.
+ * Sadece slot vendorları (gameType === 1) döndürülür, vendorName JSON parse edilir.
+ */
+const getControlGameVendors = async () => {
+	const settings = await getClientAdminApiSettings();
+	const method = settings.controlGame.methods.vendors;
+	const data = await betinoviAdminRequest("controlGame", method, {});
+	const vendors = Array.isArray(data?.vendors) ? data.vendors : [];
+
+	return vendors
+		.filter((vendor) => Number(vendor.gameType) === SLOT_GAME_TYPE)
+		.map((vendor) => ({
+			vendorCode: vendor.vendorCode,
+			vendorName: parseVendorName(vendor.vendorName, vendor.vendorCode),
+			gameType: vendor.gameType,
+		}));
+};
+
+/**
+ * "Akıllı kombinasyon": GetCurrentPlayers'tan gelen oyuncu listesini döner,
+ * hasPendingCall === true olan oyuncular için (sadece bunlar için, paralel)
+ * GetCallList ile zenginleştirme yapar. Diğer oyuncular için vendor API'sine
+ * gereksiz istek atılmaz (hasPendingCall === false olan oyuncularda GetCallList
+ * "Invalid post result from game" hatası döndürüyor).
+ */
+const getEnrichedCurrentPlayers = async (vendorCode) => {
+	const settings = await getClientAdminApiSettings();
+	const onlineUsersMethod = settings.controlGame.methods.onlineUsers;
+	const callListMethod = settings.controlGame.methods.callList;
+
+	const playersData = await betinoviAdminRequest("controlGame", onlineUsersMethod, {
+		vendorCode,
+	});
+	const players = Array.isArray(playersData?.playerInfos)
+		? playersData.playerInfos
+		: [];
+
+	const pendingPlayers = players.filter((player) => player.hasPendingCall);
+
+	const callResults = await Promise.allSettled(
+		pendingPlayers.map((player) =>
+			betinoviAdminRequest("controlGame", callListMethod, {
+				vendorCode: player.vendorCode || vendorCode,
+				gameCode: player.gameCode,
+				callType: player.requestType,
+			}).then((result) => ({ player, result })),
+		),
+	);
+
+	const callResultByUserCode = new Map();
+	for (const settled of callResults) {
+		if (settled.status !== "fulfilled") continue;
+		const { player, result } = settled.value;
+		callResultByUserCode.set(player.userCode, result);
+	}
+
+	return {
+		players,
+		pendingCallCount: pendingPlayers.length,
+		callResults: pendingPlayers.map((player) => ({
+			player,
+			call: callResultByUserCode.get(player.userCode) || null,
+		})),
+	};
+};
+
+/**
+ * Agent bakiyesi özet: GetAgentInfo (toplam bakiye) + GetSubAgentBalances
+ * (alt hesap kırılımı) tek response'ta birleştirilir.
+ */
+const getAgentBalanceSummary = async () => {
+	const settings = await getClientAdminApiSettings();
+	const agentInfoMethod = settings.controlGame.methods.agentInfo;
+	const subAgentBalancesMethod = settings.controlGame.methods.subAgentBalances;
+
+	const [agentInfoResult, subAgentBalancesResult] = await Promise.allSettled([
+		betinoviAdminRequest("controlGame", agentInfoMethod, {}),
+		betinoviAdminRequest("controlGame", subAgentBalancesMethod, {}),
+	]);
+
+	return {
+		agentInfo:
+			agentInfoResult.status === "fulfilled" ? agentInfoResult.value : null,
+		subAgentBalances:
+			subAgentBalancesResult.status === "fulfilled"
+				? subAgentBalancesResult.value
+				: null,
+		errors: [
+			agentInfoResult.status === "rejected" ? agentInfoResult.reason?.message : null,
+			subAgentBalancesResult.status === "rejected"
+				? subAgentBalancesResult.reason?.message
+				: null,
+		].filter(Boolean),
+	};
+};
+
 module.exports = {
 	DEFAULT_ADMIN_API_SETTINGS,
 	getClientAdminApiSettings,
 	saveClientAdminApiSettings,
 	betinoviAdminRequest,
+	getControlGameVendors,
+	getEnrichedCurrentPlayers,
+	getAgentBalanceSummary,
 };

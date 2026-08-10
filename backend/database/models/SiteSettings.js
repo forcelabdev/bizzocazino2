@@ -179,6 +179,7 @@ const SiteSettingsSchema = new mongoose.Schema(
 				},
 				timeoutMs: { type: Number, default: 30000 },
 				methods: {
+					vendors: { type: String, default: "GetVendors", trim: true },
 					onlineUsers: { type: String, default: "GetCurrentPlayers", trim: true },
 					callList: { type: String, default: "GetCallList", trim: true },
 					callHistory: { type: String, default: "GetCallHistory", trim: true },
@@ -188,6 +189,8 @@ const SiteSettingsSchema = new mongoose.Schema(
 					changeUserSetting: { type: String, default: "ChangeUserSetting", trim: true },
 					getAgentSetting: { type: String, default: "GetAgentSetting", trim: true },
 					changeAgentSetting: { type: String, default: "ChangeAgentSetting", trim: true },
+					agentInfo: { type: String, default: "GetAgentInfo", trim: true },
+					subAgentBalances: { type: String, default: "GetSubAgentBalances", trim: true },
 				},
 			},
 		},

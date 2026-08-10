@@ -4,6 +4,9 @@ const {
 	getClientAdminApiSettings,
 	saveClientAdminApiSettings,
 	betinoviAdminRequest,
+	getControlGameVendors,
+	getEnrichedCurrentPlayers,
+	getAgentBalanceSummary,
 } = require("../../services/betinoviAdminApiService");
 
 const router = express.Router();
@@ -149,6 +152,60 @@ router.post(
 				res,
 				error,
 				"Betinovi raporu alınırken bir hata oluştu.",
+			);
+		}
+	},
+);
+
+router.get(
+	"/control-game/vendors",
+	checkPermission("controlGame.read"),
+	async (req, res) => {
+		try {
+			const vendors = await getControlGameVendors();
+			res.status(200).json({ success: true, data: { vendors } });
+		} catch (error) {
+			console.error("ControlGame vendor listesi hatası:", error.message);
+			sendAdminApiError(
+				res,
+				error,
+				"Vendor listesi alınırken bir hata oluştu.",
+			);
+		}
+	},
+);
+
+router.get(
+	"/control-game/players-live/:vendorCode",
+	checkPermission("controlGame.read"),
+	async (req, res) => {
+		try {
+			const data = await getEnrichedCurrentPlayers(req.params.vendorCode);
+			res.status(200).json({ success: true, data });
+		} catch (error) {
+			console.error("ControlGame anlık oyuncu listesi hatası:", error.message);
+			sendAdminApiError(
+				res,
+				error,
+				"Anlık oyuncu listesi alınırken bir hata oluştu.",
+			);
+		}
+	},
+);
+
+router.get(
+	"/control-game/agent-balance-live",
+	checkPermission("controlGame.read"),
+	async (req, res) => {
+		try {
+			const data = await getAgentBalanceSummary();
+			res.status(200).json({ success: true, data });
+		} catch (error) {
+			console.error("ControlGame agent bakiye hatası:", error.message);
+			sendAdminApiError(
+				res,
+				error,
+				"Agent bakiyesi alınırken bir hata oluştu.",
 			);
 		}
 	},
