@@ -37,6 +37,8 @@ const DEFAULT_ADMIN_API_SETTINGS = {
 			changeAgentSetting: "ChangeAgentSetting",
 			agentInfo: "GetAgentInfo",
 			subAgentBalances: "GetSubAgentBalances",
+			freeRoundList: "GetFreeRoundList",
+			applyFreeRound: "ApplyFreeRound",
 		},
 	},
 };
@@ -482,6 +484,40 @@ const buildControlGamePayload = (methodName, payload = {}, config = {}) => {
 				"callRtp",
 				"betAmount",
 				"callId",
+			]);
+
+			return nextPayload;
+		}
+		case "GetFreeRoundList": {
+			const nextPayload = {
+				vendorCode: source.vendorCode,
+				gameCode: source.gameCode,
+				currencyCode,
+			};
+			ensureRequired(nextPayload, ["vendorCode", "gameCode", "currencyCode"]);
+
+			return nextPayload;
+		}
+		case "ApplyFreeRound": {
+			// Vendor API'sinin freeround şablon alan adı bilinmediği için GetFreeRoundList'ten
+			// dönen seçili öğenin tüm alanları olduğu gibi iletilir (frontend selectedItem'ı spread eder),
+			// üzerine sadece userCode/adet/süre bilgisi eklenir.
+			const nextPayload = {
+				...source,
+				userCode: source.userCode,
+				vendorCode: source.vendorCode,
+				gameCode: source.gameCode,
+				currencyCode,
+				freeRoundCount: toInteger(source.freeRoundCount ?? source.count, undefined),
+				expireHours: toInteger(source.expireHours ?? source.hours, undefined),
+			};
+			ensureRequired(nextPayload, [
+				"userCode",
+				"vendorCode",
+				"gameCode",
+				"currencyCode",
+				"freeRoundCount",
+				"expireHours",
 			]);
 
 			return nextPayload;

@@ -131,6 +131,8 @@ const settings = ref({
 				changeUserSetting: "ChangeUserSetting",
 				getAgentSetting: "GetAgentSetting",
 				changeAgentSetting: "ChangeAgentSetting",
+				freeRoundList: "GetFreeRoundList",
+				applyFreeRound: "ApplyFreeRound",
 			},
 			envFallbacks: {},
 		},
@@ -2783,6 +2785,12 @@ console.log('Custom JS loaded');"
 								</VCol>
 								<VCol cols="12" md="4">
 									<VTextField v-model="settings.apiSettings.controlGame.methods.changeAgentSetting" label="Agent RTP değiştir" />
+								</VCol>
+								<VCol cols="12" md="4">
+									<VTextField v-model="settings.apiSettings.controlGame.methods.freeRoundList" label="Freeround listesi" />
+								</VCol>
+								<VCol cols="12" md="4">
+									<VTextField v-model="settings.apiSettings.controlGame.methods.applyFreeRound" label="Freeround uygula" />
 								</VCol>
 
 								<VCol cols="12">

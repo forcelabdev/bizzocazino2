@@ -31,6 +31,8 @@ const CONTROL_GAME_METHOD_KEYS = {
 	"change-user-setting": "changeUserSetting",
 	"agent-setting": "getAgentSetting",
 	"change-agent-setting": "changeAgentSetting",
+	"free-round-list": "freeRoundList",
+	"apply-free-round": "applyFreeRound",
 };
 
 const CONTROL_GAME_MUTATIONS = new Set([
@@ -39,6 +41,7 @@ const CONTROL_GAME_MUTATIONS = new Set([
 	"cancel-call",
 	"change-user-setting",
 	"change-agent-setting",
+	"apply-free-round",
 ]);
 
 const getManageCandidates = (resource) => {

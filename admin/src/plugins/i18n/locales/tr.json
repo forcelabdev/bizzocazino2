@@ -616,6 +616,7 @@
 			"lossBonus": "Kayıp Bonusu",
 			"depositBonus": "Yatırım Bonusu",
 			"reloadBonus": "Reload Bonusu",
+			"freeSpinBonus": "Freespin Bonusu",
 			"bankAccounts": "Banka Hesapları"
 		},
 	"paymentMethods": {
@@ -1296,6 +1297,33 @@
 			"empty": "Henüz talep oluşturulmadı.",
 			"approveFailed": "Talep onaylanamadı.",
 			"rejectFailed": "Talep reddedilemedi."
+		},
+		"freeSpinBonusAdmin": {
+			"title": "Freespin Bonusu",
+			"description": "Seçilen kullanıcıya, sağlayıcı (vendor) API'si üzerinden canlı olarak freespin/freeround tanımlar.",
+			"formTitle": "Freespin Ver",
+			"userCode": "Kullanıcı",
+			"userSearchPlaceholder": "Kullanıcı adı veya e-posta ile ara",
+			"userSearchHint": "Kullanıcıyı seçtiğinizde kullanıcı kodu otomatik doldurulur.",
+			"vendor": "Sağlayıcı (Vendor)",
+			"gameCode": "Oyun Kodu",
+			"gameCodeHint": "Vendor API'sindeki oyun kodu (örn: vs20olympus1000dice).",
+			"currency": "Para Birimi",
+			"fetchList": "Listeyi Getir",
+			"freeRoundList": "Freeround Listesi",
+			"freeRoundListEmpty": "Önce vendor, oyun kodu ve para birimi seçip listeyi getirin.",
+			"freeRoundCount": "Freeround Adedi",
+			"expireHours": "Geçerlilik Süresi (Saat)",
+			"apply": "Freespin Uygula",
+			"applySuccess": "Freespin başarıyla uygulandı.",
+			"applyFailed": "Freespin uygulanırken bir hata oluştu.",
+			"listFailed": "Freeround listesi alınırken bir hata oluştu.",
+			"sessionLogTitle": "Bu Oturumda Uygulananlar",
+			"sessionLogEmpty": "Bu oturumda henüz freespin uygulanmadı.",
+			"date": "Tarih",
+			"result": "Sonuç",
+			"success": "Başarılı",
+			"failed": "Başarısız"
 		},
 		"reloadBonusAdmin": {
 			"title": "Reload Bonusu",

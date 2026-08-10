@@ -156,6 +156,12 @@ export default [
         action: "read",
         subject: "finance.reloadBonus",
       },
+      {
+        title: "platform.freeSpinBonus",
+        to: "apps-free-spin-bonus",
+        action: "read",
+        subject: "controlGame",
+      },
     ],
   },
 
