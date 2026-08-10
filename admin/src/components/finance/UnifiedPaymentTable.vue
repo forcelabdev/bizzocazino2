@@ -529,10 +529,12 @@ const confirmReject = () => {
             cols="12"
             md="4"
           >
-            <AppTextField
+            <AppDateTimePicker
               v-model="dateRange"
               :label="t('finance.dateRange')"
               density="compact"
+              :config="{ mode: 'range', dateFormat: 'Y-m-d' }"
+              clearable
             />
           </VCol>
         </VRow>
