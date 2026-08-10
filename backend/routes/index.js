@@ -730,6 +730,23 @@ module.exports = (io) => {
 
 	router.use("/telegram", require("./telegram"));
 
+	// TEŞHİS: Gerçek IP zincirini görmek için geçici endpoint. Sorun çözülünce kaldırılacak.
+	router.get("/debug-ip", (req, res) => {
+		const { getClientIp } = require("../utils/ip");
+		res.status(200).json({
+			resolvedIp: getClientIp(req),
+			headers: {
+				"cf-connecting-ip": req.headers["cf-connecting-ip"] || null,
+				"true-client-ip": req.headers["true-client-ip"] || null,
+				"x-forwarded-for": req.headers["x-forwarded-for"] || null,
+				"x-real-ip": req.headers["x-real-ip"] || null,
+			},
+			expressIp: req.ip,
+			expressIps: req.ips,
+			remoteAddress: req.socket?.remoteAddress || null,
+		});
+	});
+
 	// ⚠️ GÜVENLİK: 404 Handler
 	router.use((req, res, next) => {
 		res.status(404).json({ success: false, message: "Endpoint not found" });
