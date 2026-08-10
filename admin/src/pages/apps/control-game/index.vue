@@ -173,17 +173,106 @@ const fetchCallHistory = async () => {
 	}
 };
 
-// ---- Call uygula / iptal / RTP formları (mevcut mantık korunuyor) ----
-const callForm = ref({
-	userCode: "",
-	vendorCode: "",
-	gameCode: "",
-	currencyCode: "TRY",
-	callType: "0",
-	callRtp: "",
-	betAmount: "",
+// ---- Call ver (satır bazlı, RTP listesi otomatik gelir) ----
+const giveCallDialog = ref({
+	open: false,
+	player: null,
+	loading: false,
+	applying: false,
+	error: "",
+	options: [],
+	selectedRtp: null,
+	result: null,
 });
 
+const vendorNameByCode = computed(() =>
+	vendors.value.reduce((acc, vendor) => {
+		acc[vendor.vendorCode] = vendor.vendorName;
+		return acc;
+	}, {}),
+);
+
+const computeRealRtp = (player) => {
+	const debit = Number(player?.totalDebit) || 0;
+	const credit = Number(player?.totalCredit) || 0;
+	if (!debit) return null;
+	return (credit / debit) * 100;
+};
+
+const formatRtp = (player) => {
+	const rtp = computeRealRtp(player);
+	return rtp === null ? "-" : `${rtp.toFixed(4)}%`;
+};
+
+const formatNumber = (value) => {
+	const number = Number(value);
+	if (!Number.isFinite(number)) return "-";
+	return number.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+};
+
+const closeGiveCallDialog = () => {
+	giveCallDialog.value.open = false;
+	giveCallDialog.value.player = null;
+	giveCallDialog.value.options = [];
+	giveCallDialog.value.selectedRtp = null;
+	giveCallDialog.value.error = "";
+	giveCallDialog.value.result = null;
+};
+
+const openGiveCallDialog = async (player) => {
+	if (!canManageControlGame.value) return;
+
+	giveCallDialog.value.open = true;
+	giveCallDialog.value.player = player;
+	giveCallDialog.value.loading = true;
+	giveCallDialog.value.error = "";
+	giveCallDialog.value.options = [];
+	giveCallDialog.value.selectedRtp = null;
+	giveCallDialog.value.result = null;
+
+	try {
+		const { data } = await axios.post("/admin/betinovi-admin/control-game/call-list", {
+			vendorCode: player.vendorCode,
+			gameCode: player.gameCode,
+			callType: player.requestType,
+		});
+		giveCallDialog.value.options = Array.isArray(data.data?.calls) ? data.data.calls : [];
+	} catch (error) {
+		console.error("Call listesi hatası:", error);
+		giveCallDialog.value.error = error?.response?.data?.message || "RTP listesi alınırken bir hata oluştu.";
+	} finally {
+		giveCallDialog.value.loading = false;
+	}
+};
+
+const applySelectedCall = async () => {
+	const player = giveCallDialog.value.player;
+	if (!player || giveCallDialog.value.selectedRtp === null) return;
+
+	giveCallDialog.value.applying = true;
+	giveCallDialog.value.error = "";
+	try {
+		const { data } = await axios.post("/admin/betinovi-admin/control-game/apply-call", {
+			userCode: player.userCode,
+			vendorCode: player.vendorCode,
+			gameCode: player.gameCode,
+			currencyCode: player.currencyCode || "TRY",
+			callType: player.requestType,
+			callRtp: giveCallDialog.value.selectedRtp,
+			betAmount: player.betAmount,
+		});
+		giveCallDialog.value.result = data.data || null;
+		successMessage.value = `Call uygulandı: ${player.userCode} için ${giveCallDialog.value.selectedRtp}x RTP.`;
+		closeGiveCallDialog();
+	} catch (error) {
+		console.error("Call uygulama hatası:", error);
+		giveCallDialog.value.error = error?.response?.data?.message || "Call uygulanırken bir hata oluştu.";
+	} finally {
+		giveCallDialog.value.applying = false;
+	}
+};
+
+// ---- Call iptal / RTP formları (mevcut mantık korunuyor) ----
 const cancelCallForm = ref({
 	userCode: "",
 	vendorCode: "",
@@ -204,11 +293,6 @@ const rtpForm = ref({
 	key: "",
 	value: "",
 });
-
-const callTypeOptions = [
-	{ title: "Base Spin", value: "0" },
-	{ title: "Free Spin", value: "1" },
-];
 
 const settingScopeOptions = [
 	{ title: "Kullanıcı", value: "user" },
@@ -327,8 +411,39 @@ const buildHeaders = (rows) => {
 	return [...keys].map((key) => ({ title: formatHeaderTitle(key), key, sortable: true }));
 };
 
-const playersTableRows = computed(() => buildTableRows(livePlayers.value));
-const playersHeaders = computed(() => buildHeaders(playersTableRows.value));
+// Referans tasarımdaki sabit kolonlu oyuncu tablosu (No, Kullanıcı Kodu, Nick Name,
+// Vendor, Oyun, Bakiye, Bahis, Tip, Toplam Bahis, Toplam Kazanım, Gerçek RTP, Kontrol).
+const playersHeaders = [
+	{ title: "No", key: "no", sortable: false, width: 56 },
+	{ title: "Kullanıcı Kodu", key: "userCode" },
+	{ title: "Nick Name", key: "nickName" },
+	{ title: "Vendor", key: "vendorName" },
+	{ title: "Oyun", key: "gameCode" },
+	{ title: "Bakiye", key: "balance" },
+	{ title: "Bahis", key: "betAmount" },
+	{ title: "Tip", key: "requestType" },
+	{ title: "Toplam Bahis", key: "totalDebit" },
+	{ title: "Toplam Kazanım", key: "totalCredit" },
+	{ title: "Gerçek RTP", key: "realRtp", sortable: false },
+	{ title: "Kontrol", key: "actions", sortable: false, align: "end" },
+];
+
+const playersTableRows = computed(() =>
+	livePlayers.value.map((player, index) => ({
+		_rowId: index,
+		_player: player,
+		no: index + 1,
+		userCode: player.userCode,
+		nickName: player.nickName || "-",
+		vendorName: vendorNameByCode.value[player.vendorCode] || player.vendorCode,
+		gameCode: player.gameCode,
+		balance: formatNumber(player.balance),
+		betAmount: formatNumber(player.betAmount),
+		requestType: player.requestType || "-",
+		totalDebit: formatNumber(player.totalDebit),
+		totalCredit: formatNumber(player.totalCredit),
+	})),
+);
 
 const callResultTableRows = computed(() =>
 	buildTableRows(
@@ -381,6 +496,23 @@ onMounted(async () => {
 	if (selectedVendor.value) {
 		subscribeToPlayers(selectedVendor.value);
 	}
+	// TEMP_VISUAL_TEST
+	livePlayers.value = [
+		{
+			userCode: "699732686445e9caa08caba9",
+			nickName: "ahmetmehmet",
+			currencyCode: "TRY",
+			vendorCode: "slot-pragmatic",
+			gameCode: "vs20dicegatex",
+			requestType: "action=doSpin",
+			betAmount: 30,
+			balance: 4732.86,
+			totalDebit: 664,
+			totalCredit: 277.2,
+			hasPendingCall: false,
+		},
+	];
+	// END_TEMP_VISUAL_TEST
 });
 
 onBeforeUnmount(() => {
@@ -504,44 +636,7 @@ onBeforeUnmount(() => {
 		</VCard>
 
 		<VRow v-if="canManageControlGame" class="mb-4">
-			<VCol cols="12" lg="4">
-				<VCard>
-					<VCardTitle>Call Uygula</VCardTitle>
-					<VCardText>
-						<VRow>
-							<VCol cols="12" md="6">
-								<VTextField v-model="callForm.userCode" label="Kullanıcı Kodu" density="compact" />
-							</VCol>
-							<VCol cols="12" md="6">
-								<VTextField v-model="callForm.vendorCode" label="Vendor Kodu" density="compact" />
-							</VCol>
-							<VCol cols="12" md="6">
-								<VTextField v-model="callForm.gameCode" label="Oyun Kodu" density="compact" />
-							</VCol>
-							<VCol cols="12" md="6">
-								<VTextField v-model="callForm.currencyCode" label="Para Birimi" density="compact" />
-							</VCol>
-							<VCol cols="12" md="6">
-								<VSelect v-model="callForm.callType" :items="callTypeOptions" label="Call Tipi" density="compact" />
-							</VCol>
-							<VCol cols="12" md="6">
-								<VTextField v-model="callForm.callRtp" label="Call RTP" type="number" density="compact" />
-							</VCol>
-							<VCol cols="12" md="6">
-								<VTextField v-model="callForm.betAmount" label="Bahis Tutarı" type="number" density="compact" />
-							</VCol>
-							<VCol cols="12">
-								<VBtn color="primary" :loading="actionLoading === 'apply-call'" @click="submitControlAction('apply-call', callForm)">
-									<VIcon start icon="tabler-send" />
-									Call Uygula
-								</VBtn>
-							</VCol>
-						</VRow>
-					</VCardText>
-				</VCard>
-			</VCol>
-
-			<VCol cols="12" lg="4">
+			<VCol cols="12" lg="6">
 				<VCard>
 					<VCardTitle>Call İptal</VCardTitle>
 					<VCardText>
@@ -578,7 +673,7 @@ onBeforeUnmount(() => {
 				</VCard>
 			</VCol>
 
-			<VCol cols="12" lg="4">
+			<VCol cols="12" lg="6">
 				<VCard>
 					<VCardTitle>RTP Ayarı</VCardTitle>
 					<VCardText>
@@ -626,15 +721,112 @@ onBeforeUnmount(() => {
 		<!-- Oyundaki Kullanıcılar -->
 		<VCard v-if="activeTab === 'online-users'">
 			<VCardText>
+				<p v-if="!playersTableRows.length" class="text-medium-emphasis mb-0">
+					Şu anda bu vendor'da aktif oyuncu bulunmuyor.
+				</p>
 				<VDataTable
+					v-else
 					:headers="playersHeaders"
 					:items="playersTableRows"
 					:loading="vendorsLoading"
 					item-value="_rowId"
 					class="text-no-wrap"
-				/>
+				>
+					<template #item.realRtp="{ item }">
+						<VChip size="small" variant="outlined" color="primary">
+							{{ formatRtp(item._player) }}
+						</VChip>
+					</template>
+					<template #item.actions="{ item }">
+						<VBtn
+							size="small"
+							color="primary"
+							variant="tonal"
+							:disabled="!canManageControlGame"
+							@click="openGiveCallDialog(item._player)"
+						>
+							<VIcon start icon="tabler-target-arrow" size="16" />
+							Call Ver
+						</VBtn>
+					</template>
+				</VDataTable>
 			</VCardText>
 		</VCard>
+
+		<!-- Call Ver modalı: RTP değerleri backend'den (GetCallList) otomatik gelir, tek tek elle girilmez -->
+		<VDialog v-model="giveCallDialog.open" max-width="880" scrollable>
+			<VCard>
+				<VCardItem>
+					<VCardTitle>Call Ver</VCardTitle>
+					<VCardSubtitle>{{ giveCallDialog.player?.userCode }}</VCardSubtitle>
+					<template #append>
+						<VBtn icon variant="text" size="small" @click="closeGiveCallDialog">
+							<VIcon icon="tabler-x" />
+						</VBtn>
+					</template>
+				</VCardItem>
+
+				<VCardText>
+					<VRow class="mb-2">
+						<VCol cols="12" sm="4">
+							<div class="text-caption text-medium-emphasis">Oyun</div>
+							<div class="font-weight-medium">{{ giveCallDialog.player?.gameCode || '-' }}</div>
+						</VCol>
+						<VCol cols="12" sm="4">
+							<div class="text-caption text-medium-emphasis">Bahis</div>
+							<div class="font-weight-medium">{{ formatNumber(giveCallDialog.player?.betAmount) }}</div>
+						</VCol>
+						<VCol cols="12" sm="4">
+							<div class="text-caption text-medium-emphasis">Gerçek RTP</div>
+							<VChip size="small" variant="outlined" color="primary">
+								{{ formatRtp(giveCallDialog.player) }}
+							</VChip>
+						</VCol>
+					</VRow>
+
+					<VAlert v-if="giveCallDialog.error" type="error" variant="tonal" density="compact" class="mb-3">
+						{{ giveCallDialog.error }}
+					</VAlert>
+
+					<div class="text-subtitle-2 mb-2">RTP Seçin</div>
+
+					<div v-if="giveCallDialog.loading" class="d-flex justify-center py-10">
+						<VProgressCircular indeterminate color="primary" />
+					</div>
+					<p v-else-if="!giveCallDialog.options.length" class="text-medium-emphasis">
+						Bu el için uygulanabilir RTP değeri bulunamadı.
+					</p>
+					<div v-else class="rtp-option-grid">
+						<VBtn
+							v-for="option in giveCallDialog.options"
+							:key="option"
+							size="small"
+							:color="giveCallDialog.selectedRtp === option ? 'primary' : undefined"
+							:variant="giveCallDialog.selectedRtp === option ? 'flat' : 'outlined'"
+							@click="giveCallDialog.selectedRtp = option"
+						>
+							{{ option }}x
+						</VBtn>
+					</div>
+				</VCardText>
+
+				<VDivider />
+
+				<VCardActions>
+					<VSpacer />
+					<VBtn variant="tonal" @click="closeGiveCallDialog">Kapat</VBtn>
+					<VBtn
+						color="primary"
+						:disabled="giveCallDialog.selectedRtp === null"
+						:loading="giveCallDialog.applying"
+						@click="applySelectedCall"
+					>
+						<VIcon start icon="tabler-send" />
+						Uygula
+					</VBtn>
+				</VCardActions>
+			</VCard>
+		</VDialog>
 
 		<!-- Call Result -->
 		<VCard v-if="activeTab === 'call-result'">
@@ -708,6 +900,17 @@ onBeforeUnmount(() => {
 		</VCard>
 	</section>
 </template>
+
+<style scoped>
+.rtp-option-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
+	gap: 8px;
+	max-height: 420px;
+	overflow-y: auto;
+	padding-right: 4px;
+}
+</style>
 
 <route lang="yaml">
 meta:
