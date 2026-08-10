@@ -251,6 +251,20 @@ const defaultPermissions = [
 		action: "manage",
 		group: "Finans",
 	},
+	{
+		code: "finance.depositBonus.read",
+		name: "Finans - Yatırım Bonusu Görüntüle",
+		resource: "finance.depositBonus",
+		action: "read",
+		group: "Finans",
+	},
+	{
+		code: "finance.depositBonus.manage",
+		name: "Finans - Yatırım Bonusu Yönet",
+		resource: "finance.depositBonus",
+		action: "manage",
+		group: "Finans",
+	},
 
 	// Games
 	{
@@ -720,6 +734,7 @@ const defaultRoles = [
 			"finance.read",
 			"finance.manualAdjustments.manage",
 			"finance.lossBonus.manage",
+			"finance.depositBonus.manage",
 			"games.read",
 			"games.update",
 			"providers.read",
@@ -748,6 +763,7 @@ const defaultRoles = [
 			"finance.update",
 			"finance.manualAdjustments.manage",
 			"finance.lossBonus.manage",
+			"finance.depositBonus.manage",
 			"users.read",
 		],
 	},
@@ -824,6 +840,7 @@ const defaultRoles = [
 			"finance.read",
 			"finance.manualAdjustments.read",
 			"finance.lossBonus.read",
+			"finance.depositBonus.read",
 			"games.read",
 			"providers.read",
 			"platform.read",
