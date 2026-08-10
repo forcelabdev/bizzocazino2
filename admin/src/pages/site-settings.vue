@@ -121,19 +121,21 @@ const settings = ref({
 			agentToken: "",
 			currencyCode: "TRY",
 			timeoutMs: 30000,
-			methods: {
-				onlineUsers: "GetCurrentPlayers",
-				callList: "GetCallList",
-				callHistory: "GetCallHistory",
-				applyCall: "CallApply",
-				cancelCall: "CallCancel",
-				getUserSetting: "GetUserSetting",
-				changeUserSetting: "ChangeUserSetting",
-				getAgentSetting: "GetAgentSetting",
-				changeAgentSetting: "ChangeAgentSetting",
-				freeRoundList: "GetFreeRoundList",
-				applyFreeRound: "ApplyFreeRound",
-			},
+				methods: {
+					onlineUsers: "GetCurrentPlayers",
+					vendorGames: "GetVendorGames",
+					callList: "GetCallList",
+					callHistory: "GetCallHistory",
+					applyCall: "CallApply",
+					cancelCall: "CallCancel",
+					getUserSetting: "GetUserSetting",
+					changeUserSetting: "ChangeUserSetting",
+					getAgentSetting: "GetAgentSetting",
+					changeAgentSetting: "ChangeAgentSetting",
+					freeRoundList: "GetFreeRoundList",
+					applyFreeRound: "ApplyFreeRound",
+					cancelFreeRound: "CancelFreeRound",
+				},
 			envFallbacks: {},
 		},
 	},
@@ -2763,6 +2765,9 @@ console.log('Custom JS loaded');"
 									<VTextField v-model="settings.apiSettings.controlGame.methods.onlineUsers" label="Oyundaki kullanıcılar" />
 								</VCol>
 								<VCol cols="12" md="4">
+									<VTextField v-model="settings.apiSettings.controlGame.methods.vendorGames" label="Vendor oyun listesi" />
+								</VCol>
+								<VCol cols="12" md="4">
 									<VTextField v-model="settings.apiSettings.controlGame.methods.callList" label="Call listesi" />
 								</VCol>
 								<VCol cols="12" md="4">
@@ -2791,6 +2796,9 @@ console.log('Custom JS loaded');"
 								</VCol>
 								<VCol cols="12" md="4">
 									<VTextField v-model="settings.apiSettings.controlGame.methods.applyFreeRound" label="Freeround uygula" />
+								</VCol>
+								<VCol cols="12" md="4">
+									<VTextField v-model="settings.apiSettings.controlGame.methods.cancelFreeRound" label="Freeround iptal" />
 								</VCol>
 
 								<VCol cols="12">

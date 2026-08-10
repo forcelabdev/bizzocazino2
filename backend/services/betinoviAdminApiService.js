@@ -26,6 +26,7 @@ const DEFAULT_ADMIN_API_SETTINGS = {
 		timeoutMs: 30000,
 		methods: {
 			vendors: "GetVendors",
+			vendorGames: "GetVendorGames",
 			onlineUsers: "GetCurrentPlayers",
 			callList: "GetCallList",
 			callHistory: "GetCallHistory",
@@ -39,6 +40,7 @@ const DEFAULT_ADMIN_API_SETTINGS = {
 			subAgentBalances: "GetSubAgentBalances",
 			freeRoundList: "GetFreeRoundList",
 			applyFreeRound: "ApplyFreeRound",
+			cancelFreeRound: "CancelFreeRound",
 		},
 	},
 };
@@ -428,6 +430,12 @@ const buildControlGamePayload = (methodName, payload = {}, config = {}) => {
 		case "GetAgentInfo":
 		case "GetSubAgentBalances":
 			return {};
+		case "GetVendorGames": {
+			const nextPayload = { vendorCode: source.vendorCode };
+			ensureRequired(nextPayload, ["vendorCode"]);
+
+			return nextPayload;
+		}
 		case "GetCurrentPlayers": {
 			const nextPayload = { vendorCode: source.vendorCode };
 			ensureRequired(nextPayload, ["vendorCode"]);
@@ -489,36 +497,44 @@ const buildControlGamePayload = (methodName, payload = {}, config = {}) => {
 			return nextPayload;
 		}
 		case "GetFreeRoundList": {
-			const nextPayload = {
+			const nextPayload = cleanPayload({
 				vendorCode: source.vendorCode,
 				gameCode: source.gameCode,
 				currencyCode,
-			};
-			ensureRequired(nextPayload, ["vendorCode", "gameCode", "currencyCode"]);
+			});
+			ensureRequired(nextPayload, ["vendorCode", "gameCode"]);
 
 			return nextPayload;
 		}
 		case "ApplyFreeRound": {
-			// Vendor API'sinin freeround şablon alan adı bilinmediği için GetFreeRoundList'ten
-			// dönen seçili öğenin tüm alanları olduğu gibi iletilir (frontend selectedItem'ı spread eder),
-			// üzerine sadece userCode/adet/süre bilgisi eklenir.
-			const nextPayload = {
-				...source,
+			const nextPayload = cleanPayload({
 				userCode: source.userCode,
 				vendorCode: source.vendorCode,
 				gameCode: source.gameCode,
 				currencyCode,
-				freeRoundCount: toInteger(source.freeRoundCount ?? source.count, undefined),
-				expireHours: toInteger(source.expireHours ?? source.hours, undefined),
-			};
+				betAmount: toNumber(source.betAmount),
+				spinCount: toInteger(source.spinCount ?? source.count, undefined),
+				expireHours: toNumber(source.expireHours ?? source.hours),
+			});
 			ensureRequired(nextPayload, [
 				"userCode",
 				"vendorCode",
 				"gameCode",
-				"currencyCode",
-				"freeRoundCount",
+				"betAmount",
+				"spinCount",
 				"expireHours",
 			]);
+
+			return nextPayload;
+		}
+		case "CancelFreeRound": {
+			const nextPayload = cleanPayload({
+				userCode: source.userCode,
+				vendorCode: source.vendorCode,
+				gameCode: source.gameCode,
+				currencyCode,
+			});
+			ensureRequired(nextPayload, ["userCode", "vendorCode", "gameCode"]);
 
 			return nextPayload;
 		}
