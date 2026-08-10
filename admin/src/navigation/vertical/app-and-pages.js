@@ -150,6 +150,12 @@ export default [
         action: "read",
         subject: "finance.depositBonus",
       },
+      {
+        title: "platform.reloadBonus",
+        to: "apps-reload-bonus",
+        action: "read",
+        subject: "finance.reloadBonus",
+      },
     ],
   },
 
