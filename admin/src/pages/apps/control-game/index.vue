@@ -496,23 +496,6 @@ onMounted(async () => {
 	if (selectedVendor.value) {
 		subscribeToPlayers(selectedVendor.value);
 	}
-	// TEMP_VISUAL_TEST
-	livePlayers.value = [
-		{
-			userCode: "699732686445e9caa08caba9",
-			nickName: "ahmetmehmet",
-			currencyCode: "TRY",
-			vendorCode: "slot-pragmatic",
-			gameCode: "vs20dicegatex",
-			requestType: "action=doSpin",
-			betAmount: 30,
-			balance: 4732.86,
-			totalDebit: 664,
-			totalCredit: 277.2,
-			hasPendingCall: false,
-		},
-	];
-	// END_TEMP_VISUAL_TEST
 });
 
 onBeforeUnmount(() => {
@@ -734,7 +717,7 @@ onBeforeUnmount(() => {
 				>
 					<template #item.realRtp="{ item }">
 						<VChip size="small" variant="outlined" color="primary">
-							{{ formatRtp(item._player) }}
+							{{ formatRtp((item.raw || item)._player) }}
 						</VChip>
 					</template>
 					<template #item.actions="{ item }">
@@ -743,7 +726,7 @@ onBeforeUnmount(() => {
 							color="primary"
 							variant="tonal"
 							:disabled="!canManageControlGame"
-							@click="openGiveCallDialog(item._player)"
+							@click="openGiveCallDialog((item.raw || item)._player)"
 						>
 							<VIcon start icon="tabler-target-arrow" size="16" />
 							Call Ver
