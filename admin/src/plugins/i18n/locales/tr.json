@@ -555,6 +555,14 @@
 		"bonusNames": "Bonus Adları",
 		"bankAccounts": "Banka Hesapları"
 	},
+	"paymentMethods": {
+		"title": "Ödeme Yöntem Yönetimi",
+		"forcelabFinance": "Forcelab Finans",
+		"meelDev": "MeelDev",
+		"galaxyPay": "GalaxyPay",
+		"fluxKripto": "FluxKripto",
+		"xPayments": "XPayment"
+	},
 	"battlepass": {
 		"title": "BattlePass",
 		"season": "Sezon",

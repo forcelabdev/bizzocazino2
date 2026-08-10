@@ -572,6 +572,14 @@
 		"bonusNames": "Bonus Names",
 		"bankAccounts": "Bank Accounts"
 	},
+	"paymentMethods": {
+		"title": "Payment Method Management",
+		"forcelabFinance": "Forcelab Finance",
+		"meelDev": "MeelDev",
+		"galaxyPay": "GalaxyPay",
+		"fluxKripto": "FluxKripto",
+		"xPayments": "XPayment"
+	},
 	"battlepass": {
 		"title": "BattlePass",
 		"season": "Season",

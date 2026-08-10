@@ -362,6 +362,46 @@ export default [
     ],
   },
 
+  // 💳 Payment Methods
+  {
+    title: "paymentMethods.title",
+    icon: { icon: "tabler-credit-card" },
+    action: "read",
+    subject: "platform",
+    children: [
+      {
+        title: "paymentMethods.forcelabFinance",
+        to: "apps-payment-methods-forcelab-finance",
+        action: "read",
+        subject: "platform",
+      },
+      {
+        title: "paymentMethods.meelDev",
+        to: "apps-payment-methods-meeldev",
+        action: "read",
+        subject: "platform",
+      },
+      {
+        title: "paymentMethods.galaxyPay",
+        to: "apps-payment-methods-galaxypay",
+        action: "read",
+        subject: "platform",
+      },
+      {
+        title: "paymentMethods.fluxKripto",
+        to: "apps-payment-methods-fluxkripto",
+        action: "read",
+        subject: "platform",
+      },
+      {
+        title: "paymentMethods.xPayments",
+        to: "apps-payment-methods-xpayments",
+        action: "read",
+        subject: "platform",
+      },
+    ],
+  },
+
   // 🎟️ BattlePass
   {
     title: "battlepass.title",
