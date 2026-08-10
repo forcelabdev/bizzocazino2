@@ -263,7 +263,6 @@ const getUserApprovedFinanceTotals = async (userIds) => {
 		fiatDepositAgg,
 		fiatWithdrawalAgg,
 		bankAgg,
-		echopayzAgg,
 		forcelabAgg,
 		meelDevAgg,
 		galaxyPayAgg,
@@ -305,15 +304,6 @@ const getUserApprovedFinanceTotals = async (userIds) => {
 				},
 			},
 			groupByUserAndType("$type"),
-		]),
-		EchoPayzTransaction.aggregate([
-			{
-				$match: {
-					user: { $in: normalizedUserIds },
-					status: APPROVED_PAYMENT_STATUS,
-				},
-			},
-			groupByUserAndType("deposit"),
 		]),
 		ForcelabFinanceTransaction.aggregate([
 			{
@@ -380,7 +370,6 @@ const getUserApprovedFinanceTotals = async (userIds) => {
 		fiatDepositAgg,
 		fiatWithdrawalAgg,
 		bankAgg,
-		echopayzAgg,
 		forcelabAgg,
 		meelDevAgg,
 		galaxyPayAgg,
@@ -2529,10 +2518,7 @@ router.get("/users/:id/transactions/fiat-crypto", checkPermission("users.read"),
 			.json({ success: false, message: "Geçersiz kullanıcı ID" });
 
 	try {
-		// ✅ SiteSettings'den EchoPayz adını al
 		const siteSettings = await SiteSettings.findOne().lean();
-		const echopayzMethodName =
-			siteSettings?.echopayz?.name || "EchoPayz Havale";
 		const meelDevMethodName = siteSettings?.meelDev?.name || "MeelDev";
 		const galaxyPayMethodName = siteSettings?.galaxyPay?.name || "GalaxyPay";
 		const fluxKriptoMethodName =
@@ -2617,21 +2603,6 @@ router.get("/users/:id/transactions/fiat-crypto", checkPermission("users.read"),
 				iban: tx.iban,
 				accountName: tx.accountName,
 			}));
-
-		// ✅ EchoPayz işlemleri
-		const echopayzRaw = await EchoPayzTransaction.find({ user: id }).lean();
-		const echopayzDeposits = echopayzRaw.map((tx) => ({
-			amount: tx.amount,
-			type: "echopayz",
-			transaction: tx.referenceId || tx._id.toString(),
-			method: echopayzMethodName,
-			status: tx.status,
-			createdAt: tx.createdAt,
-			bank: tx.bank,
-			iban: tx.iban,
-			holderName: tx.holderName,
-			echopayzTransactionId: tx.echopayzTransactionId,
-		}));
 
 		// ✅ Forcelab Finance işlemleri
 		const forcelabRaw = await ForcelabFinanceTransaction.find({
@@ -2775,7 +2746,6 @@ router.get("/users/:id/transactions/fiat-crypto", checkPermission("users.read"),
 			...cryptoDeposits,
 			...fiatDeposits,
 			...bankDeposits,
-			...echopayzDeposits,
 			...forcelabDeposits,
 			...meelDevDeposits,
 			...galaxyPayDeposits,
@@ -4303,7 +4273,6 @@ router.get(
 				userBetsAgg,
 				cryptoAggAll,
 				bankAggAll,
-				echopayzAggAll,
 				galaxyPayAggAll,
 				fluxKriptoAggAll,
 				xPaymentsAggAll,
@@ -4370,32 +4339,6 @@ router.get(
 								{
 									$group: {
 										_id: "$type",
-										total: { $sum: "$amount" },
-									},
-								},
-							],
-						},
-					},
-				]),
-
-				// EchoPayzTransaction toplamları (tümü + 24h tek sorguda)
-				EchoPayzTransaction.aggregate([
-					{ $match: { status: "approved" } },
-					{
-						$facet: {
-							all: [
-								{
-									$group: {
-										_id: null,
-										total: { $sum: "$amount" },
-									},
-								},
-							],
-							last24h: [
-								{ $match: { createdAt: { $gte: yesterday } } },
-								{
-									$group: {
-										_id: null,
 										total: { $sum: "$amount" },
 									},
 								},
@@ -4480,7 +4423,6 @@ router.get(
 			// Facet sonuçlarını parse et
 			const cryptoFacet = cryptoAggAll[0] || { all: [], last24h: [] };
 			const bankFacet = bankAggAll[0] || { all: [], last24h: [] };
-			const echopayzFacet = echopayzAggAll[0] || { all: [], last24h: [] };
 			const galaxyPayFacet = galaxyPayAggAll[0] || { all: [], last24h: [] };
 			const fluxKriptoFacet = fluxKriptoAggAll[0] || { all: [], last24h: [] };
 			const xPaymentsFacet = xPaymentsAggAll[0] || { all: [], last24h: [] };
@@ -4496,17 +4438,11 @@ router.get(
 			const xPaymentsAllTotals = parseAggResult(xPaymentsFacet.all);
 			const xPaymentsLast24hTotals = parseAggResult(xPaymentsFacet.last24h);
 
-			// EchoPayz toplamları (sadece deposit)
-			const echopayzAllDeposits = echopayzFacet.all[0]?.total || 0;
-			const echopayzLast24hDeposits =
-				echopayzFacet.last24h[0]?.total || 0;
-
-			// Toplam hesaplama (Crypto + Bank + EchoPayz)
+			// Toplam hesaplama (Crypto + Bank + diğer sağlayıcılar)
 			const allTotals = {
 				deposits:
 					cryptoAllTotals.deposits +
 					bankAllTotals.deposits +
-					echopayzAllDeposits +
 					galaxyPayAllTotals.deposits +
 					fluxKriptoAllTotals.deposits +
 					xPaymentsAllTotals.deposits,
@@ -4521,7 +4457,6 @@ router.get(
 				deposits:
 					cryptoLast24hTotals.deposits +
 					bankLast24hTotals.deposits +
-					echopayzLast24hDeposits +
 					galaxyPayLast24hTotals.deposits +
 					fluxKriptoLast24hTotals.deposits +
 					xPaymentsLast24hTotals.deposits,
@@ -4556,10 +4491,6 @@ router.get(
 				bankWithdrawalsTry: bankAllTotals.withdrawals,
 				bankDeposits24hTry: bankLast24hTotals.deposits,
 				bankWithdrawals24hTry: bankLast24hTotals.withdrawals,
-
-				// Finans detay - EchoPayz
-				echopayzDepositsTry: echopayzAllDeposits,
-				echopayzDeposits24hTry: echopayzLast24hDeposits,
 
 				// Finans detay - GalaxyPay
 				galaxyPayDepositsTry: galaxyPayAllTotals.deposits,
@@ -4604,17 +4535,16 @@ router.get(
 	},
 );
 
-// Son 5 transaction endpointi (Crypto + Bank + EchoPayz birleşik)
+// Son 5 transaction endpointi (Crypto + Bank + diğer sağlayıcılar birleşik)
 router.get(
 	"/analytics/last-transactions",
 	checkPermission("dashboard.read"),
 	async (req, res) => {
 		try {
-			// Her üç koleksiyondan paralel olarak sadece 5'er tane çek
+			// Her koleksiyondan paralel olarak sadece 5'er tane çek
 			const [
 				cryptoTxs,
 				bankTxs,
-				echopayzTxs,
 				galaxyPayTxs,
 				fluxKriptoTxs,
 				xPaymentTxs,
@@ -4627,12 +4557,6 @@ router.get(
 					.lean(),
 				BankTransfer.find()
 					.select("type amount status createdAt user bankName")
-					.populate("user", "username")
-					.sort({ createdAt: -1 })
-					.limit(5)
-					.lean(),
-				EchoPayzTransaction.find()
-					.select("amount status createdAt user bank referenceId")
 					.populate("user", "username")
 					.sort({ createdAt: -1 })
 					.limit(5)
@@ -4681,18 +4605,6 @@ router.get(
 				currency: "TRY",
 			}));
 
-			const formattedEchoPayz = echopayzTxs.map((tx) => ({
-				_id: tx._id,
-				type: "deposit",
-				amount: tx.amount,
-				status: tx.status,
-				createdAt: tx.createdAt,
-				user: tx.user,
-				source: "echopayz",
-				bankName: tx.bank || "EchoPayz",
-				currency: "TRY",
-			}));
-
 			const formattedGalaxyPay = galaxyPayTxs.map((tx) => ({
 				_id: tx._id,
 				type: tx.type,
@@ -4738,7 +4650,6 @@ router.get(
 			const allTxs = [
 				...formattedCrypto,
 				...formattedBank,
-				...formattedEchoPayz,
 				...formattedGalaxyPay,
 				...formattedFluxKripto,
 				...formattedXPayments,
@@ -5786,7 +5697,7 @@ router.get("/blackjack/history", checkPermission("games.read"), async (req, res)
 			};
 		}
 
-		// 📦 Blackjack kayıtlarını getir
+		// 📦 Blackjack kayıtlar��nı getir
 		const bets = await Blackjackbet.find(query)
 			.populate("user", "username local.email")
 			.sort({ createdAt: -1 })
@@ -9505,249 +9416,6 @@ router.put(
 );
 
 // ═══════════════════════════════════════════════════════════════════════════
-// EchoPayz Ayarları (SiteSettings içinde)
-// ═══════════════════════════════════════════════════════════════════════════
-
-const EchoPayzTransaction = require("../../database/models/EchoPayzTransaction");
-
-// EchoPayz ayarlarını getir (site-settings'ten)
-router.get(
-	"/echopayz/settings",
-	checkPermission("platform.read"),
-	async (req, res) => {
-		try {
-			let siteSettings = await SiteSettings.findOne();
-			if (!siteSettings) {
-				siteSettings = new SiteSettings();
-				await siteSettings.save();
-			}
-
-			// Varsayılan değerlerle birleştir
-			const echopayz = {
-				isActive: false,
-				name: "EchoPayz Havale",
-				logo: "https://panel.echopayz.com/logo.png",
-				minAmount: 100,
-				maxAmount: 100000,
-				apiKey: "",
-				apiSecret: "",
-				apiUrl: "https://api.echopayz.com/api/v1",
-				...siteSettings.echopayz,
-			};
-
-			// Callback URL'yi otomatik ekle (sadece görüntüleme için)
-			echopayz.callbackUrl = `${process.env.SERVER_BACKEND_URL}/payment/echopayz/callback`;
-
-			res.status(200).json({ success: true, data: echopayz });
-		} catch (error) {
-			console.error("EchoPayz ayarları getirilirken hata:", error);
-			res.status(500).json({
-				success: false,
-				error: "Ayarlar getirilirken bir hata oluştu.",
-			});
-		}
-	},
-);
-
-// EchoPayz ayarlarını güncelle (site-settings içinde)
-router.put(
-	"/echopayz/settings",
-	checkPermission("platform.update"),
-	async (req, res) => {
-		try {
-			const {
-				name,
-				logo,
-				minAmount,
-				maxAmount,
-				apiKey,
-				apiSecret,
-				apiUrl,
-				isActive,
-			} = req.body;
-
-			let siteSettings = await SiteSettings.findOne();
-			if (!siteSettings) {
-				siteSettings = new SiteSettings();
-			}
-
-			// echopayz objesini oluştur/güncelle
-			if (!siteSettings.echopayz) {
-				siteSettings.echopayz = {};
-			}
-
-			// Alanları güncelle (callbackUrl ve telegram alanları kaldırıldı)
-			if (name !== undefined) siteSettings.echopayz.name = name;
-			if (logo !== undefined) siteSettings.echopayz.logo = logo;
-			if (minAmount !== undefined)
-				siteSettings.echopayz.minAmount = minAmount;
-			if (maxAmount !== undefined)
-				siteSettings.echopayz.maxAmount = maxAmount;
-			if (apiKey !== undefined) siteSettings.echopayz.apiKey = apiKey;
-			if (apiSecret !== undefined)
-				siteSettings.echopayz.apiSecret = apiSecret;
-			if (apiUrl !== undefined) siteSettings.echopayz.apiUrl = apiUrl;
-			if (isActive !== undefined)
-				siteSettings.echopayz.isActive = isActive;
-
-			await siteSettings.save();
-
-			res.status(200).json({
-				success: true,
-				message: "EchoPayz ayarları güncellendi.",
-				data: siteSettings.echopayz,
-			});
-		} catch (error) {
-			console.error("EchoPayz ayarları güncellenirken hata:", error);
-			res.status(500).json({
-				success: false,
-				error: "Ayarlar güncellenirken bir hata oluştu.",
-			});
-		}
-	},
-);
-
-// EchoPayz istatistiklerini getir
-router.get(
-	"/echopayz/stats",
-	checkPermission("finance.read"),
-	async (req, res) => {
-		try {
-			const [stats] = await EchoPayzTransaction.aggregate([
-				{
-					$facet: {
-						total: [{ $count: "count" }],
-						pending: [
-							{ $match: { status: "pending" } },
-							{ $count: "count" },
-						],
-						approved: [
-							{ $match: { status: "approved" } },
-							{ $count: "count" },
-						],
-						rejected: [
-							{ $match: { status: "rejected" } },
-							{ $count: "count" },
-						],
-						totalAmount: [
-							{ $match: { status: "approved" } },
-							{ $group: { _id: null, sum: { $sum: "$amount" } } },
-						],
-					},
-				},
-			]);
-
-			res.status(200).json({
-				total: stats.total[0]?.count || 0,
-				pending: stats.pending[0]?.count || 0,
-				approved: stats.approved[0]?.count || 0,
-				rejected: stats.rejected[0]?.count || 0,
-				totalAmount: stats.totalAmount[0]?.sum || 0,
-			});
-		} catch (error) {
-			console.error("EchoPayz istatistikleri alınırken hata:", error);
-			res.status(500).json({
-				success: false,
-				error: "İstatistikler alınırken bir hata oluştu.",
-			});
-		}
-	},
-);
-
-// EchoPayz işlemlerini listele
-router.get(
-	"/echopayz/transactions",
-	checkPermission("finance.read"),
-	async (req, res) => {
-		try {
-			const page = parseInt(req.query.page) || 1;
-			const limit = parseInt(req.query.limit) || 20;
-			const skip = (page - 1) * limit;
-			const status = req.query.status;
-			const userId = req.query.userId;
-
-			const query = {};
-			if (status) query.status = status;
-			if (userId) query.user = userId;
-
-			// Parallelize fetching transactions, count and stats
-			const [transactions, total, stats] = await Promise.all([
-				EchoPayzTransaction.find(query)
-					.select(
-						"referenceId echopayzTransactionId amount status paymentUrl createdAt updatedAt user",
-					)
-					.populate("user", "username name local.email phone")
-					.sort({ createdAt: -1 })
-					.skip(skip)
-					.limit(limit)
-					.lean(),
-				EchoPayzTransaction.countDocuments(query),
-				EchoPayzTransaction.aggregate([
-					{ $match: query },
-					{
-						$group: {
-							_id: "$status",
-							count: { $sum: 1 },
-							totalAmount: { $sum: "$amount" },
-						},
-					},
-				]),
-			]);
-
-			res.status(200).json({
-				success: true,
-				data: {
-					transactions,
-					pagination: {
-						page,
-						limit,
-						total,
-						pages: Math.ceil(total / limit),
-					},
-					stats,
-				},
-			});
-		} catch (error) {
-			console.error("EchoPayz işlemleri getirilirken hata:", error);
-			res.status(500).json({
-				success: false,
-				error: "İşlemler getirilirken bir hata oluştu.",
-			});
-		}
-	},
-);
-
-// EchoPayz işlem detayı
-router.get(
-	"/echopayz/transactions/:id",
-	checkPermission("finance.read"),
-	async (req, res) => {
-		try {
-			const transaction = await EchoPayzTransaction.findById(
-				req.params.id,
-			).populate("user", "username name local.email wallets currency");
-
-			if (!transaction) {
-				return res
-					.status(404)
-					.json({ success: false, error: "İşlem bulunamadı." });
-			}
-
-			res.status(200).json({ success: true, data: transaction });
-		} catch (error) {
-			console.error("EchoPayz işlem detayı getirilirken hata:", error);
-			res.status(500).json({
-				success: false,
-				error: "İşlem detayı getirilirken bir hata oluştu.",
-			});
-		}
-	},
-);
-
-// Manual approve/reject endpoints removed for EchoPayz because the integration is automatic.
-// Status changes must come from EchoPayz callbacks (webhooks) handled at /payment/echopayz/callback.
-
-// ═══════════════════════════════════════════════════════════════════════════
 // Forcelab Finance Admin Endpoints
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -10520,7 +10188,7 @@ router.post(
 	},
 );
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════���═══════════════════════
 // MeelDev Admin Endpoints
 // ═══════════════════════════════════════════════════════════════════════════
 

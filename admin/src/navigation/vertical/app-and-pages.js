@@ -77,12 +77,6 @@ export default [
         subject: "finance.withdraws",
       },
       {
-        title: "finance.echopayzMenu",
-        to: "apps-finance-echopayz",
-        action: "read",
-        subject: "finance",
-      },
-      {
         title: "manualAdjustments.title",
         to: "apps-finance-manual-adjustments",
         action: "read",
