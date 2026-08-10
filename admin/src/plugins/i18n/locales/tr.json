@@ -438,7 +438,7 @@
 	"gamestitle": "Oyunlar",
 	"gamesall": "Tümü",
 	"gameshistorytitle": "Oyun Geçmişi",
-	"gamesproviders": "Sağlayıcılar",
+	"gamesproviders": "Sa��layıcılar",
 	"gameshistoryfutures": "Futures Geçmişi",
 	"gameshistoryturbo": "Turbo Geçmişi",
 	"gameshistorywingo": "Wingo Geçmişi",
@@ -1188,8 +1188,8 @@
 			"campaign_revoke": "Kampanya Geri Alma"
 		}
 	},
-	"mfaCodes": {
-		"title": "MFA Codes",
+		"mfaCodes": {
+			"title": "MFA Kodları",
 		"code": "OTP Kodu",
 		"methodType": "Yöntem",
 		"scope": "Kapsam",
