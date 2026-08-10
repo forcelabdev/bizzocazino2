@@ -239,6 +239,13 @@ const userSchema = new mongoose.Schema(
 			lastClaimAt: { type: Date },
 		},
 
+		// Yatırım Bonusu: son talep edilen dönemin bitiş tarihi ve bu bonus
+		// alındığında diğer bonusların ne zamana kadar engelli olduğu.
+		depositBonus: {
+			lastClaimAt: { type: Date },
+			otherBonusesBlockedUntil: { type: Date },
+		},
+
 		rakeback: {
 			earned: { type: Number, default: 0 },
 			available: { type: Number, default: 0 },
