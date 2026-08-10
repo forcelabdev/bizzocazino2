@@ -1,5 +1,6 @@
 <script setup>
 import { kFormatter } from "@core/utils/formatters"
+import { formatCoinType } from "@/utils/currency"
 import { useI18n } from "vue-i18n"
 
 const props = defineProps({
@@ -221,7 +222,7 @@ const copyToClipboard = async (value, messageKey) => {
               v-for="wallet in userData.wallets"
               :key="wallet.coinType + wallet.chain + wallet.type"
             >
-              <td>{{ wallet.coinType }}</td>
+              <td>{{ formatCoinType(wallet.coinType) }}</td>
               <td>{{ wallet.chain }}</td>
               <td>{{ wallet.type }}</td>
               <td>{{ wallet.balance }}</td>

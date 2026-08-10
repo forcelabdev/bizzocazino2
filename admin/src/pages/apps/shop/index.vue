@@ -184,7 +184,7 @@ onMounted(fetchItems)
 
 				<template #item.rewardAmount="{ item }">
 					<VChip color="success" variant="tonal">
-						{{ item.raw.rewardAmount }} Rivo
+						{{ item.raw.rewardAmount }} TRY
 					</VChip>
 				</template>
 

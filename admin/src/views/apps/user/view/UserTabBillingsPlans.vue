@@ -1,5 +1,6 @@
 <script setup>
 import axios from "@axios"
+import { formatCoinType } from "@/utils/currency"
 import { ref, watch } from "vue"
 import { useI18n } from "vue-i18n"
 import { useRoute } from "vue-router"
@@ -84,7 +85,7 @@ const getSignedAmountClass = value =>
 const formatWallet = wallet => {
   if (!wallet) return "-"
 
-  return [wallet.coinType, wallet.chain, wallet.type]
+  return [formatCoinType(wallet.coinType), wallet.chain, wallet.type]
     .filter(Boolean)
     .join(" / ")
 }

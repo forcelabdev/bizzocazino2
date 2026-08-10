@@ -1,5 +1,6 @@
 <script setup>
 import { kFormatter } from "@core/utils/formatters"
+import { formatCoinType } from "@/utils/currency"
 import { useI18n } from "vue-i18n"
 
 const props = defineProps({
@@ -53,7 +54,7 @@ const totalIpCount = computed(() => props.userData?.ips?.length || 0)
           <div>
             <h5 class="text-h5">
               {{ userData.activeWallet?.balance ?? 0 }}
-              <span class="text-body-2 text-disabled">{{ userData.activeWallet?.coinType }}</span>
+              <span class="text-body-2 text-disabled">{{ formatCoinType(userData.activeWallet?.coinType) }}</span>
             </h5>
             <span class="text-body-2 text-disabled">{{ t("userDetail.stats.balance") }}</span>
           </div>

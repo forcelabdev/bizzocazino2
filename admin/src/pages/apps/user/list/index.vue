@@ -3,6 +3,7 @@ import { paginationMeta } from '@/@fake-db/utils'
 import AddNewUserDrawer from '@/views/apps/user/list/AddNewUserDrawer.vue'
 import { useUserListStore } from '@/views/apps/user/useUserListStore'
 import { usePermissionStore } from '@/stores/permissionStore'
+import { formatCoinType } from '@/utils/currency'
 import { avatarText } from '@core/utils/formatters'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
@@ -497,7 +498,7 @@ const exportUsers = async () => {
                     label
                     class="cursor-pointer"
                   >
-                    {{ item.raw.activeWallet.coinType }}: {{ item.raw.activeWallet.balance }}
+                    {{ formatCoinType(item.raw.activeWallet.coinType) }}: {{ item.raw.activeWallet.balance }}
                   </VChip>
                 </template>
 
@@ -508,7 +509,7 @@ const exportUsers = async () => {
                     :key="wallet.coinType + wallet.chain + wallet.type"
                   >
                     <VListItemTitle>
-                      {{ wallet.coinType }} ({{ wallet.chain }} - {{ wallet.type }}): {{ wallet.balance }}
+                      {{ formatCoinType(wallet.coinType) }} ({{ wallet.chain }} - {{ wallet.type }}): {{ wallet.balance }}
                     </VListItemTitle>
                   </VListItem>
                 </VList>

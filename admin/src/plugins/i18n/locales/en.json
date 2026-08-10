@@ -272,7 +272,7 @@
 	"shop": {
 		"management": "Shop Management",
 		"managementEyebrow": "Coin storefront",
-		"managementDescription": "Manage products that let users spend coins to receive direct Rivo wallet balance.",
+		"managementDescription": "Manage products that let users spend coins to receive direct TRY wallet balance.",
 		"addNew": "Add New Product",
 		"search": "Search product",
 		"drawerTitle": "Add / Edit Shop Item",
@@ -1098,7 +1098,7 @@
 		"singleAdjustmentOnly": "You can only prepare one manual adjustment at a time.",
 		"invalidBonusCategory": "Select a valid manual bonus category.",
 		"loadBonusCategoriesFailed": "Failed to load bonus categories.",
-		"rivoWalletMissing": "The user does not have a Rivo wallet.",
+		"rivoWalletMissing": "The user does not have a TRY wallet.",
 		"readyMessage": "{kind} {direction} adjustment is ready for {amount}. It will be executed when you save the form.",
 		"success": "Manual adjustment saved.",
 		"empty": "No manual adjustments found.",
