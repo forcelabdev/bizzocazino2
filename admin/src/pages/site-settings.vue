@@ -3124,7 +3124,7 @@ console.log('Custom JS loaded');"
 										:disabled="!canUpdateApiSettings"
 										:loading="loading"
 									>
-										Betinovi API Ayarlarını Kaydet
+										ForceLab API Ayarlarını Kaydet
 									</VBtn>
 								</VCol>
 							</VRow>

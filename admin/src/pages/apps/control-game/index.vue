@@ -291,7 +291,7 @@ const saveRtpSetting = async () => {
 			<div>
 				<h1 class="text-h4 mb-1">Slot Call & RTP Yönetimi</h1>
 				<p class="text-medium-emphasis mb-0">
-					Betinovi ControlGame işlemlerini Türkçe admin ekranından yönetin.
+					Forcelab ControlGame işlemlerini Türkçe admin ekranından yönetin.
 				</p>
 			</div>
 			<VChip :color="canManageControlGame ? 'success' : 'warning'" variant="tonal">

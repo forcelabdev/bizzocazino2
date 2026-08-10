@@ -149,7 +149,7 @@ const subResourceLabels = {
 	bankTransfersWithdraw: "Banka Transfer Çekim",
 	campaigns: "Kampanyalar",
 	promo: "Promolar",
-	betinovi: "Betinovi",
+	betinovi: "Forcelab",
 	apiSettings: "API Ayarları",
 };
 

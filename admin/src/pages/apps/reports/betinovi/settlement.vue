@@ -6,7 +6,7 @@ import BetinoviReportPage from "@/components/betinovi/BetinoviReportPage.vue";
 	<BetinoviReportPage
 		report-type="settlement"
 		title="Mutabakat"
-		description="Betinovi mutabakat kayıtlarını temsilci, vendor, kullanıcı ve oyun bazında filtreleyin."
+		description="Forcelab mutabakat kayıtlarını temsilci, vendor, kullanıcı ve oyun bazında filtreleyin."
 	/>
 </template>
 

@@ -296,7 +296,7 @@ const exportCsv = () => {
           {{ title }}
         </h1>
         <p class="text-medium-emphasis mb-0">
-          {{ description || "Betinovi rapor verilerini Türkçe yönetim ekranında görüntüleyin." }}
+          {{ description || "Forcelab rapor verilerini Türkçe yönetim ekranında görüntüleyin." }}
         </p>
       </div>
       <VChip

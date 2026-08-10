@@ -6,7 +6,7 @@ import BetinoviReportPage from "@/components/betinovi/BetinoviReportPage.vue";
 	<BetinoviReportPage
 		report-type="by-agent"
 		title="Temsilciye göre"
-		description="Temsilci bazlı Betinovi raporlarını tarih ve periyot filtresiyle görüntüleyin."
+		description="Temsilci bazlı Forcelab raporlarını tarih ve periyot filtresiyle görüntüleyin."
 	/>
 </template>
 
