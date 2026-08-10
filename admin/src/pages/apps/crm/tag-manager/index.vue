@@ -274,7 +274,7 @@ onMounted(fetchTags)
 
             <div class="d-flex align-center justify-space-between mt-auto">
               <span class="text-caption text-medium-emphasis">
-                {{ t('crm.tags.usageCount', { count: tag.usersCount || 0 }) }}
+                {{ t('crm.tags.usageCount', { count: tag.usageCount || 0 }) }}
               </span>
               <div class="d-flex gap-1">
                 <IconBtn
