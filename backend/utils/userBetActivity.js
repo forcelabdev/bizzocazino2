@@ -71,7 +71,57 @@ const hasUserBetSince = async (userId, since) => {
 	return results.some(Boolean);
 };
 
+/**
+ * Kullanıcının belirtilen tarihten (dahil) itibaren yaptığı TÜM bahislerin
+ * (iç oyunlar + dış sağlayıcı) toplam tutarını hesaplar. Çevrim (wagering)
+ * ilerlemesi bu toplam üzerinden canlı olarak hesaplanır; ayrı bir "bahis
+ * geçmişi" tablosu tutulmaz.
+ *
+ * @param {string|mongoose.Types.ObjectId} userId
+ * @param {Date} since
+ * @returns {Promise<number>}
+ */
+const sumUserBetsSince = async (userId, since) => {
+	if (!mongoose.Types.ObjectId.isValid(userId) || !since) return 0;
+
+	const objectId = new mongoose.Types.ObjectId(userId);
+	const createdAtFilter = { $gte: since };
+
+	const internalSums = INTERNAL_BET_MODELS.map((Model) =>
+		Model.aggregate([
+			{
+				$match: {
+					user: objectId,
+					amount: { $gt: 0 },
+					createdAt: createdAtFilter,
+				},
+			},
+			{ $group: { _id: null, total: { $sum: "$amount" } } },
+		])
+	);
+
+	const externalSum = Transaction.aggregate([
+		{
+			$match: {
+				user_code: userId.toString(),
+				bet_money: { $gt: 0 },
+				created_at: createdAtFilter,
+			},
+		},
+		{ $group: { _id: null, total: { $sum: "$bet_money" } } },
+	]);
+
+	const results = await Promise.all([...internalSums, externalSum]);
+
+	const total = results.reduce((sum, rows) => {
+		return sum + (rows && rows[0] ? rows[0].total : 0);
+	}, 0);
+
+	return Math.round(total * 100) / 100;
+};
+
 module.exports = {
 	hasUserBetSince,
+	sumUserBetsSince,
 	INTERNAL_BET_MODELS,
 };

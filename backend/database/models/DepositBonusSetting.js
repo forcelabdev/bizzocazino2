@@ -25,13 +25,16 @@ const depositBonusSettingSchema = new mongoose.Schema(
 		minDepositAmount: { type: Number, default: 50, min: 0 },
 		maxDepositAmount: { type: Number, default: 0, min: 0 },
 
-		// Bilgilendirme amaçlı çevrim katsayısı (x). Şu an otomatik
-		// çevrim takibi yapılmıyor; admin panelinde referans olarak tutulur.
-		wageringMultiplier: { type: Number, default: 1, min: 0 },
+		// Çevrim katsayısı (x). 0 = çevrim şartı yok (eski davranış: sadece
+		// durationHours boyunca diğer bonuslar engellenir). > 0 ise, onaylanan
+		// bonus tutarının bu katsayıyla çarpımı kadar bahis (iç oyun + dış
+		// sağlayıcı) yapılana kadar kullanıcı çekim yapamaz ve yeni bonus talep
+		// edemez (durationHours bu durumda kullanılmaz, süre sınırı yoktur).
+		wageringMultiplier: { type: Number, default: 0, min: 0 },
 
-		// blockOtherBonuses açıkken, bu bonus alındığında diğer bonusların
-		// kaç saat boyunca engelleneceği. blockOtherBonuses kapalıyken
-		// kullanılmaz.
+		// wageringMultiplier === 0 iken, blockOtherBonuses açıksa, bu bonus
+		// alındığında diğer bonusların kaç saat boyunca engelleneceği.
+		// wageringMultiplier > 0 ise kullanılmaz.
 		durationHours: { type: Number, default: 720, min: 0 },
 
 		// true: talep anında otomatik onaylanır ve bakiyeye geçer.

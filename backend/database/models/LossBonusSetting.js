@@ -14,6 +14,11 @@ const lossBonusSettingSchema = new mongoose.Schema(
 		// Talep edilebilmesi için gereken minimum net kayıp (TL).
 		minLossAmount: { type: Number, default: 0, min: 0 },
 
+		// Çevrim katsayısı (x). 0 = çevrim şartı yok. > 0 ise, onaylanan bonus
+		// tutarının bu katsayıyla çarpımı kadar bahis (iç oyun + dış sağlayıcı)
+		// yapılana kadar kullanıcı çekim yapamaz ve yeni bonus talep edemez.
+		wageringMultiplier: { type: Number, default: 0, min: 0 },
+
 		// true: talep anında otomatik onaylanır ve bakiyeye geçer.
 		// false: talep PENDING olarak düşer, admin onaylamalıdır.
 		autoApprove: { type: Boolean, default: true },

@@ -56,6 +56,12 @@ const lossBonusClaimSchema = new mongoose.Schema(
 			ref: "AdminManualAdjustment",
 			default: null,
 		},
+
+		// Bonus onaylandığında çevrim (wagering) şartı yoksa (multiplier=0)
+		// ve zaman bazlı kilit uygulandıysa, kilidin bitiş tarihi (sadece
+		// kayıt/rapor amaçlıdır; asıl kilit User.bonusLock üzerinden
+		// yürütülür).
+		otherBonusesBlockedUntil: { type: Date, default: null },
 	},
 	{ timestamps: true }
 );

@@ -245,11 +245,23 @@ const userSchema = new mongoose.Schema(
 		},
 
 		// Paylaşımlı bonus kilidi: bir bonus alındığında (örn. Yatırım Bonusu)
-		// belirli bir süre boyunca diğer bonusların talep edilmesini engeller.
+		// diğer bonusların talep edilmesini VE gerçek para çekimini engeller.
 		// Herhangi bir bonus servisi bu alanı okuyup/yazabilir.
+		// - wageringRequired > 0 ise kilit, çevrim tamamlanana kadar aktif kalır
+		//   (blockedUntil'e bakılmaz).
+		// - wageringRequired === 0 ise eski davranış geçerlidir: kilit sadece
+		//   blockedUntil saatine kadar aktiftir (sadece diğer bonusları engeller,
+		//   çekimi engellemez).
 		bonusLock: {
+			source: { type: String, default: "" }, // "deposit_bonus" | "loss_bonus"
+			claimId: { type: mongoose.Schema.Types.ObjectId, default: null },
+			claimModel: { type: String, default: "" }, // "DepositBonusClaim" | "LossBonusClaim"
+			bonusAmount: { type: Number, default: 0 },
+			wageringMultiplier: { type: Number, default: 0 },
+			wageringRequired: { type: Number, default: 0 },
+			wageringSince: { type: Date, default: null },
 			blockedUntil: { type: Date },
-			source: { type: String, default: "" },
+			completedAt: { type: Date, default: null },
 		},
 
 		rakeback: {

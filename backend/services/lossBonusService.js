@@ -8,7 +8,10 @@ const {
 	createAdminManualAdjustment,
 } = require("./adminManualAdjustmentService");
 const { RIVO_WALLET } = require("../utils/rivoWallet");
-const { isBonusLocked } = require("../utils/bonusLock");
+const {
+	applyWageringLock,
+	evaluateBonusLock,
+} = require("../utils/bonusLock");
 
 const CATEGORY = "KAYIP BONUSU";
 const SOURCE = "loss_bonus";
@@ -34,6 +37,7 @@ const updateSettings = async (patch = {}, actorUser = null) => {
 		"percentage",
 		"maxBonusAmount",
 		"minLossAmount",
+		"wageringMultiplier",
 		"autoApprove",
 		"note",
 	];
@@ -112,7 +116,8 @@ const getPotential = async (userId) => {
 	const hasLoss = period.netLoss > 0;
 	const meetsMinimum =
 		hasLoss && period.netLoss >= (settings.minLossAmount || 0);
-	const blockedByOtherBonus = isBonusLocked(user);
+	const lockStatus = await evaluateBonusLock(user);
+	const blockedByOtherBonus = lockStatus.active;
 	const eligible = Boolean(
 		settings.enabled && meetsMinimum && !blockedByOtherBonus
 	);
@@ -124,6 +129,8 @@ const getPotential = async (userId) => {
 	let message;
 	if (!settings.enabled) {
 		message = "Kayıp bonusu şu anda aktif değil.";
+	} else if (blockedByOtherBonus && lockStatus.type === "wagering") {
+		message = `Devam eden bir bonusun çevrim şartını tamamlamadan yeni bonus talep edemezsiniz. Çevrim için ${lockStatus.wageringRemaining.toLocaleString("tr-TR")} TL daha bahis yapmanız gerekiyor.`;
 	} else if (blockedByOtherBonus) {
 		message = "Yakın zamanda alınan bir bonus nedeniyle şu anda başka bonus talep edemezsiniz.";
 	} else if (!hasLoss) {
@@ -158,8 +165,11 @@ const claim = async (userId) => {
 	const settings = await getSettings();
 	if (!settings.enabled) throw new Error("LOSS_BONUS_DISABLED");
 
-	if (isBonusLocked(user)) {
-		throw new Error("OTHER_BONUS_BLOCKED");
+	const lockStatus = await evaluateBonusLock(user);
+	if (lockStatus.active) {
+		const err = new Error("OTHER_BONUS_BLOCKED");
+		err.wagering = lockStatus.type === "wagering" ? lockStatus : null;
+		throw err;
 	}
 
 	const period = await calculatePeriodLoss(user);
@@ -205,6 +215,7 @@ const claim = async (userId) => {
 		status: settings.autoApprove ? "approved" : "pending",
 		autoApproved: settings.autoApprove,
 		reviewedAt: settings.autoApprove ? new Date() : null,
+		otherBonusesBlockedUntil: null,
 	});
 
 	if (!settings.autoApprove) {
@@ -224,6 +235,17 @@ const claim = async (userId) => {
 			source: SOURCE,
 			sourceRef: { claimId: claimDoc._id },
 		});
+
+		// Bonus fiilen kredilendikten SONRA çevrim kilidi uygulanır.
+		if (settings.wageringMultiplier > 0) {
+			await applyWageringLock(lockedUser._id, {
+				source: SOURCE,
+				claimId: claimDoc._id,
+				claimModel: "LossBonusClaim",
+				bonusAmount: appliedAmount,
+				wageringMultiplier: settings.wageringMultiplier,
+			});
+		}
 
 		claimDoc.adjustmentRef = result.adjustment._id;
 		await claimDoc.save();
@@ -250,6 +272,8 @@ const approveClaim = async (claimId, actorUser) => {
 	const user = await User.findById(claimDoc.user);
 	if (!user) throw new Error("USER_NOT_FOUND");
 
+	const settings = await getSettings();
+
 	const result = await createAdminManualAdjustment({
 		targetUser: user,
 		actorUser,
@@ -262,6 +286,16 @@ const approveClaim = async (claimId, actorUser) => {
 		source: SOURCE,
 		sourceRef: { claimId: claimDoc._id },
 	});
+
+	if (settings.wageringMultiplier > 0) {
+		await applyWageringLock(user._id, {
+			source: SOURCE,
+			claimId: claimDoc._id,
+			claimModel: "LossBonusClaim",
+			bonusAmount: claimDoc.appliedAmount,
+			wageringMultiplier: settings.wageringMultiplier,
+		});
+	}
 
 	claimDoc.status = "approved";
 	claimDoc.reviewedBy = actorUser?._id || null;

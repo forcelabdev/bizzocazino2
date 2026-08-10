@@ -10,9 +10,9 @@ const {
 } = require("./adminManualAdjustmentService");
 const { RIVO_WALLET } = require("../utils/rivoWallet");
 const {
-	isBonusLocked,
-	getBonusLockInfo,
 	applyBonusLock,
+	applyWageringLock,
+	evaluateBonusLock,
 } = require("../utils/bonusLock");
 
 const CATEGORY = "YATIRIM BONUSU";
@@ -130,7 +130,8 @@ const getPotential = async (userId) => {
 		!settings.maxDepositAmount ||
 		settings.maxDepositAmount <= 0 ||
 		period.totalDeposit <= settings.maxDepositAmount;
-	const blockedByOtherBonus = isBonusLocked(user);
+	const lockStatus = await evaluateBonusLock(user);
+	const blockedByOtherBonus = lockStatus.active;
 	const eligible = Boolean(
 		settings.enabled &&
 			meetsMinimum &&
@@ -146,10 +147,11 @@ const getPotential = async (userId) => {
 	let message;
 	if (!settings.enabled) {
 		message = "Yatırım bonusu şu anda aktif değil.";
+	} else if (blockedByOtherBonus && lockStatus.type === "wagering") {
+		message = `Devam eden bir bonusun çevrim şartını tamamlamadan yeni bonus talep edemezsiniz. Çevrim için ${lockStatus.wageringRemaining.toLocaleString("tr-TR")} TL daha bahis yapmanız gerekiyor.`;
 	} else if (blockedByOtherBonus) {
-		const lockInfo = getBonusLockInfo(user);
-		const until = lockInfo?.blockedUntil
-			? new Date(lockInfo.blockedUntil).toLocaleString("tr-TR")
+		const until = lockStatus.blockedUntil
+			? new Date(lockStatus.blockedUntil).toLocaleString("tr-TR")
 			: "";
 		message = `Yakın zamanda alınan bir bonus nedeniyle ${until} tarihine kadar başka bonus talep edemezsiniz.`;
 	} else if (!hasDeposit) {
@@ -186,8 +188,11 @@ const claim = async (userId) => {
 	const settings = await getSettings();
 	if (!settings.enabled) throw new Error("DEPOSIT_BONUS_DISABLED");
 
-	if (isBonusLocked(user)) {
-		throw new Error("OTHER_BONUS_BLOCKED");
+	const lockStatus = await evaluateBonusLock(user);
+	if (lockStatus.active) {
+		const err = new Error("OTHER_BONUS_BLOCKED");
+		err.wagering = lockStatus.type === "wagering" ? lockStatus : null;
+		throw err;
 	}
 
 	const period = await calculatePeriod(user);
@@ -229,14 +234,6 @@ const claim = async (userId) => {
 		throw new Error("CLAIM_IN_PROGRESS");
 	}
 
-	const blockedUntil = settings.blockOtherBonuses
-		? await applyBonusLock(
-				lockedUser._id,
-				Math.max(settings.durationHours || 0, 0),
-				SOURCE
-			)
-		: null;
-
 	const claimDoc = await DepositBonusClaim.create({
 		user: lockedUser._id,
 		userSnapshot: {
@@ -253,7 +250,7 @@ const claim = async (userId) => {
 		status: settings.autoApprove ? "approved" : "pending",
 		autoApproved: settings.autoApprove,
 		reviewedAt: settings.autoApprove ? new Date() : null,
-		otherBonusesBlockedUntil: blockedUntil,
+		otherBonusesBlockedUntil: null,
 	});
 
 	if (!settings.autoApprove) {
@@ -274,6 +271,30 @@ const claim = async (userId) => {
 			sourceRef: { claimId: claimDoc._id },
 		});
 
+		// Bonus fiilen kredilendikten SONRA çevrim/zaman kilidi uygulanır;
+		// aksi halde henüz hiç para almamış bir kullanıcıya çevrim şartı
+		// yüklenmiş olur.
+		const wageringLock =
+			settings.wageringMultiplier > 0
+				? await applyWageringLock(lockedUser._id, {
+						source: SOURCE,
+						claimId: claimDoc._id,
+						claimModel: "DepositBonusClaim",
+						bonusAmount: appliedAmount,
+						wageringMultiplier: settings.wageringMultiplier,
+					})
+				: null;
+		const blockedUntil = wageringLock
+			? null
+			: settings.blockOtherBonuses
+				? await applyBonusLock(
+						lockedUser._id,
+						Math.max(settings.durationHours || 0, 0),
+						SOURCE
+					)
+				: null;
+
+		claimDoc.otherBonusesBlockedUntil = blockedUntil;
 		claimDoc.adjustmentRef = result.adjustment._id;
 		await claimDoc.save();
 
@@ -312,14 +333,25 @@ const approveClaim = async (claimId, actorUser) => {
 		sourceRef: { claimId: claimDoc._id },
 	});
 
-	let blockedUntil = null;
-	if (settings.blockOtherBonuses) {
-		blockedUntil = await applyBonusLock(
-			user._id,
-			Math.max(settings.durationHours || 0, 0),
-			SOURCE
-		);
-	}
+	const wageringLock =
+		settings.wageringMultiplier > 0
+			? await applyWageringLock(user._id, {
+					source: SOURCE,
+					claimId: claimDoc._id,
+					claimModel: "DepositBonusClaim",
+					bonusAmount: claimDoc.appliedAmount,
+					wageringMultiplier: settings.wageringMultiplier,
+				})
+			: null;
+	const blockedUntil = wageringLock
+		? null
+		: settings.blockOtherBonuses
+			? await applyBonusLock(
+					user._id,
+					Math.max(settings.durationHours || 0, 0),
+					SOURCE
+				)
+			: null;
 
 	claimDoc.otherBonusesBlockedUntil = blockedUntil;
 	claimDoc.status = "approved";
