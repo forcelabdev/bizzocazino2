@@ -7,6 +7,8 @@ const mongoose = require("mongoose");
 const upload = require("../../middleware/upload");
 const adminWingoController = require("../../controllers/adminWingoController");
 const manualBonusCategoryController = require("../../controllers/admin/manualBonusCategoryController");
+const playerSegmentsController = require("../../controllers/admin/playerSegments");
+const tagsController = require("../../controllers/admin/tags");
 const { generalGetChatOnlineCount } = require("../../utils/general/chat");
 
 // Tabloları import edin
@@ -216,6 +218,11 @@ const {
 	getMfaCodesForUser,
 	getUserMfaSummary,
 } = require("../../services/mfaService");
+const {
+	APPROVED_PAYMENT_STATUS,
+	APPROVED_CRYPTO_STATES,
+	getUserApprovedFinanceTotals,
+} = require("../../utils/userFinanceTotals");
 
 const USER_LIST_SORT_FIELDS = {
 	user: "username",
@@ -230,155 +237,6 @@ const ACTIVE_BALANCE_SORT_KEYS = new Set([
 	"activeWallet.balance",
 	"activeBalance",
 ]);
-
-// Bonus adları artık ManualBonusCategory koleksiyonunda (DB) yönetiliyor.
-// Bkz. controllers/admin/manualBonusCategoryController.js
-// Admin panelinde: Finans > Promosyonlar > Bonus Adları
-const APPROVED_PAYMENT_STATUS = "approved";
-const APPROVED_CRYPTO_STATES = ["completed", "success"];
-
-const getUserApprovedFinanceTotals = async (userIds) => {
-	const normalizedUserIds = userIds
-		.filter((userId) => mongoose.Types.ObjectId.isValid(userId))
-		.map((userId) => new mongoose.Types.ObjectId(userId));
-
-	const totalsByUser = new Map(
-		normalizedUserIds.map((userId) => [
-			userId.toString(),
-			{ totalDeposit: 0, totalWithdrawal: 0 },
-		]),
-	);
-
-	if (!normalizedUserIds.length) return totalsByUser;
-
-	const groupByUserAndType = (type) => ({
-		$group: {
-			_id: { user: "$user", type },
-			total: { $sum: "$amount" },
-		},
-	});
-
-	const [
-		cryptoAgg,
-		fiatDepositAgg,
-		fiatWithdrawalAgg,
-		bankAgg,
-		forcelabAgg,
-		meelDevAgg,
-		galaxyPayAgg,
-		fluxKriptoAgg,
-		xPaymentsAgg,
-	] = await Promise.all([
-		CryptoTransaction.aggregate([
-			{
-				$match: {
-					user: { $in: normalizedUserIds },
-					state: { $in: APPROVED_CRYPTO_STATES },
-				},
-			},
-			groupByUserAndType("$type"),
-		]),
-		Deposit.aggregate([
-			{
-				$match: {
-					user: { $in: normalizedUserIds },
-					status: APPROVED_PAYMENT_STATUS,
-				},
-			},
-			groupByUserAndType("deposit"),
-		]),
-		Withdrawal.aggregate([
-			{
-				$match: {
-					user: { $in: normalizedUserIds },
-					status: APPROVED_PAYMENT_STATUS,
-				},
-			},
-			groupByUserAndType("withdraw"),
-		]),
-		BankTransfer.aggregate([
-			{
-				$match: {
-					user: { $in: normalizedUserIds },
-					status: APPROVED_PAYMENT_STATUS,
-				},
-			},
-			groupByUserAndType("$type"),
-		]),
-		ForcelabFinanceTransaction.aggregate([
-			{
-				$match: {
-					user: { $in: normalizedUserIds },
-					status: APPROVED_PAYMENT_STATUS,
-				},
-			},
-			groupByUserAndType({ $ifNull: ["$providerType", "deposit"] }),
-		]),
-		MeelDevTransaction.aggregate([
-			{
-				$match: {
-					user: { $in: normalizedUserIds },
-					status: APPROVED_PAYMENT_STATUS,
-				},
-			},
-			groupByUserAndType("$type"),
-		]),
-		GalaxyPayTransaction.aggregate([
-			{
-				$match: {
-					user: { $in: normalizedUserIds },
-					status: APPROVED_PAYMENT_STATUS,
-				},
-			},
-			groupByUserAndType("$type"),
-		]),
-		FluxKriptoTransaction.aggregate([
-			{
-				$match: {
-					user: { $in: normalizedUserIds },
-					status: APPROVED_PAYMENT_STATUS,
-				},
-			},
-			groupByUserAndType("$type"),
-		]),
-		XPaymentTransaction.aggregate([
-			{
-				$match: {
-					user: { $in: normalizedUserIds },
-					status: APPROVED_PAYMENT_STATUS,
-				},
-			},
-			groupByUserAndType("$type"),
-		]),
-	]);
-
-	const addRowsToTotals = (rows) => {
-		for (const row of rows) {
-			const userTotals = totalsByUser.get(row._id.user.toString());
-			if (!userTotals) continue;
-
-			if (row._id.type === "deposit") {
-				userTotals.totalDeposit += Number(row.total || 0);
-			} else if (row._id.type === "withdraw") {
-				userTotals.totalWithdrawal += Number(row.total || 0);
-			}
-		}
-	};
-
-	[
-		cryptoAgg,
-		fiatDepositAgg,
-		fiatWithdrawalAgg,
-		bankAgg,
-		forcelabAgg,
-		meelDevAgg,
-		galaxyPayAgg,
-		fluxKriptoAgg,
-		xPaymentsAgg,
-	].forEach(addRowsToTotals);
-
-	return totalsByUser;
-};
 
 const buildActiveWalletAggregationFields = () => ({
 	activeWallet: {
@@ -2004,6 +1862,44 @@ router.get(
 	},
 );
 
+// ═══════════════════════════════════════════════════════════════════════════
+// CRM: Oyuncu Segmentleri
+// ═══════════════════════════════════════════════════════════════════════════
+router.get(
+	"/player-segments/summary",
+	checkPermission("users.read"),
+	playerSegmentsController.getSummary,
+);
+
+router.get(
+	"/player-segments/:key/users",
+	checkPermission("users.read"),
+	playerSegmentsController.getUsers,
+);
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CRM: Tag Manager
+// ═══════════════════════════════════════════════════════════════════════════
+router.get("/tags", checkPermission("users.read"), tagsController.listTags);
+router.post("/tags", checkPermission("users.manage"), tagsController.createTag);
+router.put("/tags/:id", checkPermission("users.manage"), tagsController.updateTag);
+router.delete("/tags/:id", checkPermission("users.manage"), tagsController.deleteTag);
+router.get(
+	"/tags/:id/users",
+	checkPermission("users.read"),
+	tagsController.getTagUsers,
+);
+router.post(
+	"/tags/:id/assign",
+	checkPermission("users.manage"),
+	tagsController.assignUsers,
+);
+router.post(
+	"/tags/:id/unassign",
+	checkPermission("users.manage"),
+	tagsController.unassignUsers,
+);
+
 router.get(
 	"/manual-bonus-categories",
 	checkPermission(["finance.manualAdjustments.manage", "users.update"]),
@@ -3430,7 +3326,7 @@ router.put(
 				if (!Number.isFinite(parsedRewardAmount)) {
 					return res.status(400).json({
 						success: false,
-						message: "Ödül bakiyesi geçerli sayı olmalıdır.",
+						message: "Ödül bakiyesi ge��erli sayı olmalıdır.",
 					});
 				}
 				updates.rewardAmount = parsedRewardAmount;
@@ -8975,7 +8871,7 @@ router.put(
 
 // ═══════════════════════════════════════════════════════════════════════════
 // SMS OTP Ayarları (SiteSettings içinde)
-// ═══════════════════════════════════════════════════════════════════════════
+// ════════════════════════════════════��══════════════════════════════════════
 
 const normalizePositiveInteger = (value, fallback = 0) => {
 	const parsed = Number.parseInt(value, 10);
@@ -10372,7 +10268,7 @@ router.get(
 			});
 		} catch (error) {
 			console.error("MeelDev admin list hatası:", error);
-			res.status(500).json({ success: false, error: "İşlemler listelenirken hata oluştu." });
+			res.status(500).json({ success: false, error: "İşlemler listelenirken hata olu��tu." });
 		}
 	},
 );

@@ -57,6 +57,28 @@ export default [
     ],
   },
 
+  // 📇 CRM
+  {
+    title: "crm.title",
+    icon: { icon: "tabler-address-book" },
+    action: "read",
+    subject: "users",
+    children: [
+      {
+        title: "crm.playerSegments",
+        to: "apps-crm-player-segments",
+        action: "read",
+        subject: "users",
+      },
+      {
+        title: "crm.tagManager",
+        to: "apps-crm-tag-manager",
+        action: "read",
+        subject: "users",
+      },
+    ],
+  },
+
   // 💰 Finance
   {
     title: "finance.title",

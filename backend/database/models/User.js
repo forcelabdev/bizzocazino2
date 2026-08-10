@@ -204,6 +204,12 @@ const userSchema = new mongoose.Schema(
 			updatedAt: { type: Date },
 		},
 
+		// CRM: Tag Manager üzerinden atanan etiketler
+		tags: {
+			type: [{ type: mongoose.Schema.Types.ObjectId, ref: "Tag" }],
+			default: [],
+		},
+
 		rakeback: {
 			earned: { type: Number, default: 0 },
 			available: { type: Number, default: 0 },
@@ -329,6 +335,7 @@ userSchema.index({ "affiliates.code": 1 });
 userSchema.index({ "web3.address": 1 }, { unique: true, sparse: true });
 userSchema.index({ phone: 1 }, { unique: true, sparse: true });
 userSchema.index({ "mfa.enabled": 1 });
+userSchema.index({ tags: 1 });
 
 const User = mongoose.model("User", userSchema);
 
