@@ -204,6 +204,29 @@ const userSchema = new mongoose.Schema(
 			updatedAt: { type: Date },
 		},
 
+		// Admin panelindeki "Kontroller" sekmesi tarafından yönetilen
+		// hesap kısıtlamaları ve platform erişim izinleri.
+		controls: {
+			withdrawalBlocked: { type: Boolean, default: false },
+			depositBlocked: { type: Boolean, default: false },
+			gameBlocked: { type: Boolean, default: false },
+			tipBlocked: { type: Boolean, default: false },
+			categoryRestrictions: {
+				slots: { type: Boolean, default: false },
+				liveCasino: { type: Boolean, default: false },
+				sportsBook: { type: Boolean, default: false },
+				originals: { type: Boolean, default: false },
+			},
+			platformAccess: {
+				affiliatePanel: { type: Boolean, default: false },
+				partnerAccess: { type: Boolean, default: false },
+				contentEditor: { type: Boolean, default: false },
+				chatModerator: { type: Boolean, default: false },
+				streamer: { type: Boolean, default: false },
+			},
+			updatedAt: { type: Date },
+		},
+
 		// CRM: Tag Manager üzerinden atanan etiketler
 		tags: {
 			type: [{ type: mongoose.Schema.Types.ObjectId, ref: "Tag" }],

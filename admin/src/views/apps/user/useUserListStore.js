@@ -117,7 +117,39 @@ export const useUserListStore = defineStore('UserListStore', {
         }
       })
     },
-    
+
+    // ✅ Kontroller sekmesi: dönemsel finansal rapor
+    fetchUserFinancialReport(userId, params = {}) {
+      return axios.get(`/admin/users/${userId}/financial-report`, { params }).then(res => res.data.data)
+    },
+
+    // ✅ Kontroller sekmesi: engelleme / kısıtlama / platform erişimi güncelleme
+    updateUserControls(userId, payload) {
+      return axios.patch(`/admin/users/${userId}/controls`, payload).then(res => res.data)
+    },
+
+    // ✅ Kontroller sekmesi: partnere ata
+    assignUserPartner(userId, identifier) {
+      return axios.patch(`/admin/users/${userId}/partner`, { identifier }).then(res => res.data)
+    },
+
+    // ✅ Kontroller sekmesi: partner bağlantısını kaldır
+    removeUserPartner(userId) {
+      return axios.delete(`/admin/users/${userId}/partner`).then(res => res.data)
+    },
+
+    // ✅ Kontroller sekmesi: etiket yönetimi (Tag Manager ile paylaşılan endpointler)
+    fetchTags() {
+      return axios.get('/admin/tags').then(res => res.data.data)
+    },
+
+    assignTagToUser(tagId, userId) {
+      return axios.post(`/admin/tags/${tagId}/assign`, { userIds: [userId] }).then(res => res.data)
+    },
+
+    unassignTagFromUser(tagId, userId) {
+      return axios.post(`/admin/tags/${tagId}/unassign`, { userIds: [userId] }).then(res => res.data)
+    },
 
   },
 })

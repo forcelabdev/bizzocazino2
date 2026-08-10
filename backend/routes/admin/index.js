@@ -1028,7 +1028,7 @@ router.patch(
 
 			res.status(200).json({
 				success: true,
-				message: "Kullanıcı askıya alındı.",
+				message: "Kullanıcı ask��ya alındı.",
 				data: buildAdminUserResponseData(updatedUser),
 			});
 		} catch (error) {
@@ -1174,6 +1174,318 @@ router.patch(
 			});
 		} catch (error) {
 			console.error("Bet erişimi güncelleme hatası:", error);
+			res.status(500).json({ success: false, message: "Sunucu hatası" });
+		}
+	},
+);
+
+// 🔹 Kontroller sekmesi: hesap kısıtlamaları, kategori engelleri ve platform erişimi
+router.patch(
+	"/users/:id/controls",
+	checkPermission("users.update"),
+	async (req, res) => {
+		try {
+			const { id } = req.params;
+			if (!mongoose.Types.ObjectId.isValid(id)) {
+				return res.status(400).json({
+					success: false,
+					message: "Geçersiz kullanıcı ID.",
+				});
+			}
+
+			const user = await User.findById(id);
+			if (!user) {
+				return res
+					.status(404)
+					.json({ success: false, message: "Kullanıcı bulunamadı." });
+			}
+
+			const originalControls = user.controls
+				? user.controls.toObject?.() || user.controls
+				: {};
+
+			const boolFields = [
+				"withdrawalBlocked",
+				"depositBlocked",
+				"gameBlocked",
+				"tipBlocked",
+			];
+			const categoryFields = [
+				"slots",
+				"liveCasino",
+				"sportsBook",
+				"originals",
+			];
+			const platformFields = [
+				"affiliatePanel",
+				"partnerAccess",
+				"contentEditor",
+				"chatModerator",
+				"streamer",
+			];
+
+			const nextControls = {
+				withdrawalBlocked: Boolean(
+					originalControls.withdrawalBlocked,
+				),
+				depositBlocked: Boolean(originalControls.depositBlocked),
+				gameBlocked: Boolean(originalControls.gameBlocked),
+				tipBlocked: Boolean(originalControls.tipBlocked),
+				categoryRestrictions: {
+					slots: Boolean(
+						originalControls.categoryRestrictions?.slots,
+					),
+					liveCasino: Boolean(
+						originalControls.categoryRestrictions?.liveCasino,
+					),
+					sportsBook: Boolean(
+						originalControls.categoryRestrictions?.sportsBook,
+					),
+					originals: Boolean(
+						originalControls.categoryRestrictions?.originals,
+					),
+				},
+				platformAccess: {
+					affiliatePanel: Boolean(
+						originalControls.platformAccess?.affiliatePanel,
+					),
+					partnerAccess: Boolean(
+						originalControls.platformAccess?.partnerAccess,
+					),
+					contentEditor: Boolean(
+						originalControls.platformAccess?.contentEditor,
+					),
+					chatModerator: Boolean(
+						originalControls.platformAccess?.chatModerator,
+					),
+					streamer: Boolean(
+						originalControls.platformAccess?.streamer,
+					),
+				},
+			};
+
+			const changes = [];
+
+			boolFields.forEach((field) => {
+				if (typeof req.body?.[field] === "boolean") {
+					const from = nextControls[field];
+					const to = req.body[field];
+					if (from !== to) {
+						changes.push({ field: `controls.${field}`, from, to });
+					}
+					nextControls[field] = to;
+				}
+			});
+
+			if (req.body?.categoryRestrictions) {
+				categoryFields.forEach((field) => {
+					if (
+						typeof req.body.categoryRestrictions[field] ===
+						"boolean"
+					) {
+						const from = nextControls.categoryRestrictions[field];
+						const to = req.body.categoryRestrictions[field];
+						if (from !== to) {
+							changes.push({
+								field: `controls.categoryRestrictions.${field}`,
+								from,
+								to,
+							});
+						}
+						nextControls.categoryRestrictions[field] = to;
+					}
+				});
+			}
+
+			if (req.body?.platformAccess) {
+				platformFields.forEach((field) => {
+					if (typeof req.body.platformAccess[field] === "boolean") {
+						const from = nextControls.platformAccess[field];
+						const to = req.body.platformAccess[field];
+						if (from !== to) {
+							changes.push({
+								field: `controls.platformAccess.${field}`,
+								from,
+								to,
+							});
+						}
+						nextControls.platformAccess[field] = to;
+					}
+				});
+			}
+
+			nextControls.updatedAt = new Date();
+			user.controls = nextControls;
+			user.markModified("controls");
+
+			const updatedUser = await user.save();
+
+			if (changes.length) {
+				await createAdminUserAuditLog({
+					targetUser: updatedUser,
+					actorUser: req.adminUser || null,
+					action: "controls_update",
+					summary: "Kullanıcı kontrolleri güncellendi",
+					changes,
+					source: "admin-user-controls",
+					metadata: {
+						initiatedFrom: "admin-user-profile",
+					},
+				});
+			}
+
+			res.status(200).json({
+				success: true,
+				message: "Kullanıcı kontrolleri güncellendi.",
+				data: buildAdminUserResponseData(updatedUser),
+			});
+		} catch (error) {
+			console.error("Kullanıcı kontrolleri güncelleme hatası:", error);
+			res.status(500).json({ success: false, message: "Sunucu hatası" });
+		}
+	},
+);
+
+// 🔹 Kontroller sekmesi: kullanıcıyı bir partnerin/affiliate'in altına ata
+router.patch(
+	"/users/:id/partner",
+	checkPermission("users.update"),
+	async (req, res) => {
+		try {
+			const { id } = req.params;
+			if (!mongoose.Types.ObjectId.isValid(id)) {
+				return res.status(400).json({
+					success: false,
+					message: "Geçersiz kullanıcı ID.",
+				});
+			}
+
+			const identifier = String(req.body?.identifier || "").trim();
+			if (!identifier) {
+				return res.status(400).json({
+					success: false,
+					message: "Referans kodu veya kullanıcı ID'si giriniz.",
+				});
+			}
+
+			const user = await User.findById(id);
+			if (!user) {
+				return res
+					.status(404)
+					.json({ success: false, message: "Kullanıcı bulunamadı." });
+			}
+
+			const partnerQuery = mongoose.Types.ObjectId.isValid(identifier)
+				? { $or: [{ _id: identifier }, { "affiliates.code": identifier }] }
+				: { "affiliates.code": identifier };
+
+			const partner = await User.findOne(partnerQuery).select(
+				"_id username name affiliates.code",
+			);
+
+			if (!partner) {
+				return res.status(404).json({
+					success: false,
+					message: "Belirtilen partner bulunamadı.",
+				});
+			}
+
+			if (partner._id.toString() === user._id.toString()) {
+				return res.status(400).json({
+					success: false,
+					message: "Kullanıcı kendisine partner olarak atanamaz.",
+				});
+			}
+
+			const previousReferrer = user.affiliates?.referrer || null;
+			user.affiliates = user.affiliates || {};
+			user.affiliates.referrer = partner._id;
+			user.markModified("affiliates");
+
+			const updatedUser = await user.save();
+			await createAdminUserAuditLog({
+				targetUser: updatedUser,
+				actorUser: req.adminUser || null,
+				action: "partner_assign",
+				summary: "Kullanıcı bir partnere atandı",
+				changes: [
+					{
+						field: "affiliates.referrer",
+						from: previousReferrer,
+						to: partner._id,
+					},
+				],
+				source: "admin-user-controls",
+				metadata: {
+					initiatedFrom: "admin-user-profile",
+					partnerUsername: partner.username || partner.name || "",
+				},
+			});
+
+			res.status(200).json({
+				success: true,
+				message: "Kullanıcı partnere atandı.",
+				data: buildAdminUserResponseData(updatedUser),
+			});
+		} catch (error) {
+			console.error("Partner atama hatası:", error);
+			res.status(500).json({ success: false, message: "Sunucu hatası" });
+		}
+	},
+);
+
+router.delete(
+	"/users/:id/partner",
+	checkPermission("users.update"),
+	async (req, res) => {
+		try {
+			const { id } = req.params;
+			if (!mongoose.Types.ObjectId.isValid(id)) {
+				return res.status(400).json({
+					success: false,
+					message: "Geçersiz kullanıcı ID.",
+				});
+			}
+
+			const user = await User.findById(id);
+			if (!user) {
+				return res
+					.status(404)
+					.json({ success: false, message: "Kullanıcı bulunamadı." });
+			}
+
+			const previousReferrer = user.affiliates?.referrer || null;
+			if (user.affiliates) {
+				user.affiliates.referrer = null;
+				user.markModified("affiliates");
+			}
+
+			const updatedUser = await user.save();
+			await createAdminUserAuditLog({
+				targetUser: updatedUser,
+				actorUser: req.adminUser || null,
+				action: "partner_unassign",
+				summary: "Kullanıcının partner bağlantısı kaldırıldı",
+				changes: [
+					{
+						field: "affiliates.referrer",
+						from: previousReferrer,
+						to: null,
+					},
+				],
+				source: "admin-user-controls",
+				metadata: {
+					initiatedFrom: "admin-user-profile",
+				},
+			});
+
+			res.status(200).json({
+				success: true,
+				message: "Partner bağlantısı kaldırıldı.",
+				data: buildAdminUserResponseData(updatedUser),
+			});
+		} catch (error) {
+			console.error("Partner bağlantısı kaldırma hatası:", error);
 			res.status(500).json({ success: false, message: "Sunucu hatası" });
 		}
 	},
@@ -2249,6 +2561,250 @@ router.get("/users/:id/transactions", checkPermission("users.read"), async (req,
 		res.status(500).json({ success: false, message: "Sunucu hatası." });
 	}
 });
+
+// 🔹 Kontroller sekmesi: dönemsel finansal rapor (yatırım/çekim/net kâr/bonus/çevrim/GGR)
+router.get(
+	"/users/:id/financial-report",
+	checkPermission("users.read"),
+	async (req, res) => {
+		try {
+			const { id } = req.params;
+			if (!mongoose.Types.ObjectId.isValid(id)) {
+				return res.status(400).json({
+					success: false,
+					message: "Geçersiz kullanıcı ID.",
+				});
+			}
+
+			const period = String(req.query.period || "monthly").toLowerCase();
+			const now = new Date();
+			let dateFrom = null;
+			let dateTo = null;
+
+			if (period === "daily") {
+				dateFrom = new Date(now);
+				dateFrom.setHours(0, 0, 0, 0);
+			} else if (period === "weekly") {
+				dateFrom = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+			} else if (period === "monthly") {
+				dateFrom = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+			} else if (period === "custom") {
+				dateFrom = req.query.dateFrom ? new Date(req.query.dateFrom) : null;
+				dateTo = req.query.dateTo ? new Date(req.query.dateTo) : null;
+				if (dateFrom && Number.isNaN(dateFrom.getTime())) dateFrom = null;
+				if (dateTo && Number.isNaN(dateTo.getTime())) dateTo = null;
+			}
+			// period === 'all' -> aralık yok
+
+			const userObjectId = new mongoose.Types.ObjectId(id);
+			const dateMatch = {};
+			if (dateFrom) dateMatch.$gte = dateFrom;
+			if (dateTo) dateMatch.$lte = dateTo;
+			const withDateRange = (base) =>
+				Object.keys(dateMatch).length
+					? { ...base, createdAt: dateMatch }
+					: base;
+
+			const sumAmount = (rows) =>
+				rows.reduce((sum, row) => sum + Number(row.total || 0), 0);
+			const countRows = (rows) =>
+				rows.reduce((sum, row) => sum + Number(row.count || 0), 0);
+
+			const [
+				depositAgg,
+				withdrawalAgg,
+				cryptoAgg,
+				bankAgg,
+				forcelabAgg,
+				meelDevAgg,
+				galaxyPayAgg,
+				fluxKriptoAgg,
+				xPaymentsAgg,
+				manualCreditAgg,
+				manualDebitAgg,
+				manualBonusAgg,
+				bonusHistoryAgg,
+				transactionAgg,
+			] = await Promise.all([
+				Deposit.aggregate([
+					{ $match: withDateRange({ user: userObjectId, status: "approved" }) },
+					{ $group: { _id: null, total: { $sum: "$amount" }, count: { $sum: 1 } } },
+				]),
+				Withdrawal.aggregate([
+					{ $match: withDateRange({ user: userObjectId, status: "approved" }) },
+					{ $group: { _id: null, total: { $sum: "$amount" }, count: { $sum: 1 } } },
+				]),
+				CryptoTransaction.aggregate([
+					{
+						$match: withDateRange({
+							user: userObjectId,
+							state: { $in: ["completed", "success"] },
+						}),
+					},
+					{ $group: { _id: "$type", total: { $sum: "$amount" }, count: { $sum: 1 } } },
+				]),
+				BankTransfer.aggregate([
+					{ $match: withDateRange({ user: userObjectId, status: "approved" }) },
+					{ $group: { _id: "$type", total: { $sum: "$amount" }, count: { $sum: 1 } } },
+				]),
+				ForcelabFinanceTransaction.aggregate([
+					{ $match: withDateRange({ user: userObjectId, status: "approved" }) },
+					{
+						$group: {
+							_id: { $ifNull: ["$providerType", "deposit"] },
+							total: { $sum: "$amount" },
+							count: { $sum: 1 },
+						},
+					},
+				]),
+				MeelDevTransaction.aggregate([
+					{ $match: withDateRange({ user: userObjectId, status: "approved" }) },
+					{ $group: { _id: "$type", total: { $sum: "$amount" }, count: { $sum: 1 } } },
+				]),
+				GalaxyPayTransaction.aggregate([
+					{ $match: withDateRange({ user: userObjectId, status: "approved" }) },
+					{ $group: { _id: "$type", total: { $sum: "$amount" }, count: { $sum: 1 } } },
+				]),
+				FluxKriptoTransaction.aggregate([
+					{ $match: withDateRange({ user: userObjectId, status: "approved" }) },
+					{ $group: { _id: "$type", total: { $sum: "$amount" }, count: { $sum: 1 } } },
+				]),
+				XPaymentTransaction.aggregate([
+					{ $match: withDateRange({ user: userObjectId, status: "approved" }) },
+					{ $group: { _id: "$type", total: { $sum: "$amount" }, count: { $sum: 1 } } },
+				]),
+				AdminManualAdjustment.aggregate([
+					{
+						$match: withDateRange({
+							targetUser: userObjectId,
+							kind: "balance",
+							direction: "credit",
+						}),
+					},
+					{ $group: { _id: null, total: { $sum: "$appliedAmount" } } },
+				]),
+				AdminManualAdjustment.aggregate([
+					{
+						$match: withDateRange({
+							targetUser: userObjectId,
+							kind: "balance",
+							direction: "debit",
+						}),
+					},
+					{ $group: { _id: null, total: { $sum: "$appliedAmount" } } },
+				]),
+				AdminManualAdjustment.aggregate([
+					{
+						$match: withDateRange({
+							targetUser: userObjectId,
+							kind: "bonus",
+							direction: "credit",
+						}),
+					},
+					{ $group: { _id: null, total: { $sum: "$appliedAmount" } } },
+				]),
+				BonusHistory.aggregate([
+					{
+						$match: Object.keys(dateMatch).length
+							? { userId: userObjectId, claimedAt: dateMatch }
+							: { userId: userObjectId },
+					},
+					{ $group: { _id: null, total: { $sum: "$amount" } } },
+				]),
+				Transactions.aggregate([
+					{
+						$match: Object.keys(dateMatch).length
+							? { user_code: id, created_at: dateMatch }
+							: { user_code: id },
+					},
+					{
+						$group: {
+							_id: null,
+							totalBet: { $sum: { $ifNull: ["$bet_money", 0] } },
+							totalWin: { $sum: { $ifNull: ["$win_money", 0] } },
+						},
+					},
+				]),
+			]);
+
+			const splitByType = (rows, type) =>
+				rows.filter((row) => row._id === type);
+
+			const totalDeposit =
+				Number(depositAgg[0]?.total || 0) +
+				sumAmount(splitByType(cryptoAgg, "deposit")) +
+				sumAmount(splitByType(bankAgg, "deposit")) +
+				sumAmount(splitByType(forcelabAgg, "deposit")) +
+				sumAmount(splitByType(meelDevAgg, "deposit")) +
+				sumAmount(splitByType(galaxyPayAgg, "deposit")) +
+				sumAmount(splitByType(fluxKriptoAgg, "deposit")) +
+				sumAmount(splitByType(xPaymentsAgg, "deposit"));
+
+			const depositCount =
+				Number(depositAgg[0]?.count || 0) +
+				countRows(splitByType(cryptoAgg, "deposit")) +
+				countRows(splitByType(bankAgg, "deposit")) +
+				countRows(splitByType(forcelabAgg, "deposit")) +
+				countRows(splitByType(meelDevAgg, "deposit")) +
+				countRows(splitByType(galaxyPayAgg, "deposit")) +
+				countRows(splitByType(fluxKriptoAgg, "deposit")) +
+				countRows(splitByType(xPaymentsAgg, "deposit"));
+
+			const totalWithdrawal =
+				Number(withdrawalAgg[0]?.total || 0) +
+				sumAmount(splitByType(cryptoAgg, "withdraw")) +
+				sumAmount(splitByType(bankAgg, "withdraw")) +
+				sumAmount(splitByType(forcelabAgg, "withdraw")) +
+				sumAmount(splitByType(meelDevAgg, "withdraw")) +
+				sumAmount(splitByType(galaxyPayAgg, "withdraw")) +
+				sumAmount(splitByType(fluxKriptoAgg, "withdraw")) +
+				sumAmount(splitByType(xPaymentsAgg, "withdraw"));
+
+			const withdrawalCount =
+				Number(withdrawalAgg[0]?.count || 0) +
+				countRows(splitByType(cryptoAgg, "withdraw")) +
+				countRows(splitByType(bankAgg, "withdraw")) +
+				countRows(splitByType(forcelabAgg, "withdraw")) +
+				countRows(splitByType(meelDevAgg, "withdraw")) +
+				countRows(splitByType(galaxyPayAgg, "withdraw")) +
+				countRows(splitByType(fluxKriptoAgg, "withdraw")) +
+				countRows(splitByType(xPaymentsAgg, "withdraw"));
+
+			const manualReceivable = Number(manualCreditAgg[0]?.total || 0);
+			const manualDebt = Number(manualDebitAgg[0]?.total || 0);
+			const bonusTotal =
+				Number(manualBonusAgg[0]?.total || 0) +
+				Number(bonusHistoryAgg[0]?.total || 0);
+			const turnover = Number(transactionAgg[0]?.totalBet || 0);
+			const ggr =
+				Number(transactionAgg[0]?.totalBet || 0) -
+				Number(transactionAgg[0]?.totalWin || 0);
+			const netProfit = totalDeposit - totalWithdrawal;
+
+			res.status(200).json({
+				success: true,
+				data: {
+					period,
+					dateFrom,
+					dateTo,
+					totalDeposit,
+					depositCount,
+					totalWithdrawal,
+					withdrawalCount,
+					netProfit,
+					manualReceivable,
+					manualDebt,
+					bonusTotal,
+					turnover,
+					ggr,
+				},
+			});
+		} catch (error) {
+			console.error("Finansal rapor hatası:", error);
+			res.status(500).json({ success: false, message: "Sunucu hatası" });
+		}
+	},
+);
 
 // Kullanıcının bonus geçmişini döndürme
 router.get("/users/:id/bonus-history", checkPermission("users.read"), async (req, res) => {

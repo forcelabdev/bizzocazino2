@@ -9,6 +9,7 @@ import UserTabAccount from "@/views/apps/user/view/UserTabAccount.vue"
 import UserTabBillingsPlans from "@/views/apps/user/view/UserTabBillingsPlans.vue"
 import UserTabManualAdjustments from "@/views/apps/user/view/UserTabManualAdjustments.vue"
 import UserTabSportsBetHistory from "@/views/apps/user/view/UserTabSportsBetHistory.vue"
+import UserTabControls from "@/views/apps/user/view/UserTabControls.vue"
 
 // import UserTabConnections from "@/views/apps/user/view/UserTabConnections.vue";
 import UserTabNotifications from "@/views/apps/user/view/UserTabNotifications.vue"
