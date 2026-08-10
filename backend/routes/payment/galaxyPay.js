@@ -23,6 +23,7 @@ const {
 	generateGalaxyPayHash,
 	generateGalaxyPayCallbackHash,
 } = require("../../utils/galaxyPay");
+const { createAdminNotification } = require("../../utils/adminNotification");
 
 
 
@@ -761,8 +762,13 @@ try{
 	});
 
 
-
-
+	createAdminNotification(
+		"withdraw",
+		"Yeni Çekim Talebi",
+		`${user.username} kullanıcısı ${amount} ₺ tutarında GalaxyPay çekim talebi oluşturdu.`,
+		"/apps/finance/withdraw",
+		{ provider: "GalaxyPay", amount, username: user.username, userId: user._id },
+	);
 
 
 	return res.json({

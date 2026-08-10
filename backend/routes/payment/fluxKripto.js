@@ -29,6 +29,7 @@ const {
 	normalizeFluxProviderTryAmount,
 	verifyFluxCallbackHash,
 } = require("../../utils/fluxKripto");
+const { createAdminNotification } = require("../../utils/adminNotification");
 
 const router = express.Router();
 
@@ -550,6 +551,19 @@ router.post("/withdraw", authorizeUser(true), async (req, res) => {
 		});
 
 		if (userToEmit) emitUserBalance(null, userToEmit);
+
+		createAdminNotification(
+			"withdraw",
+			"Yeni Çekim Talebi",
+			`${userToEmit?.username || "Kullanıcı"} kullanıcısı ${transaction?.amount} ₺ tutarında FluxKripto çekim talebi oluşturdu.`,
+			"/apps/finance/withdraw",
+			{
+				provider: "FluxKripto",
+				amount: transaction?.amount,
+				username: userToEmit?.username,
+				userId: userToEmit?._id,
+			},
+		);
 
 		res.json({
 			success: true,

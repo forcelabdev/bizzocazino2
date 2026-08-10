@@ -13,6 +13,7 @@ const {
 	verifyMeelDevCallbackHash,
 	mapMeelDevStatus,
 } = require("../../utils/meelDev");
+const { createAdminNotification } = require("../../utils/adminNotification");
 
 // ─── Settings Helper ───────────────────────────────────────────────────────
 const getSettings = async (requireActive = true) => {
@@ -328,6 +329,14 @@ router.post("/withdraw", authorizeUser(true), async (req, res) => {
 				name: user.name || user.username || "",
 			},
 		});
+
+		createAdminNotification(
+			"withdraw",
+			"Yeni Çekim Talebi",
+			`${user.username} kullanıcısı ${amountValue} ₺ tutarında MeelDev çekim talebi oluşturdu.`,
+			"/apps/finance/withdraw",
+			{ provider: "MeelDev", amount: amountValue, username: user.username, userId: user._id },
+		);
 
 		res.json({
 			success: true,

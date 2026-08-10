@@ -16,6 +16,7 @@ const {
 	toSmallestUnit,
 	verifyWebhookSignature,
 } = require("../../utils/forcelabFinance");
+const { createAdminNotification } = require("../../utils/adminNotification");
 
 const getSettings = async (requireActive = true) => {
 	let siteSettings = await SiteSettings.findOne();
@@ -790,6 +791,14 @@ router.post("/withdraw", authorizeUser(true), async (req, res) => {
 				...(metadata?.network ? { destination_network: metadata.network } : {}),
 			},
 		});
+
+		createAdminNotification(
+			"withdraw",
+			"Yeni Çekim Talebi",
+			`${user.username} kullanıcısı ${amountValue} ₺ tutarında Forcelab Finance çekim talebi oluşturdu.`,
+			"/apps/finance/withdraw",
+			{ provider: "Forcelab Finance", amount: amountValue, username: user.username, userId: user._id },
+		);
 
 		res.json({
 			success: true,

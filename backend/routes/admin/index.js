@@ -189,6 +189,8 @@ const { getIO } = require("../../utils/io");
 const {
 	notifyAndDisconnectSuspendedUser,
 } = require("../../utils/userSuspension");
+const { createAdminNotification } = require("../../utils/adminNotification");
+const AdminNotification = require("../../database/models/AdminNotification");
 const {
 	authenticateAdmin,
 	checkPermission,
@@ -1168,6 +1170,14 @@ router.patch(
 				},
 			});
 			await notifyAndDisconnectSuspendedUser(getIO(), updatedUser._id);
+
+			createAdminNotification(
+				"sanction",
+				"Kullanıcı Askıya Alındı",
+				`${updatedUser.username} kullanıcısı askıya alındı.`,
+				`/apps/user/view/${updatedUser._id}`,
+				{ username: updatedUser.username, userId: updatedUser._id, reason },
+			);
 
 			res.status(200).json({
 				success: true,
@@ -8562,7 +8572,7 @@ router.put(
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 📁 FILE MANAGER ENDPOINTS
-// ═══════════════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════════��══════
 
 // List all files
 router.get("/files", checkPermission("platform.read"), async (req, res) => {
@@ -8766,7 +8776,7 @@ router.delete(
 
 const CATEGORY_ICONS = ["lobby", "originals", "favorites", "hot"];
 
-// Kategori ikonlarını listele
+// Kategori ikonların�� listele
 router.get(
 	"/category-icons",
 	checkPermission("platform.read"),
@@ -10828,5 +10838,75 @@ router.post(
 		}
 	},
 );
+
+// @desc    Admin bildirimlerini listele (son 50 + okunmamış sayısı)
+// @route   GET /admin/notifications
+// @access  Admin
+router.get("/notifications", async (req, res) => {
+	try {
+		const adminId = req.adminUser._id;
+
+		const notifications = await AdminNotification.find()
+			.sort({ createdAt: -1 })
+			.limit(50)
+			.lean();
+
+		const unreadCount = await AdminNotification.countDocuments({
+			readBy: { $ne: adminId },
+		});
+
+		res.status(200).json({
+			success: true,
+			data: notifications,
+			unreadCount,
+		});
+	} catch (error) {
+		console.error("Admin notifications list error:", error.message);
+		res.status(500).json({ success: false, message: "Bildirimler alınamadı." });
+	}
+});
+
+// @desc    Bir bildirimi okundu olarak işaretle
+// @route   POST /admin/notifications/:id/read
+// @access  Admin
+router.post("/notifications/:id/read", async (req, res) => {
+	try {
+		const { id } = req.params;
+		if (!mongoose.Types.ObjectId.isValid(id)) {
+			return res.status(400).json({ success: false, message: "Geçersiz bildirim ID." });
+		}
+
+		const adminId = req.adminUser._id;
+
+		await AdminNotification.updateOne(
+			{ _id: id },
+			{ $addToSet: { readBy: adminId } },
+		);
+
+		res.status(200).json({ success: true });
+	} catch (error) {
+		console.error("Admin notification read error:", error.message);
+		res.status(500).json({ success: false, message: "Bildirim güncellenemedi." });
+	}
+});
+
+// @desc    Tüm bildirimleri okundu olarak işaretle
+// @route   POST /admin/notifications/read-all
+// @access  Admin
+router.post("/notifications/read-all", async (req, res) => {
+	try {
+		const adminId = req.adminUser._id;
+
+		await AdminNotification.updateMany(
+			{ readBy: { $ne: adminId } },
+			{ $addToSet: { readBy: adminId } },
+		);
+
+		res.status(200).json({ success: true });
+	} catch (error) {
+		console.error("Admin notifications read-all error:", error.message);
+		res.status(500).json({ success: false, message: "Bildirimler güncellenemedi." });
+	}
+});
 
 module.exports = router;
