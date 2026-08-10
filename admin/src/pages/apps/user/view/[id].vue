@@ -11,7 +11,6 @@ import UserTabManualAdjustments from "@/views/apps/user/view/UserTabManualAdjust
 import UserTabSportsBetHistory from "@/views/apps/user/view/UserTabSportsBetHistory.vue"
 import UserTabControls from "@/views/apps/user/view/UserTabControls.vue"
 import UserTabReloadBonus from "@/views/apps/user/view/UserTabReloadBonus.vue"
-import UserTabReloadBonus from "@/views/apps/user/view/UserTabReloadBonus.vue"
 
 // import UserTabConnections from "@/views/apps/user/view/UserTabConnections.vue";
 import UserTabNotifications from "@/views/apps/user/view/UserTabNotifications.vue"
