@@ -23,6 +23,30 @@
 	"copyAccountNumber": "Copy account number",
 	"accountNumberCopied": "Account number copied to clipboard.",
 	"copyFailed": "Could not copy to clipboard.",
+	"userDetail": {
+		"tabs": {
+			"profile": "Profile",
+			"finance": "Finance",
+			"gameHistory": "Game History",
+			"balanceAdjustment": "Balance Adjustment",
+			"security": "Security",
+			"notifications": "Notifications"
+		},
+		"stats": {
+			"balance": "Balance",
+			"vipLevel": "VIP Level",
+			"totalWagered": "Total Wagered",
+			"lastIp": "Last IP",
+			"totalIps": "{count} IPs total"
+		},
+		"personalInfo": "Personal Information",
+		"financialSummary": "Financial Summary",
+		"walletsSection": "Wallets",
+		"ipAddressesSection": "IP Addresses",
+		"affiliateAndRole": "Affiliate & Role",
+		"totalDeposit": "Total Deposit",
+		"totalWithdraw": "Total Withdraw"
+	},
 	"betAccess": {
 		"block": "Disable Betting",
 		"restore": "Enable Betting",

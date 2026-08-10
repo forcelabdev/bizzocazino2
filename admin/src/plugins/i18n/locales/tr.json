@@ -23,6 +23,30 @@
 	"copyAccountNumber": "Hesap numarasını kopyala",
 	"accountNumberCopied": "Hesap numarası panoya kopyalandı.",
 	"copyFailed": "Panoya kopyalanamadı.",
+	"userDetail": {
+		"tabs": {
+			"profile": "Profil",
+			"finance": "Finans",
+			"gameHistory": "Oyun Geçmişi",
+			"balanceAdjustment": "Bakiye Düzeltme",
+			"security": "Güvenlik",
+			"notifications": "Bildirimler"
+		},
+		"stats": {
+			"balance": "Bakiye",
+			"vipLevel": "VIP Seviyesi",
+			"totalWagered": "Toplam Çevrim",
+			"lastIp": "Son IP",
+			"totalIps": "toplam {count} IP"
+		},
+		"personalInfo": "Kişisel Bilgiler",
+		"financialSummary": "Finansal Özet",
+		"walletsSection": "Cüzdanlar",
+		"ipAddressesSection": "IP Adresleri",
+		"affiliateAndRole": "Affiliate & Rol",
+		"totalDeposit": "Toplam Yatırım",
+		"totalWithdraw": "Toplam Çekim"
+	},
 	"betAccess": {
 		"block": "Bet Alımını Kapat",
 		"restore": "Bet Alımını Aç",
