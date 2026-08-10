@@ -56,8 +56,47 @@ const livePendingCallCount = ref(0);
 const liveUpdatedAt = ref(null);
 const liveConnected = ref(false);
 const liveError = ref("");
+const liveUsingRestFallback = ref(false);
 
 const subscribedVendor = ref("");
+
+// Socket.IO (/admin-panel) bazı ortamlarda (örn. bu geliştirme sandbox'ı)
+// WebSocket bağlantısını hiç kuramıyor (proxy sadece HTTP'yi yönlendiriyor).
+// Bu yüzden socket bağlanamadığında/koptuğunda otomatik olarak REST polling'e
+// (GET .../control-game/players-live/:vendorCode) düşüyoruz; socket bağlanınca
+// tekrar realtime akışa geçilir. Böylece sayfa her koşulda çalışır.
+const REST_POLL_INTERVAL_MS = 4000;
+let restPollTimer = null;
+
+const fetchPlayersLiveOnce = async (vendorCode) => {
+	if (!vendorCode) return;
+	try {
+		const { data } = await axios.get(`/admin/betinovi-admin/control-game/players-live/${vendorCode}`);
+		if (vendorCode !== subscribedVendor.value) return;
+		livePlayers.value = data.data?.players || [];
+		livePendingCallCount.value = data.data?.pendingCallCount || 0;
+		liveUpdatedAt.value = new Date().toISOString();
+		liveError.value = "";
+	} catch (error) {
+		console.error("Anlık oyuncu listesi (REST) hatası:", error);
+		liveError.value = error?.response?.data?.message || "Anlık oyuncu listesi alınırken bir hata oluştu.";
+	}
+};
+
+const stopRestPolling = () => {
+	if (restPollTimer) {
+		clearInterval(restPollTimer);
+		restPollTimer = null;
+	}
+	liveUsingRestFallback.value = false;
+};
+
+const startRestPolling = () => {
+	if (restPollTimer) return;
+	liveUsingRestFallback.value = true;
+	fetchPlayersLiveOnce(subscribedVendor.value);
+	restPollTimer = setInterval(() => fetchPlayersLiveOnce(subscribedVendor.value), REST_POLL_INTERVAL_MS);
+};
 
 const subscribeToPlayers = (vendorCode) => {
 	if (!vendorCode) return;
@@ -68,9 +107,19 @@ const subscribeToPlayers = (vendorCode) => {
 	liveUpdatedAt.value = null;
 	subscribedVendor.value = vendorCode;
 	adminPanelSocket.emit("control-game:subscribe-players", { vendorCode });
+
+	// Socket henüz bağlı değilse (ya da hiç bağlanamıyorsa) veriyi hemen REST
+	// üzerinden çekip periyodik olarak tazelemeye başla.
+	if (!liveConnected.value) {
+		stopRestPolling();
+		startRestPolling();
+	} else {
+		fetchPlayersLiveOnce(vendorCode);
+	}
 };
 
 const unsubscribeFromPlayers = () => {
+	stopRestPolling();
 	if (!subscribedVendor.value) return;
 	adminPanelSocket.emit("control-game:unsubscribe-players", { vendorCode: subscribedVendor.value });
 	subscribedVendor.value = "";
@@ -80,6 +129,8 @@ const setupRealtimeListeners = () => {
 	adminPanelSocket.on("connect", () => {
 		liveConnected.value = true;
 		liveError.value = "";
+		// Socket bağlandı, REST polling'e artık gerek yok — realtime akış devreye girer.
+		stopRestPolling();
 		if (subscribedVendor.value) {
 			adminPanelSocket.emit("control-game:subscribe-players", { vendorCode: subscribedVendor.value });
 		}
@@ -87,15 +138,18 @@ const setupRealtimeListeners = () => {
 
 	adminPanelSocket.on("disconnect", () => {
 		liveConnected.value = false;
+		if (subscribedVendor.value) startRestPolling();
 	});
 
 	adminPanelSocket.on("connect_error", (error) => {
 		liveConnected.value = false;
-		liveError.value = error?.message || "Anlık bağlantı kurulamadı.";
+		liveError.value = error?.message || "Anlık bağlantı kurulamadı, yedek (REST) mod kullanılıyor.";
+		if (subscribedVendor.value) startRestPolling();
 	});
 
 	adminPanelSocket.on("control-game:players", (payload) => {
 		if (payload.vendorCode !== subscribedVendor.value) return;
+		stopRestPolling();
 		livePlayers.value = payload.players || [];
 		livePendingCallCount.value = payload.pendingCallCount || 0;
 		liveUpdatedAt.value = payload.updatedAt;
@@ -545,9 +599,13 @@ onBeforeUnmount(() => {
 				</p>
 			</div>
 			<div class="d-flex align-center gap-3">
-				<VChip :color="liveConnected ? 'success' : 'error'" variant="tonal" size="small">
-					<VIcon start :icon="liveConnected ? 'tabler-plug-connected' : 'tabler-plug-connected-x'" size="16" />
-					{{ liveConnected ? 'Anlık bağlantı aktif' : 'Bağlantı yok' }}
+				<VChip :color="liveConnected ? 'success' : (liveUsingRestFallback ? 'warning' : 'error')" variant="tonal" size="small">
+					<VIcon
+						start
+						:icon="liveConnected ? 'tabler-plug-connected' : (liveUsingRestFallback ? 'tabler-refresh' : 'tabler-plug-connected-x')"
+						size="16"
+					/>
+					{{ liveConnected ? 'Anlık bağlantı aktif' : (liveUsingRestFallback ? 'Yedek mod (4sn yenileme)' : 'Bağlantı yok') }}
 				</VChip>
 				<VChip :color="canManageControlGame ? 'success' : 'warning'" variant="tonal">
 					<VIcon start :icon="canManageControlGame ? 'tabler-shield-check' : 'tabler-lock'" />
