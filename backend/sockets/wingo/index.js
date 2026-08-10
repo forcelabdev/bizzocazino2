@@ -319,19 +319,39 @@ if (amountRakeback > 0 || xpToAdd > 0) {
          * Round başlatma, süre bitince sonucu belirleme
          */
         async function startWingoLoop(io) {
-  currentGame = await startNewRound();
+  // ❗ Bu döngü kendi kendini tekrar çağırır (recursive). Beklenmeyen bir
+  // hata (örn. geçici DB hatası, roundId çakışması) burada yakalanmazsa
+  // yakalanmamış bir promise reddi olarak tüm backend process'ini çökertir.
+  // Bu yüzden tüm gövde try/catch ile korunuyor ve hata durumunda döngü
+  // process'i çökertmeden kısa bir gecikmeyle yeniden başlatılıyor.
+  try {
+    currentGame = await startNewRound();
 
-  io.emit('wingo:round:start', {
-    roundId: currentGame.roundId,
-    endsAt: currentGame.endAt
-  });
+    io.emit('wingo:round:start', {
+      roundId: currentGame.roundId,
+      endsAt: currentGame.endAt
+    });
 
-  betPool = {};
-  betUserCount = {};
+    betPool = {};
+    betUserCount = {};
 
-  const duration = currentGame.endAt.getTime() - Date.now();
+    const duration = currentGame.endAt.getTime() - Date.now();
 
-intervalId = setTimeout(async () => {
+    intervalId = setTimeout(async () => {
+      try {
+        await runWingoRoundCompletion(io);
+      } catch (err) {
+        console.error('[WINGO LOOP ERROR] Round tamamlanamadı:', err);
+        setTimeout(() => startWingoLoop(io), 3000);
+      }
+    }, duration);
+  } catch (err) {
+    console.error('[WINGO LOOP ERROR] Round başlatılamadı:', err);
+    setTimeout(() => startWingoLoop(io), 3000);
+  }
+}
+
+async function runWingoRoundCompletion(io) {
   const result = await completeRound(currentGame, io, userSockets);
 
   // ✅ Kazananların bakiyesi güncellendi (zaten var)

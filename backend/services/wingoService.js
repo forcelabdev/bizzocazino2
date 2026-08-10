@@ -24,31 +24,52 @@ async function startNewRound() {
 	const startAt = new Date();
 	const endAt = new Date(Date.now() + config.roundDuration);
 
-	const serverSeed = crypto.randomBytes(16).toString("hex");
-	const clientSeed = crypto.randomBytes(16).toString("hex");
+	// ❗ roundId üretimi ve kayıt işlemini, eşzamanlı (concurrent) çağrılardan
+	// kaynaklanan "duplicate key" hatalarına karşı dayanıklı hale getir.
+	// Böyle bir hata artık process'i çökertmez, bir sonraki round numarasıyla
+	// tekrar denenir.
+	const MAX_ATTEMPTS = 5;
+	let lastError = null;
 
-	// ❗ Son oyunu bul ve artır
-	const lastGame = await WingoGame.findOne().sort({ createdAt: -1 });
-	let newRoundNumber = 1;
+	for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+		const serverSeed = crypto.randomBytes(16).toString("hex");
+		const clientSeed = crypto.randomBytes(16).toString("hex");
 
-	if (lastGame && lastGame.roundId?.startsWith("raxen-")) {
-		const parts = lastGame.roundId.split("-");
-		const lastNumber = parseInt(parts[1]);
-		if (!isNaN(lastNumber)) newRoundNumber = lastNumber + 1;
+		// ❗ Son oyunu bul ve artır
+		const lastGame = await WingoGame.findOne().sort({ createdAt: -1 });
+		let newRoundNumber = 1 + attempt;
+
+		if (lastGame && lastGame.roundId?.startsWith("raxen-")) {
+			const parts = lastGame.roundId.split("-");
+			const lastNumber = parseInt(parts[1]);
+			if (!isNaN(lastNumber)) newRoundNumber = lastNumber + 1 + attempt;
+		}
+
+		const newRoundId = `raxen-${newRoundNumber}`;
+
+		try {
+			const newGame = await WingoGame.create({
+				roundId: newRoundId,
+				startAt,
+				endAt,
+				serverSeed,
+				clientSeed,
+				nonce: 0,
+			});
+
+			return newGame;
+		} catch (err) {
+			const isDuplicateKey =
+				err?.code === 11000 || err?.name === "MongoServerError";
+			if (!isDuplicateKey) throw err;
+			lastError = err;
+			console.warn(
+				`[WINGO] roundId çakışması (${newRoundId}), tekrar deneniyor (attempt ${attempt + 1}/${MAX_ATTEMPTS})`,
+			);
+		}
 	}
 
-	const newRoundId = `raxen-${newRoundNumber}`;
-
-	const newGame = await WingoGame.create({
-		roundId: newRoundId,
-		startAt,
-		endAt,
-		serverSeed,
-		clientSeed,
-		nonce: 0,
-	});
-
-	return newGame;
+	throw lastError || new Error("Yeni round oluşturulamadı.");
 }
 
 async function placeBet(user, { roundId, betType, choice, amount, wallet }) {
