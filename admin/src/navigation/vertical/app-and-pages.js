@@ -88,37 +88,39 @@ export default [
         action: "read",
         subject: "users",
       },
+    ],
+  },
+
+  // 🏷️ Promotions
+  {
+    title: "finance.promotionsGroup",
+    icon: { icon: "tabler-discount-2" },
+    action: "read",
+    subject: "finance.promo",
+    children: [
       {
-        title: "finance.promotionsGroup",
-        icon: { icon: "tabler-discount-2" },
+        title: "platform.campaigns",
+        to: "apps-campaigns",
+        action: "read",
+        subject: "finance.campaigns",
+      },
+      {
+        title: "platform.promotions",
+        to: "apps-promotions",
         action: "read",
         subject: "finance.promo",
-        children: [
-          {
-            title: "platform.campaigns",
-            to: "apps-campaigns",
-            action: "read",
-            subject: "finance.campaigns",
-          },
-          {
-            title: "platform.promotions",
-            to: "apps-promotions",
-            action: "read",
-            subject: "finance.promo",
-          },
-          {
-            title: "finance.promo",
-            to: "apps-promo",
-            action: "read",
-            subject: "finance.promo",
-          },
-          {
-            title: "platform.bonusNames",
-            to: "apps-bonus-names",
-            action: "read",
-            subject: "finance.manualAdjustments",
-          },
-        ],
+      },
+      {
+        title: "finance.promo",
+        to: "apps-promo",
+        action: "read",
+        subject: "finance.promo",
+      },
+      {
+        title: "platform.bonusNames",
+        to: "apps-bonus-names",
+        action: "read",
+        subject: "finance.manualAdjustments",
       },
     ],
   },
