@@ -292,7 +292,7 @@ const allSettingsTabs = [
 	{ value: "provider-settings", label: "Provider", icon: "mdi-server" },
 	{
 		value: "api-settings",
-		label: "Betinovi API",
+		label: "ForceLab API",
 		icon: "mdi-api",
 		canView: () => canReadApiSettings.value,
 	},
@@ -988,12 +988,12 @@ const saveApiSettings = async () => {
 		if (response.data.success && response.data.data) {
 			settings.value.apiSettings = normalizeApiSettings(response.data.data);
 		}
-		alert("Betinovi API ayarları başarıyla kaydedildi!");
+		alert("ForceLab API ayarları başarıyla kaydedildi!");
 	} catch (error) {
-		console.error("Betinovi API ayarları kaydedilirken hata:", error);
+		console.error("ForceLab API ayarları kaydedilirken hata:", error);
 		alert(
 			error?.response?.data?.message ||
-				"Betinovi API ayarları kaydedilirken bir hata oluştu!",
+				"ForceLab API ayarları kaydedilirken bir hata oluştu!",
 		);
 	} finally {
 		loading.value = false;
@@ -1007,7 +1007,7 @@ const fetchApiSettings = async () => {
 			settings.value.apiSettings = normalizeApiSettings(response.data.data);
 		}
 	} catch (error) {
-		console.error("Betinovi API ayarları yüklenirken hata:", error);
+		console.error("ForceLab API ayarları yüklenirken hata:", error);
 	}
 };
 
@@ -2913,7 +2913,7 @@ console.log('Custom JS loaded');"
 					<VWindowItem v-if="canReadApiSettings" value="api-settings">
 						<VContainer>
 							<VAlert type="info" class="mb-4">
-								<strong>Betinovi API Ayarları</strong> - Rapor ve ControlGame ekranlarının kullanacağı endpoint, agent ve method bilgileri bu özel yetkili alandan yönetilir.
+								<strong>ForceLab API Ayarları</strong> - Rapor ve ControlGame ekranlarının kullanacağı endpoint, agent ve method bilgileri bu özel yetkili alandan yönetilir.
 							</VAlert>
 							<VRow>
 								<VCol cols="12">
