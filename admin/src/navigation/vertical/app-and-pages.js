@@ -216,7 +216,7 @@ export default [
     children: [
       {
         title: "betinoviReports.wagerIndex",
-        to: "apps-reports-betinovi-wager-index",
+        to: "apps-reports-betinovi-wager",
         action: "read",
         subject: "reports.betinovi",
       },
