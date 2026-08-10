@@ -747,7 +747,7 @@ router.post("/users", checkPermission("users.create"), async (req, res) => {
 router.get("/users/:id", checkPermission("users.read"), async (req, res) => {
 	try {
 		const user = await User.findById(req.params.id)
-			.select("-local.password -ips")
+			.select("-local.password")
 			.populate("adminRole");
 		if (!user)
 			return res
@@ -9008,7 +9008,7 @@ router.put(
 // E-posta Şablonları (SiteSettings içinde)
 // SMTP credential bilgileri backend/.env üzerinden okunur, sadece şablonlar
 // ve gönderici görünen ad/adres burada yönetilir.
-// ═══════════════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════���══════════════════
 
 const buildEmailTemplatesPayload = (siteSettings) => {
 	const tpl = (siteSettings && siteSettings.emailTemplates) || {};

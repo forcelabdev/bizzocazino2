@@ -41,6 +41,18 @@ const copyAccountNumber = async () => {
   }
 }
 
+const copyIp = async address => {
+  if (!address) return
+
+  try {
+    await navigator.clipboard.writeText(String(address))
+    showSnackbar(t("ipCopied"), "success")
+  } catch (error) {
+    console.error("IP adresi panoya kopyalanamadı:", error)
+    showSnackbar(t("copyFailed"), "error")
+  }
+}
+
 const isUserInfoEditDialogVisible = ref(false)
 const isRoleDialogVisible = ref(false)
 const userListStore = useUserListStore()
@@ -447,6 +459,65 @@ const resolveUserRoleVariant = role => {
                     {{ userData.affiliates.redeemedCode }}
                   </VChip>
                   <span v-else>-</span>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <strong>{{ t("ipAddresses") }}</strong>
+                </td>
+                <td>
+                  <VMenu v-if="userData.ips?.length">
+                    <template #activator="{ props: activatorProps }">
+                      <VChip
+                        v-bind="activatorProps"
+                        color="secondary"
+                        size="small"
+                        label
+                        class="cursor-pointer"
+                      >
+                        <VIcon
+                          icon="tabler-map-pin"
+                          size="14"
+                          class="me-1"
+                        />
+                        {{ userData.ips[0]?.address }}
+                      </VChip>
+                      <VBtn
+                        icon
+                        size="x-small"
+                        variant="text"
+                        class="ms-1"
+                        :title="t('copyIp')"
+                        :aria-label="t('copyIp')"
+                        @click.stop="copyIp(userData.ips[0]?.address)"
+                      >
+                        <VIcon
+                          icon="tabler-copy"
+                          size="14"
+                        />
+                      </VBtn>
+                    </template>
+
+                    <VList>
+                      <VListSubheader>
+                        {{ t("allIps") }}
+                      </VListSubheader>
+                      <VListItem
+                        v-for="(ipRecord, index) in userData.ips"
+                        :key="ipRecord.address + index"
+                        class="cursor-pointer"
+                        @click="copyIp(ipRecord.address)"
+                      >
+                        <VListItemTitle>
+                          {{ ipRecord.address }}
+                        </VListItemTitle>
+                        <VListItemSubtitle v-if="ipRecord.createdAt">
+                          {{ new Date(ipRecord.createdAt).toLocaleString() }}
+                        </VListItemSubtitle>
+                      </VListItem>
+                    </VList>
+                  </VMenu>
+                  <span v-else>{{ t("noIpRecords") }}</span>
                 </td>
               </tr>
               <tr>
