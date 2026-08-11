@@ -58,7 +58,12 @@ const BACKEND_ROUTE_PREFIXES = [
 export default defineConfig(({ mode }) => {
 	const env = loadEnv(mode, process.cwd(), "");
 	const newSiteMode = String(env.NEW_SITE_MODE ?? "true").toLowerCase();
-	const backendTarget = env.VITE_BACKEND_PROXY_TARGET || "http://localhost:5000";
+	// Falls back to the deployed backend URL (SERVER_BACKEND_URL) when no local
+	// backend is running, e.g. in the v0 preview sandbox where only this dev
+	// server is started. On the real server, VITE_BACKEND_PROXY_TARGET or
+	// SERVER_BACKEND_URL should point at the actual backend process.
+	const backendTarget =
+		env.VITE_BACKEND_PROXY_TARGET || env.SERVER_BACKEND_URL || "http://localhost:5000";
 
 	return {
 	plugins: [
