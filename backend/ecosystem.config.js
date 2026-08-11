@@ -2,7 +2,7 @@ module.exports = {
 	apps: [
 		{
 			name: "Bizzocazino-backend",
-			script: "app.js",
+			script: "index.js",
 			exec_mode: "cluster",
 			instances: 4,
 			env: {
