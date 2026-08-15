@@ -62,8 +62,17 @@ const normalizeCallbackString = (value) => {
 
 const normalizeCallbackAmount = (value, txnType) => {
 	const amount = Number(value);
-	if (!Number.isFinite(amount) || amount === 0) return null;
-	return txnType === 0 || amount > 0 ? Math.abs(amount) : null;
+	if (!Number.isFinite(amount)) return null;
+
+	// Debit (bet) transactions must move a strictly positive amount.
+	if (txnType === 0) {
+		return amount > 0 ? Math.abs(amount) : null;
+	}
+
+	// Credit (win) and refund transactions may legitimately settle with a
+	// zero amount (e.g. a round finished with no win, or a zero-value
+	// refund). Only reject negative or non-numeric values here.
+	return amount >= 0 ? Math.abs(amount) : null;
 };
 
 const normalizeCallbackTxnType = (value) => {
@@ -799,7 +808,7 @@ router.post("/callback", async (req, res) => {
 					!normalizedVendorCode ||
 					!normalizedTxnCode ||
 					normalizedTxnType === null ||
-					!normalizedAmount
+					normalizedAmount === null
 				) {
 					return res.status(200).json({
 						status: 13,
