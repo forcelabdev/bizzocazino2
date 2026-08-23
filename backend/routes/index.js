@@ -37,6 +37,7 @@ const wingoRoutes = require("./wingoRoutes");
 const binance = require("./binance");
 const gamehistory = require("./gamehistory/recent");
 const bonusSettingRoutes = require("./bonusSetting");
+const promoCodeRoutes = require("./promoCodes");
 const pixRoutes = require("./payment/pix");
 const forcelabFinanceRoutes = require("./payment/forcelabFinance");
 const meelDevRoutes = require("./payment/meelDev");
@@ -49,6 +50,7 @@ const {
 const pockersGamesRoute = require("./pokerApi");
 router.use("/poker_api", pockersGamesRoute);
 router.use("/bonus-settings", bonusSettingRoutes);
+router.use("/promo-codes", promoCodeRoutes);
 router.use("/payment/pix", pixRoutes);
 router.use("/payment/forcelab-finance", forcelabFinanceRoutes);
 router.use("/payment/meeldev", meelDevRoutes);

@@ -4632,38 +4632,46 @@ router.delete("/leaderboards/:id", checkPermission("users.manage"), async (req, 
 });
 
 // 7. PROMOCODE
+const normalizePromoPayload = (body = {}) => {
+	const startsAt = body.startsAt ? new Date(body.startsAt) : null;
+	const expiresAt = body.expiresAt ? new Date(body.expiresAt) : null;
+	const reward = Number(body.reward);
+	if (!String(body.code || "").trim() || !Number.isFinite(reward) || reward <= 0) throw new Error("INVALID_PROMO");
+	if (startsAt && expiresAt && startsAt >= expiresAt) throw new Error("INVALID_DATE_RANGE");
+	return {
+		code: String(body.code).trim().toUpperCase(), reward,
+		levelMin: Math.max(0, Number(body.levelMin) || 0), isActive: body.isActive !== false,
+		startsAt, expiresAt,
+		affiliateCodes: [...new Set((Array.isArray(body.affiliateCodes) ? body.affiliateCodes : []).map(code => String(code).trim()).filter(Boolean))],
+		redeemptionsMax: Math.max(0, Number(body.redeemptionsMax) || 0),
+		perUserLimit: Math.max(1, Number(body.perUserLimit) || 1),
+		minLastDeposit: Math.max(0, Number(body.minLastDeposit) || 0),
+		applyWageringLock: Boolean(body.applyWageringLock),
+		wageringMultiplier: Math.max(0, Number(body.wageringMultiplier) || 0),
+		minWithdraw: Math.max(0, Number(body.minWithdraw) || 0), updatedAt: new Date(),
+	};
+};
+
+router.get("/promocodes/affiliate-options", checkPermission("finance.promo.read"), async (req, res) => {
+	const users = await User.find({ "affiliates.code": { $exists: true, $nin: [null, ""] } }).select("username affiliates.code").sort({ username: 1 }).lean();
+	res.json({ success: true, data: users.map(user => ({ code: user.affiliates.code, title: `${user.username} (${user.affiliates.code})` })) });
+});
+
 router.post("/promocodes", checkPermission("finance.promo.manage"), async (req, res) => {
-	try {
-		const promo = new PromoCode(req.body);
-		await promo.save();
-		res.status(201).json({ success: true, data: promo });
-	} catch (err) {
-		res.status(500).json({
-			success: false,
-			message: "Promocode eklenemedi",
-		});
-	}
+	try { res.status(201).json({ success: true, data: await PromoCode.create(normalizePromoPayload(req.body)) }); }
+	catch (err) { res.status(err?.code === 11000 ? 409 : 400).json({ success: false, message: err?.code === 11000 ? "Bu kod zaten mevcut." : "Promosyon kodu eklenemedi." }); }
 });
 
 router.get("/promocodes", checkPermission("finance.promo.read"), async (req, res) => {
-	const codes = await PromoCode.find().sort({ createdAt: -1 });
-	res.json({ success: true, data: codes });
+	res.json({ success: true, data: await PromoCode.find().sort({ createdAt: -1 }).lean() });
 });
 
 router.put("/promocodes/:id", checkPermission("finance.promo.manage"), async (req, res) => {
 	try {
-		const promo = await PromoCode.findByIdAndUpdate(
-			req.params.id,
-			req.body,
-			{ new: true },
-		);
+		const promo = await PromoCode.findByIdAndUpdate(req.params.id, { $set: normalizePromoPayload(req.body) }, { new: true, runValidators: true });
+		if (!promo) return res.status(404).json({ success: false, message: "Promosyon kodu bulunamadı." });
 		res.json({ success: true, data: promo });
-	} catch (err) {
-		res.status(500).json({
-			success: false,
-			message: "Promocode güncellenemedi",
-		});
-	}
+	} catch (err) { res.status(err?.code === 11000 ? 409 : 400).json({ success: false, message: "Promosyon kodu güncellenemedi." }); }
 });
 
 router.delete("/promocodes/:id", checkPermission("finance.promo.manage"), async (req, res) => {
@@ -6295,7 +6303,7 @@ router.get("/futures/history", checkPermission("games.read"), async (req, res) =
 	}
 });
 
-// 📌 Tüm Turbo geçmişleri (admin)
+// 📌 Tüm Turbo ge��mişleri (admin)
 router.get("/turbo/history", checkPermission("games.read"), async (req, res) => {
 	try {
 		const {
@@ -8413,7 +8421,7 @@ router.get("/my-permissions", authenticateAdmin, async (req, res) => {
 	}
 });
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ═══��═══════════════════════════════════════════════════════════════════════
 // 🎨 SITE SETTINGS ENDPOINTS
 // ═════════════════════════════════════════════════════════════��═════════════
 
@@ -8940,7 +8948,7 @@ router.put(
 
 // ═══════════���═══════════════════════════════════════════════════════════════
 // 🖼️ AVATAR MANAGEMENT ENDPOINTS
-// ═══════════════════════════════════════════════════════════════════════��═══
+// ═════════════════════════════���═════════════════════════════════════════��═══
 
 // Avatar upload directory
 const avatarUploadDir = path.join(__dirname, "..", "..", "uploads", "avatars");
@@ -10205,7 +10213,7 @@ router.post(
 
 
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════���═══════════════════════════════
 // Forcelab Finance Ayarları (SiteSettings içinde)
 // ═══════════════════════════════════════════════════════════════════════════
 
