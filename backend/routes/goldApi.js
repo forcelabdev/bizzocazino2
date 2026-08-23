@@ -18,9 +18,12 @@ const { getMaxAccountBalance } = require("../config");
 const {
 	BET_ACCESS_BLOCKED_CODE,
 	BET_ACCESS_BLOCKED_MESSAGE,
+	CATEGORY_BET_LIMIT_EXCEEDED_CODE,
 	getProviderVisibleBalance,
 	isUserBetAccessBlocked,
+	evaluateCategoryBetLimit,
 } = require("../utils/userBetAccess");
+const { onBetSettled } = require("../utils/wagerHooks");
 
 const router = express.Router();
 

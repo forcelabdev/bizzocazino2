@@ -16,11 +16,14 @@ const { getMaxAccountBalance } = require("../config");
 const {
 	BET_ACCESS_BLOCKED_CODE,
 	BET_ACCESS_BLOCKED_MESSAGE,
+	CATEGORY_BET_LIMIT_EXCEEDED_CODE,
 	getProviderVisibleBalance,
 	isUserBetAccessBlocked,
+	evaluateCategoryBetLimit,
 } = require("../utils/userBetAccess");
 const { generalUserGetRakeback } = require("../utils/general/user");
 const trialBonusService = require("../services/trialBonusService");
+const { onBetSettled } = require("../utils/wagerHooks");
 
 // Betinovi API Credentials
 const BETINOVI_BASE_URL = process.env.BETINOVI_API_ENDPOINT;
@@ -1295,6 +1298,16 @@ router.post("/callback", async (req, res) => {
 						wallets: updatedUser.wallets,
 						currency: updatedUser.currency,
 					});
+
+					// 🎯 Bilet çevrimi + Race puanı hook'u (Betinovi debit = bahis konuldu)
+					if (normalizedTxnType === 0) {
+						onBetSettled({
+							userId: user._id,
+							amount: normalizedAmount,
+							category: "casino",
+							providerCode: normalizedVendorCode,
+						});
+					}
 
 					try {
 						if (normalizedTxnType === 0) {

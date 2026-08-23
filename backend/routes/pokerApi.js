@@ -18,9 +18,12 @@ const {
 const {
 	BET_ACCESS_BLOCKED_CODE,
 	BET_ACCESS_BLOCKED_MESSAGE,
+	CATEGORY_BET_LIMIT_EXCEEDED_CODE,
 	getProviderVisibleBalance,
 	isUserBetAccessBlocked,
+	evaluateCategoryBetLimit,
 } = require("../utils/userBetAccess");
+const { onBetSettled } = require("../utils/wagerHooks");
 
 // 🔐 UCRANBET API Bilgileri
 const API_BASE_URL = "https://pokersgamessistemas.com/api/v1";
@@ -432,6 +435,20 @@ router.post("/", async (req, res) => {
 					});
 				}
 
+				// 🎯 Bet Limitleme: kategori bazlı tam blokaj / maksimum tutar kontrolü.
+				const limitCheck = evaluateCategoryBetLimit(user, "slots", amount);
+				if (!limitCheck.allowed) {
+					return res.status(403).json({
+						status: 0,
+						msg: limitCheck.reason,
+						details:
+							limitCheck.reason === CATEGORY_BET_LIMIT_EXCEEDED_CODE
+								? `Bu kategori için maksimum bahis tutarı ${limitCheck.max} ile sınırlıdır.`
+								: "Bu oyun kategorisine erişiminiz kısıtlanmıştır.",
+						balance: 0,
+					});
+				}
+
 				const activeWallet = getActiveWallet(user);
 				if (!activeWallet)
 					return res
@@ -448,6 +465,14 @@ router.post("/", async (req, res) => {
 
 				const newBalance = await updateUserBalance(user, -amount, {
 					emitSocket: true,
+				});
+
+				// 🎯 Bilet çevrimi + Race puanı hook'u (Poker/UCRANBET bahsi konuldu)
+				onBetSettled({
+					userId: user._id,
+					amount,
+					category: "casino",
+					providerCode: "pokerapi",
 				});
 
 				const updatedProgressUser = await User.findByIdAndUpdate(

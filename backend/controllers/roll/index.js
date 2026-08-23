@@ -9,6 +9,10 @@ const Leaderboard = require("../../database/models/Leaderboard");
 const BalanceTransaction = require("../../database/models/BalanceTransaction");
 const { getActiveWalletIndex } = require("../../utils/wallet");
 const { onBetSettled } = require("../../utils/wagerHooks");
+const {
+	evaluateCategoryBetLimit,
+	CATEGORY_BET_LIMIT_EXCEEDED_CODE,
+} = require("../../utils/userBetAccess");
 const Setting = require("../../database/models/Setting");
 // Load utils
 const { socketRemoveAntiSpam } = require("../../utils/socket");
@@ -78,7 +82,7 @@ const rollSendBetSocket = async (io, socket, user, data, callback) => {
 			// ✅ Güncel kullanıcı
 			const freshUser = await User.findById(user._id)
 				.select(
-					"wallets currency stats rakeback mute ban verifiedAt updatedAt roblox username avatar rank level limits affiliates createdAt anonymous"
+					"wallets currency stats rakeback mute ban verifiedAt updatedAt roblox username avatar rank level limits controls affiliates createdAt anonymous"
 				)
 				.lean();
 			if (!freshUser) throw new Error("User not found.");
@@ -89,6 +93,16 @@ const rollSendBetSocket = async (io, socket, user, data, callback) => {
 			const walletPath = `wallets.${walletIndex}.balance`;
 			const balance = freshUser.wallets[walletIndex].balance || 0;
 			if (balance < amount) throw new Error("Yetersiz bakiye");
+
+			// 🎯 Bet Limitleme: kategori bazlı tam blokaj / maksimum tutar kontrolü.
+			const limitCheck = evaluateCategoryBetLimit(freshUser, "originals", amount);
+			if (!limitCheck.allowed) {
+				throw new Error(
+					limitCheck.reason === CATEGORY_BET_LIMIT_EXCEEDED_CODE
+						? `Bu kategori için maksimum bahis tutarı ${limitCheck.max} ile sınırlıdır.`
+						: "Bu oyun kategorisine erişiminiz kısıtlanmıştır."
+				);
+			}
 
 			const amountRakeback =
 				freshUser.limits.blockSponsor !== true

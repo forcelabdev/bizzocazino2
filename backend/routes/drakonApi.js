@@ -19,10 +19,13 @@ const { getMaxAccountBalance } = require("../config");
 const {
 	BET_ACCESS_BLOCKED_CODE,
 	BET_ACCESS_BLOCKED_MESSAGE,
+	CATEGORY_BET_LIMIT_EXCEEDED_CODE,
 	getProviderVisibleBalance,
 	isUserBetAccessBlocked,
+	evaluateCategoryBetLimit,
 } = require("../utils/userBetAccess");
 const SiteSettings = require("../database/models/SiteSettings");
+const { onBetSettled } = require("../utils/wagerHooks");
 
 // Drakon API Kimlik Bilgileri
 const DRAKON_BASE_URL = process.env.DRAKON_API_URL;
@@ -441,6 +444,20 @@ router.post("/", async (req, res) => {
 						});
 					}
 
+					// 🎯 Bet Limitleme: kategori bazlı tam blokaj / maksimum tutar kontrolü.
+					const limitCheck = evaluateCategoryBetLimit(user, "slots", bet);
+					if (!limitCheck.allowed) {
+						return res.status(403).json({
+							status: 0,
+							error: limitCheck.reason,
+							details:
+								limitCheck.reason === CATEGORY_BET_LIMIT_EXCEEDED_CODE
+									? `Bu kategori için maksimum bahis tutarı ${limitCheck.max} ile sınırlıdır.`
+									: "Bu oyun kategorisine erişiminiz kısıtlanmıştır.",
+							balance: 0,
+						});
+					}
+
 					const balanceBefore = activeWallet.balance || 0;
 					if (balanceBefore < bet) {
 						return res.status(400).json({
@@ -453,6 +470,14 @@ router.post("/", async (req, res) => {
 
 					const balanceAfter = await updateUserBalance(user, -bet, {
 						emitSocket: true,
+					});
+
+					// 🎯 Bilet çevrimi + Race puanı hook'u (Drakon bahsi konuldu)
+					onBetSettled({
+						userId: user._id,
+						amount: bet,
+						category: "casino",
+						providerCode: "drakon",
 					});
 					user.xp = (user.xp || 0) + Math.floor(bet / 5);
 					user.currency = user.currency || {};
