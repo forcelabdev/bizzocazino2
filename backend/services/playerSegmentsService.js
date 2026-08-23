@@ -174,8 +174,13 @@ const resolveVipInfo = (user, sortedVipLevels) => {
  * Küçük/orta ölçekli kullanıcı tabanları için bellekte hesaplama yeterlidir.
  */
 const buildUserMetrics = async () => {
+	// Admin/personel hesapları (rank="admin" veya bir adminRole atanmış
+	// olanlar) segmentasyona dahil edilmez.
 	const [users, vipLevels] = await Promise.all([
-		User.find({})
+		User.find({
+			rank: { $ne: "admin" },
+			adminRole: { $exists: false },
+		})
 			.select(
 				"username name local.email avatar xp birthday createdAt updatedAt stats tags",
 			)

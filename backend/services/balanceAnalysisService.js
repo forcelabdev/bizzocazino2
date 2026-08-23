@@ -124,19 +124,35 @@ const getRemainingBonusBalance = async (settings) => {
 	};
 };
 
+// Admin/personel hesapları (rank="admin" veya bir adminRole atanmış
+// olanlar) bakiye analizi toplamlarına dahil edilmez.
+const getAdminUserIds = async () => {
+	const admins = await User.find({
+		$or: [{ rank: "admin" }, { adminRole: { $exists: true } }],
+	})
+		.select("_id")
+		.lean();
+	return admins.map((a) => a._id);
+};
+
 /**
  * Üst kısımdaki özet kutucuklarının (kartların) tamamını hesaplar.
  */
 const getSummary = async ({ startDate, endDate } = {}) => {
 	const dateRange = buildDateRange(startDate, endDate);
+	const adminIds = await getAdminUserIds();
 
-	const adjMatch = { direction: "credit" };
+	const adjMatch = { direction: "credit", targetUser: { $nin: adminIds } };
 	if (dateRange) adjMatch.createdAt = dateRange;
 
-	const depositMatch = { type: "deposit", status: "approved" };
+	const depositMatch = {
+		type: "deposit",
+		status: "approved",
+		user: { $nin: adminIds },
+	};
 	if (dateRange) depositMatch.createdAt = dateRange;
 
-	const campaignMatch = { status: "completed" };
+	const campaignMatch = { status: "completed", user: { $nin: adminIds } };
 	if (dateRange) campaignMatch.createdAt = dateRange;
 
 	const [
@@ -297,6 +313,7 @@ const getMembers = async ({
 
 	const userDocs = await User.find({
 		_id: { $in: objectIds },
+		rank: { $ne: "admin" },
 		adminRole: { $exists: false },
 	})
 		.select("_id username name affiliates.code affiliates.redeemedCode")

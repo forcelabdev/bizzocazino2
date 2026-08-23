@@ -259,8 +259,11 @@ const buildMemberRecords = async ({ startDate, endDate } = {}) => {
 		}
 	});
 
+	// Admin/personel hesapları (rank="admin" veya bir adminRole atanmış
+	// olanlar) rapora dahil edilmez - sadece gerçek oyuncular sayılır.
 	const userDocs = await User.find({
 		_id: { $in: objectIds },
+		rank: { $ne: "admin" },
 		adminRole: { $exists: false },
 	})
 		.select("_id username name affiliates wallets createdAt")
