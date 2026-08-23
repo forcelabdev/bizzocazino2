@@ -63,21 +63,32 @@ const ACTIVITY_STATUSES = {
 
 const round2 = (value) => Math.round(Number(value || 0) * 100) / 100;
 
+// Sistemin canlıya alındığı (gerçek operasyonun başladığı) tarih.
+// 2026-07-30T21:00:00.000Z (UTC) → 31.07.2026 00:00 (TR).
+// Bundan önceki kayıtlar test/göç verisidir ve CRM raporuna asla dahil
+// edilmez - kullanıcı bir tarih filtresi seçmese, ya da bu tarihten daha
+// eski bir başlangıç tarihi girse dahi bu taban tarih uygulanır.
+const OPERATIONS_START_AT = new Date("2026-07-30T21:00:00.000Z");
+
 const buildDateRange = (startDate, endDate) => {
 	const range = {};
+
+	let gte = OPERATIONS_START_AT;
 	if (startDate) {
 		const d = new Date(
 			Number.isNaN(Number(startDate)) ? startDate : Number(startDate),
 		);
-		if (!Number.isNaN(d.getTime())) range.$gte = d;
+		if (!Number.isNaN(d.getTime()) && d > gte) gte = d;
 	}
+	range.$gte = gte;
+
 	if (endDate) {
 		const d = new Date(
 			Number.isNaN(Number(endDate)) ? endDate : Number(endDate),
 		);
 		if (!Number.isNaN(d.getTime())) range.$lte = d;
 	}
-	return Object.keys(range).length ? range : null;
+	return range;
 };
 
 const getDepositBucketKey = (amount) => {
