@@ -13,8 +13,26 @@ const affiliateOptions = ref([])
 const formValid = ref(false)
 const refForm = ref()
 const searchQuery = ref('')
+const saveError = ref('')
 const emptyPromo = () => ({ code: '', reward: 0, levelMin: 0, isActive: true, startsAt: '', expiresAt: '', affiliateCodes: [], redeemptionsMax: 0, perUserLimit: 1, minLastDeposit: 0, applyWageringLock: false, wageringMultiplier: 0, minWithdraw: 0 })
 const promoToEdit = ref(emptyPromo())
+
+const nonNegativeValidator = value => (value === '' || value === null || Number(value) >= 0) || 'Negatif değer girilemez.'
+const positiveRewardValidator = value => Number(value) > 0 || 'Ödül tutarı sıfırdan büyük olmalıdır.'
+const dateRangeValidator = () => {
+  const { startsAt, expiresAt } = promoToEdit.value
+  if (startsAt && expiresAt && new Date(startsAt) >= new Date(expiresAt)) return 'Bitiş tarihi başlangıçtan sonra olmalıdır.'
+  return true
+}
+const perUserLimitValidator = value => {
+  const { redeemptionsMax } = promoToEdit.value
+  if (Number(redeemptionsMax) > 0 && Number(value) > Number(redeemptionsMax)) return 'Kullanıcı başı limit, toplam limitten büyük olamaz.'
+  return true
+}
+const wageringMultiplierValidator = value => {
+  if (promoToEdit.value.applyWageringLock && Number(value) <= 0) return 'Çevrim şartı açıkken çevrim katı sıfırdan büyük olmalıdır.'
+  return true
+}
 
 const fetchData = async () => {
   try {
@@ -25,18 +43,23 @@ const fetchData = async () => {
 }
 const localDate = value => value ? new Date(new Date(value).getTime() - new Date(value).getTimezoneOffset() * 60000).toISOString().slice(0, 16) : ''
 const openDrawer = (item = null) => {
+  saveError.value = ''
   promoToEdit.value = item ? { ...emptyPromo(), ...item, startsAt: localDate(item.startsAt), expiresAt: localDate(item.expiresAt), affiliateCodes: [...(item.affiliateCodes || [])] } : emptyPromo()
   isDrawerOpen.value = true
 }
-const closeDrawer = () => { isDrawerOpen.value = false; nextTick(() => { refForm.value?.reset(); refForm.value?.resetValidation() }) }
+const closeDrawer = () => { isDrawerOpen.value = false; saveError.value = ''; nextTick(() => { refForm.value?.reset(); refForm.value?.resetValidation() }) }
 const onSubmit = () => refForm.value?.validate().then(async ({ valid }) => {
   if (!valid) return
+  saveError.value = ''
   try {
     const item = promoToEdit.value
     if (item._id) await axios.put(`/admin/promocodes/${item._id}`, item)
     else await axios.post('/admin/promocodes', item)
     closeDrawer(); await fetchData()
-  } catch (err) { console.error('Kayıt hatası:', err) }
+  } catch (err) {
+    console.error('Kayıt hatası:', err)
+    saveError.value = err?.response?.data?.message || 'Promosyon kodu kaydedilemedi.'
+  }
 })
 const deletePromocode = async id => { if (!id) return; await axios.delete(`/admin/promocodes/${id}`); await fetchData() }
 const filteredPromocodes = computed(() => promocodes.value.filter(p => !searchQuery.value || p.code.toLowerCase().includes(searchQuery.value.toLowerCase())))

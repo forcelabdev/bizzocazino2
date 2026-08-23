@@ -39,9 +39,11 @@ const claimPromoCode = async ({ code, userId }) => {
 			const claimCount = await PromoCodeClaim.countDocuments({ promoCode: promo._id, user: user._id }).session(session);
 			if (claimCount >= promo.perUserLimit) throw new PromoCodeError("USER_LIMIT_REACHED", "Bu kod için kullanıcı limitinize ulaştınız.", 409);
 
+			let lastDepositAmount = null;
 			if (promo.minLastDeposit > 0) {
 				const deposit = await ForcelabFinanceTransaction.findOne({ user: user._id, status: "approved" }).sort({ approvedAt: -1, createdAt: -1 }).session(session).lean();
-				if (!deposit || Number(deposit.amount || 0) < promo.minLastDeposit) throw new PromoCodeError("DEPOSIT_REQUIRED", `Son onaylı yatırım en az ${promo.minLastDeposit} ₺ olmalıdır.`);
+				lastDepositAmount = deposit ? Number(deposit.amount || 0) : null;
+				if (!deposit || lastDepositAmount < promo.minLastDeposit) throw new PromoCodeError("DEPOSIT_REQUIRED", `Son onaylı yatırım en az ${promo.minLastDeposit} ₺ olmalıdır.`);
 			}
 
 			user.balance = Number(user.balance || 0) + promo.reward;
@@ -53,9 +55,34 @@ const claimPromoCode = async ({ code, userId }) => {
 			promo.redeemers.push({ user: user._id, claimedAt: now });
 			promo.redeemptionsTotal += 1;
 			await promo.save({ session });
-			await PromoCodeClaim.create([{ promoCode: promo._id, user: user._id, code: promo.code, reward: promo.reward, affiliateCode }], { session });
+			await PromoCodeClaim.create([{
+				promoCode: promo._id,
+				user: user._id,
+				code: promo.code,
+				reward: promo.reward,
+				affiliateCode,
+				conditions: {
+					levelMin: promo.levelMin,
+					userLevel,
+					minLastDeposit: promo.minLastDeposit,
+					lastDepositAmount,
+					applyWageringLock: promo.applyWageringLock,
+					wageringMultiplier: promo.wageringMultiplier,
+					minWithdraw: promo.minWithdraw,
+				},
+			}], { session });
 			await BalanceTransaction.create([{ amount: promo.reward, type: "promoCodeClaim", user: user._id, state: "completed" }], { session });
-			result = { code: promo.code, reward: promo.reward, balance: user.balance, claimedAt: now };
+			result = {
+				code: promo.code,
+				reward: promo.reward,
+				balance: user.balance,
+				claimedAt: now,
+				wagering: promo.applyWageringLock ? {
+					required: promo.reward * promo.wageringMultiplier,
+					multiplier: promo.wageringMultiplier,
+					minWithdraw: promo.minWithdraw,
+				} : null,
+			};
 		});
 		return result;
 	} finally { await session.endSession(); }

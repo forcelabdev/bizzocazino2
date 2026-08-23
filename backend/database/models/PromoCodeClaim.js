@@ -6,6 +6,15 @@ const promoCodeClaimSchema = new mongoose.Schema({
 	code: { type: String, required: true },
 	reward: { type: Number, required: true },
 	affiliateCode: { type: String, default: "" },
+	conditions: {
+		levelMin: { type: Number, default: 0 },
+		userLevel: { type: Number, default: 0 },
+		minLastDeposit: { type: Number, default: 0 },
+		lastDepositAmount: { type: Number, default: null },
+		applyWageringLock: { type: Boolean, default: false },
+		wageringMultiplier: { type: Number, default: 0 },
+		minWithdraw: { type: Number, default: 0 },
+	},
 	createdAt: { type: Date, default: Date.now },
 });
 

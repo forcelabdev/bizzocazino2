@@ -4638,17 +4638,26 @@ const normalizePromoPayload = (body = {}) => {
 	const reward = Number(body.reward);
 	if (!String(body.code || "").trim() || !Number.isFinite(reward) || reward <= 0) throw new Error("INVALID_PROMO");
 	if (startsAt && expiresAt && startsAt >= expiresAt) throw new Error("INVALID_DATE_RANGE");
+	const redeemptionsMax = Math.max(0, Number(body.redeemptionsMax) || 0);
+	const perUserLimit = Math.max(1, Number(body.perUserLimit) || 1);
+	if (redeemptionsMax > 0 && perUserLimit > redeemptionsMax) throw new Error("INVALID_USER_LIMIT");
+	const applyWageringLock = Boolean(body.applyWageringLock);
+	const wageringMultiplier = Math.max(0, Number(body.wageringMultiplier) || 0);
+	if (applyWageringLock && wageringMultiplier <= 0) throw new Error("INVALID_WAGERING_MULTIPLIER");
+	const minLastDeposit = Math.max(0, Number(body.minLastDeposit) || 0);
+	const minWithdraw = Math.max(0, Number(body.minWithdraw) || 0);
+	if (minLastDeposit < 0 || minWithdraw < 0 || reward < 0) throw new Error("INVALID_PROMO");
 	return {
 		code: String(body.code).trim().toUpperCase(), reward,
 		levelMin: Math.max(0, Number(body.levelMin) || 0), isActive: body.isActive !== false,
 		startsAt, expiresAt,
 		affiliateCodes: [...new Set((Array.isArray(body.affiliateCodes) ? body.affiliateCodes : []).map(code => String(code).trim()).filter(Boolean))],
-		redeemptionsMax: Math.max(0, Number(body.redeemptionsMax) || 0),
-		perUserLimit: Math.max(1, Number(body.perUserLimit) || 1),
-		minLastDeposit: Math.max(0, Number(body.minLastDeposit) || 0),
-		applyWageringLock: Boolean(body.applyWageringLock),
-		wageringMultiplier: Math.max(0, Number(body.wageringMultiplier) || 0),
-		minWithdraw: Math.max(0, Number(body.minWithdraw) || 0), updatedAt: new Date(),
+		redeemptionsMax,
+		perUserLimit,
+		minLastDeposit,
+		applyWageringLock,
+		wageringMultiplier,
+		minWithdraw, updatedAt: new Date(),
 	};
 };
 
@@ -4657,9 +4666,21 @@ router.get("/promocodes/affiliate-options", checkPermission("finance.promo.read"
 	res.json({ success: true, data: users.map(user => ({ code: user.affiliates.code, title: `${user.username} (${user.affiliates.code})` })) });
 });
 
+const PROMO_VALIDATION_MESSAGES = {
+	INVALID_PROMO: "Kod ve ödül tutarı zorunludur; ödül tutarı sıfırdan büyük olmalıdır.",
+	INVALID_DATE_RANGE: "Bitiş tarihi başlangıç tarihinden sonra olmalıdır.",
+	INVALID_USER_LIMIT: "Kullanıcı başı limit, toplam kullanım limitinden büyük olamaz.",
+	INVALID_WAGERING_MULTIPLIER: "Çevrim şartı açıkken çevrim katı sıfırdan büyük olmalıdır.",
+};
+
+const resolvePromoErrorMessage = (err, fallback) => PROMO_VALIDATION_MESSAGES[err?.message] || fallback;
+
 router.post("/promocodes", checkPermission("finance.promo.manage"), async (req, res) => {
 	try { res.status(201).json({ success: true, data: await PromoCode.create(normalizePromoPayload(req.body)) }); }
-	catch (err) { res.status(err?.code === 11000 ? 409 : 400).json({ success: false, message: err?.code === 11000 ? "Bu kod zaten mevcut." : "Promosyon kodu eklenemedi." }); }
+	catch (err) {
+		const message = err?.code === 11000 ? "Bu kod zaten mevcut." : resolvePromoErrorMessage(err, "Promosyon kodu eklenemedi.");
+		res.status(err?.code === 11000 ? 409 : 400).json({ success: false, message });
+	}
 });
 
 router.get("/promocodes", checkPermission("finance.promo.read"), async (req, res) => {
@@ -4671,7 +4692,10 @@ router.put("/promocodes/:id", checkPermission("finance.promo.manage"), async (re
 		const promo = await PromoCode.findByIdAndUpdate(req.params.id, { $set: normalizePromoPayload(req.body) }, { new: true, runValidators: true });
 		if (!promo) return res.status(404).json({ success: false, message: "Promosyon kodu bulunamadı." });
 		res.json({ success: true, data: promo });
-	} catch (err) { res.status(err?.code === 11000 ? 409 : 400).json({ success: false, message: "Promosyon kodu güncellenemedi." }); }
+	} catch (err) {
+		const message = err?.code === 11000 ? "Bu kod zaten mevcut." : resolvePromoErrorMessage(err, "Promosyon kodu güncellenemedi.");
+		res.status(err?.code === 11000 ? 409 : 400).json({ success: false, message });
+	}
 });
 
 router.delete("/promocodes/:id", checkPermission("finance.promo.manage"), async (req, res) => {
