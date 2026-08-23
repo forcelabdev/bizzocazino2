@@ -22,6 +22,22 @@ const ConditionSchema = new mongoose.Schema(
     { _id: false },
 );
 
+// 🎯 Ayrı bir alt şema olarak tanımlanmalı: Mongoose, iç içe bir objede
+// doğrudan "type" adında bir alan görürse (audience: { type: {...}, ... })
+// bunu üst alanın TİP bildirimi olarak yorumlar ve şemayı bozar. Bu yüzden
+// "audienceType" iç alan adı yerine ayrı bir alt şema kullanıyoruz.
+const AudienceSchema = new mongoose.Schema(
+    {
+        type: {
+            type: String,
+            enum: ["all", "online", "offline", "segment"],
+            default: "all",
+        },
+        conditions: { type: [ConditionSchema], default: [] },
+    },
+    { _id: false },
+);
+
 const NoticeSchema = new mongoose.Schema({
     title: {
         type: String,
@@ -39,14 +55,7 @@ const NoticeSchema = new mongoose.Schema({
     },
     // 🎯 Hedef kitle: Tümü / Online / Offline / Segment koşulları.
     // recipientId doluysa (tekil hedefleme) audience yok sayılır.
-    audience: {
-        type: {
-            type: String,
-            enum: ["all", "online", "offline", "segment"],
-            default: "all",
-        },
-        conditions: { type: [ConditionSchema], default: [] },
-    },
+    audience: { type: AudienceSchema, default: () => ({ type: "all", conditions: [] }) },
     // Gönderim anında hesaplanıp SAKLANAN hedef kullanıcı listesi (audience
     // "online"/"offline"/"segment" için). Boş = "all" (herkes) demektir.
     recipients: [{
