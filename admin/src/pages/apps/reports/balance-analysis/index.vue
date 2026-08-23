@@ -15,6 +15,11 @@ const period = ref("all") // today | week | month | all | custom
 const customStart = ref(null)
 const customEnd = ref(null)
 
+// "Tüm Zamanlar" seçildiğinde, admin/test hesaplarına ait eski verilerin
+// istatistikleri şişirmemesi için gerçek üye verilerinin başladığı
+// 31.07.2026 tarihi baz alınır (Kalan Bonus Bakiyesi'nin başlangıç tarihiyle aynı).
+const ALL_TIME_START_DATE = "2026-07-31T00:00:00"
+
 const summary = ref(null)
 const summaryLoading = ref(false)
 
@@ -70,7 +75,7 @@ const dateRange = computed(() => {
       endDate: customEnd.value ? new Date(customEnd.value).toISOString() : null,
     }
   }
-  return { startDate: null, endDate: null }
+  return { startDate: new Date(ALL_TIME_START_DATE).toISOString(), endDate: null }
 })
 
 const formatMoney = value => {
