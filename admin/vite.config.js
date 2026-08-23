@@ -1,6 +1,7 @@
 import http from "node:http";
 import { fileURLToPath } from "node:url";
 import VueI18nPlugin from "@intlify/unplugin-vue-i18n/vite";
+import httpProxy from "http-proxy";
 import vue from "@vitejs/plugin-vue";
 import vueJsx from "@vitejs/plugin-vue-jsx";
 import AutoImport from "unplugin-auto-import/vite";
@@ -77,24 +78,56 @@ function isLocalBackendUp(port) {
 	});
 }
 
+// 🎯 Kök sebep: Eskiden backendTarget SADECE vite başlangıcında bir kez
+// seçiliyordu (yerel backend o an ayaktaysa yerel, değilse SERVER_BACKEND_URL
+// -yani "olası bakımsız/eski" deploy edilmiş backend-). Sandbox'ta yerel
+// backend süreci zaman zaman durup yeniden başlayabildiğinden, bu tek seferlik
+// karar donup kalıyor ve widget'lar (örn. "Bugünkü Özet") ya hep eski/deploy
+// edilmiş backend'e (henüz yeni alanları döndürmeyen) ya da hiç yanıt
+// vermeyen bir hedefe takılı kalıyordu - bu da "bir açılıp bir kayboluyor"
+// hissi veriyordu. Çözüm: canlılık her istekte (kısa bir cache ile, gereksiz
+// health-check trafiğini önlemek için) YENİDEN kontrol edilir, böylece yerel
+// backend ayağa kalktığı anda (en fazla CACHE_MS gecikmeyle) proxy otomatik
+// olarak ona geçer.
+const LOCAL_BACKEND_PORT = 5000;
+const LIVENESS_CACHE_MS = 3000;
+let livenessCache = { value: false, checkedAt: 0 };
+
+async function resolveBackendTarget(explicitOverride, deployedFallback) {
+	if (explicitOverride) return explicitOverride;
+
+	const now = Date.now();
+	if (now - livenessCache.checkedAt > LIVENESS_CACHE_MS) {
+		livenessCache = {
+			value: await isLocalBackendUp(LOCAL_BACKEND_PORT),
+			checkedAt: now,
+		};
+	}
+
+	return livenessCache.value
+		? `http://127.0.0.1:${LOCAL_BACKEND_PORT}`
+		: deployedFallback || `http://localhost:${LOCAL_BACKEND_PORT}`;
+}
+
 export default defineConfig(async ({ mode }) => {
 	const env = loadEnv(mode, process.cwd(), "");
 	const newSiteMode = String(env.NEW_SITE_MODE ?? "true").toLowerCase();
-	const localBackendPort = 5000;
-	// Prefer an explicit override, then a live local backend (most common in
-	// this sandbox, and always the freshest code), then fall back to the
-	// deployed backend URL (SERVER_BACKEND_URL) if nothing local is running.
-	const localBackendUp = await isLocalBackendUp(localBackendPort);
-	const backendTarget =
-		env.VITE_BACKEND_PROXY_TARGET ||
-		(localBackendUp ? `http://127.0.0.1:${localBackendPort}` : null) ||
-		env.SERVER_BACKEND_URL ||
-		`http://localhost:${localBackendPort}`;
 	// Vercel already provides SERVER_BACKEND_URL. Expose only this public API
 	// origin to the browser when the optional VITE-prefixed alias is absent.
 	const apiBaseUrl = String(
 		env.VITE_API_BASE_URL || env.SERVER_BACKEND_URL || ""
 	).replace(/\/$/, "");
+
+	// http-proxy instance reused across all requests/plugin reloads.
+	const backendProxy = httpProxy.createProxyServer({});
+
+	backendProxy.on("error", (err, _req, res) => {
+		console.error("[dev-proxy] backend isteği başarısız:", err.message);
+		if (res && !res.headersSent) {
+			res.writeHead(502, { "Content-Type": "application/json" });
+		}
+		res?.end(JSON.stringify({ success: false, message: "Backend proxy error" }));
+	});
 
 	return {
 	plugins: [
@@ -169,6 +202,33 @@ export default defineConfig(async ({ mode }) => {
 			],
 		}),
 		DefineOptions(),
+
+		// Backend istekleri için dinamik proxy: her istekte (kısa cache'li)
+		// yerel backend'in canlı olup olmadığını yeniden kontrol eder ve
+		// hedefi buna göre seçer (bkz. resolveBackendTarget üstteki yorum).
+		{
+			name: "dynamic-backend-proxy",
+			configureServer(server) {
+				server.middlewares.use((req, res, next) => {
+					const url = req.url || "";
+					const matchesPrefix = BACKEND_ROUTE_PREFIXES.some(
+						(prefix) => url === prefix || url.startsWith(`${prefix}/`) || url.startsWith(`${prefix}?`)
+					);
+
+					if (!matchesPrefix) return next();
+
+					resolveBackendTarget(env.VITE_BACKEND_PROXY_TARGET, env.SERVER_BACKEND_URL)
+						.then((target) => {
+							backendProxy.web(req, res, { target, changeOrigin: true });
+						})
+						.catch((err) => {
+							console.error("[dev-proxy] hedef çözümlenemedi:", err.message);
+							res.writeHead(502, { "Content-Type": "application/json" });
+							res.end(JSON.stringify({ success: false, message: "Backend proxy error" }));
+						});
+				});
+			},
+		},
 	],
 	define: {
 		"process.env": {},
@@ -217,15 +277,8 @@ export default defineConfig(async ({ mode }) => {
 		hmr: {
 			clientPort: 443,
 		},
-		proxy: Object.fromEntries(
-			BACKEND_ROUTE_PREFIXES.map((prefix) => [
-				prefix,
-				{
-					target: backendTarget,
-					changeOrigin: true,
-				},
-			])
-		),
+		// Proxy artık statik değil: yukarıdaki "dynamic-backend-proxy" plugin'i
+		// (configureServer) her isteği canlılık kontrolüyle doğru hedefe yönlendirir.
 	},
 };
 });
