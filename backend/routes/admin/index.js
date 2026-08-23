@@ -40,6 +40,9 @@ const PromoCode = require("../../database/models/PromoCode"); // Promocode model
 const TicketEvent = require("../../database/models/TicketEvent");
 const Ticket = require("../../database/models/Ticket");
 const ticketService = require("../../services/ticketService");
+const RaceTournament = require("../../database/models/RaceTournament");
+const RaceEntry = require("../../database/models/RaceEntry");
+const raceService = require("../../services/raceService");
 const Leaderboard = require("../../database/models/Leaderboard"); // Leaderboard modelini import edin
 const News = require("../../database/models/News"); // News modelini import edin
 const CustomerService = require("../../database/models/CustomerService"); // CustomerService modelini import edin
@@ -4815,6 +4818,135 @@ router.post("/ticket-events/:id/manual-ticket", checkPermission("finance.tickets
 		res.status(201).json({ success: true, data: tickets });
 	} catch (err) {
 		res.status(err?.status || 400).json({ success: false, message: err?.message || "Manuel bilet eklenemedi.", code: err?.code });
+	}
+});
+
+// 7.2 ÇEVRİM TURNUVASI (Race Tournaments)
+const RACE_GAME_CATEGORIES = ["all", "slots", "liveCasino", "sportsBook", "originals"];
+
+const normalizeRaceTournamentPayload = (body = {}) => {
+	const startsAt = body.startsAt ? new Date(body.startsAt) : null;
+	const endsAt = body.endsAt ? new Date(body.endsAt) : null;
+	const pointsPerWager = Number(body.pointsPerWager);
+
+	if (!String(body.name || "").trim() || !Number.isFinite(pointsPerWager) || pointsPerWager <= 0) {
+		throw new Error("INVALID_RACE_TOURNAMENT");
+	}
+	if (startsAt && endsAt && startsAt >= endsAt) throw new Error("INVALID_DATE_RANGE");
+
+	const gameCategory = RACE_GAME_CATEGORIES.includes(body.gameCategory) ? body.gameCategory : "all";
+	const providers = [...new Set((Array.isArray(body.providers) ? body.providers : ["all"]).map((p) => String(p).trim()).filter(Boolean))];
+	const prizes = (Array.isArray(body.prizes) ? body.prizes : [])
+		.map((p) => ({ rank: Math.max(1, Math.floor(Number(p.rank) || 0)), amount: Math.max(0, Number(p.amount) || 0) }))
+		.filter((p) => p.rank > 0);
+
+	return {
+		name: String(body.name).trim(),
+		isActive: body.isActive !== false,
+		startsAt,
+		endsAt,
+		providers: providers.length ? providers : ["all"],
+		gameCategory,
+		pointsPerWager,
+		prizes,
+		autoDistribute: body.autoDistribute !== false,
+		note: String(body.note || "").trim(),
+		updatedAt: new Date(),
+	};
+};
+
+const RACE_VALIDATION_MESSAGES = {
+	INVALID_RACE_TOURNAMENT: "Turnuva adı ve 1 TL çevrime karşılık gelen puan zorunludur; puan sıfırdan büyük olmalıdır.",
+	INVALID_DATE_RANGE: "Bitiş tarihi başlangıç tarihinden sonra olmalıdır.",
+};
+
+router.get("/race-tournaments", checkPermission("finance.race.read"), async (req, res) => {
+	const tournaments = await RaceTournament.find().sort({ createdAt: -1 }).lean();
+	const counts = await Promise.all(tournaments.map((t) => RaceEntry.countDocuments({ tournament: t._id })));
+	res.json({ success: true, data: tournaments.map((t, i) => ({ ...t, entryCount: counts[i] })) });
+});
+
+router.post("/race-tournaments", checkPermission("finance.race.manage"), async (req, res) => {
+	try {
+		const tournament = await RaceTournament.create(normalizeRaceTournamentPayload(req.body));
+		res.status(201).json({ success: true, data: tournament });
+	} catch (err) {
+		res.status(400).json({ success: false, message: RACE_VALIDATION_MESSAGES[err?.message] || "Turnuva eklenemedi." });
+	}
+});
+
+router.put("/race-tournaments/:id", checkPermission("finance.race.manage"), async (req, res) => {
+	try {
+		const tournament = await RaceTournament.findByIdAndUpdate(req.params.id, { $set: normalizeRaceTournamentPayload(req.body) }, { new: true, runValidators: true });
+		if (!tournament) return res.status(404).json({ success: false, message: "Turnuva bulunamadı." });
+		res.json({ success: true, data: tournament });
+	} catch (err) {
+		res.status(400).json({ success: false, message: RACE_VALIDATION_MESSAGES[err?.message] || "Turnuva güncellenemedi." });
+	}
+});
+
+router.delete("/race-tournaments/:id", checkPermission("finance.race.manage"), async (req, res) => {
+	try {
+		await RaceTournament.findByIdAndDelete(req.params.id);
+		await RaceEntry.deleteMany({ tournament: req.params.id });
+		res.json({ success: true, message: "Turnuva silindi." });
+	} catch (err) {
+		res.status(500).json({ success: false, message: "Turnuva silinemedi." });
+	}
+});
+
+router.get("/race-tournaments/:id/leaderboard", checkPermission("finance.race.read"), async (req, res) => {
+	try {
+		const leaderboard = await raceService.getLeaderboard(req.params.id, Number(req.query.limit) || 100);
+		res.json({ success: true, data: leaderboard });
+	} catch (err) {
+		res.status(500).json({ success: false, message: "Sıralama alınamadı." });
+	}
+});
+
+router.get("/race-tournaments/user-search", checkPermission("finance.race.manage"), async (req, res) => {
+	const q = String(req.query.q || "").trim();
+	if (q.length < 2) return res.json({ success: true, data: [] });
+	const users = await User.find({
+		$or: [
+			{ username: { $regex: q, $options: "i" } },
+			{ email: { $regex: q, $options: "i" } },
+		],
+	}).select("username email name").limit(15).lean();
+	res.json({ success: true, data: users });
+});
+
+router.post("/race-tournaments/:id/manual-entry", checkPermission("finance.race.manage"), async (req, res) => {
+	try {
+		const { userId, displayName, startingPoints, manualGrowthRate } = req.body;
+		const entry = await raceService.upsertManualEntry({
+			tournamentId: req.params.id,
+			userId: userId || null,
+			displayName,
+			startingPoints,
+			manualGrowthRate,
+		});
+		res.status(201).json({ success: true, data: entry });
+	} catch (err) {
+		res.status(err?.status || 400).json({ success: false, message: err?.message || "Katılımcı eklenemedi.", code: err?.code });
+	}
+});
+
+router.delete("/race-tournaments/:id/entries/:entryId", checkPermission("finance.race.manage"), async (req, res) => {
+	try {
+		await RaceEntry.findOneAndDelete({ _id: req.params.entryId, tournament: req.params.id });
+		res.json({ success: true, message: "Katılımcı silindi." });
+	} catch (err) {
+		res.status(500).json({ success: false, message: "Katılımcı silinemedi." });
+	}
+});
+
+router.post("/race-tournaments/:id/settle", checkPermission("finance.race.manage"), async (req, res) => {
+	try {
+		const result = await raceService.settleTournament(req.params.id);
+		res.json({ success: true, data: result });
+	} catch (err) {
+		res.status(err?.status || 400).json({ success: false, message: err?.message || "Turnuva sonuçlandırılamadı.", code: err?.code });
 	}
 });
 
@@ -9859,7 +9991,7 @@ router.post(
 	},
 );
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ════��══════════════════════════════════════════════════════════════════════
 // Provider Ayarları (SiteSettings içinde)
 // ═════════════════════════════════════════��═════════════════════════════════
 
@@ -10347,7 +10479,7 @@ router.post(
 
 // ═══════════════════════════════════════════���═══════════════════════════════
 // Forcelab Finance Ayarları (SiteSettings içinde)
-// ═══════════════════════════════════════════════════════════════════════════
+// ════���══════════════════════════════════════════════════════════════════════
 
 router.get(
 	"/forcelab-finance/settings",
