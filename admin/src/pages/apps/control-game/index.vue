@@ -461,6 +461,31 @@ const rtpCategoryOptions = [
 	{ title: "TargetRtp", value: "TargetRtp" },
 ];
 
+// "Oyundaki Kullanıcılar" tablosundaki "RTP Tanımla" kısayolu: aşağıdaki
+// genel "RTP Ayarı" formunu seçilen oyuncunun bilgileriyle önceden doldurur
+// ve forma kaydırır. Personel Kategori/Key/Değer alanlarını kendisi girer;
+// otomatik hesaplama veya öneri yapılmaz.
+const rtpSettingCardRef = ref(null);
+
+const prefillRtpFormForPlayer = (player) => {
+	if (!player) return;
+	rtpForm.value.scope = "user";
+	rtpForm.value.userCode = player.userCode || "";
+	rtpForm.value.vendorCode = player.vendorCode || "";
+	rtpForm.value.gameCode = player.gameCode || "";
+	rtpForm.value.currencyCode = player.currencyCode || "TRY";
+	rtpForm.value.category = "LowRtp";
+	rtpForm.value.key = "";
+	rtpForm.value.value = "";
+	rawResponse.value = null;
+	lastError.value = "";
+	successMessage.value = "";
+
+	if (rtpSettingCardRef.value?.$el) {
+		rtpSettingCardRef.value.$el.scrollIntoView({ behavior: "smooth", block: "center" });
+	}
+};
+
 const submitControlAction = async (type, payload) => {
 	if (!canManageControlGame.value) return;
 
@@ -746,17 +771,22 @@ onBeforeUnmount(() => {
 			</VCardText>
 		</VCard>
 
-		<VRow v-if="canManageControlGame" class="mb-4">
-			<VCol cols="12" lg="6">
-				<VCard>
-					<VCardTitle>RTP Ayarı</VCardTitle>
-					<VCardText>
-						<VRow>
-							<VCol cols="12" md="6">
-								<VSelect v-model="rtpForm.scope" :items="settingScopeOptions" label="Kapsam" density="compact" />
-							</VCol>
-							<VCol v-if="rtpForm.scope === 'user'" cols="12" md="6">
-								<VTextField v-model="rtpForm.userCode" label="Kullanıcı Kodu" density="compact" />
+			<VRow v-if="canManageControlGame" class="mb-4">
+				<VCol cols="12" lg="6">
+					<VCard ref="rtpSettingCardRef">
+						<VCardTitle>RTP Ayarı</VCardTitle>
+						<VCardSubtitle>
+							Kullanıcıya kalıcı Low RTP / High RTP değeri tanımlar (Betinovi
+							GetUserSetting / ChangeUserSetting). "Oyundaki Kullanıcılar"
+							listesindeki "RTP Tanımla" butonu bu formu otomatik doldurur.
+						</VCardSubtitle>
+						<VCardText>
+							<VRow>
+								<VCol cols="12" md="6">
+									<VSelect v-model="rtpForm.scope" :items="settingScopeOptions" label="Kapsam" density="compact" />
+								</VCol>
+								<VCol v-if="rtpForm.scope === 'user'" cols="12" md="6">
+									<VTextField v-model="rtpForm.userCode" label="Kullanıcı Kodu" density="compact" />
 							</VCol>
 							<VCol cols="12" md="6">
 								<VTextField v-model="rtpForm.vendorCode" label="Vendor Kodu" density="compact" />
@@ -774,18 +804,24 @@ onBeforeUnmount(() => {
 								<VTextField v-model="rtpForm.key" label="Key" density="compact" />
 							</VCol>
 							<VCol cols="12" md="6">
-								<VTextField v-model="rtpForm.value" label="Değer" density="compact" />
-							</VCol>
-							<VCol cols="12" class="d-flex flex-wrap gap-2">
-								<VBtn variant="tonal" color="secondary" :loading="['user-setting', 'agent-setting'].includes(actionLoading)" @click="fetchRtpSetting">
-									<VIcon start icon="tabler-search" />
-									Oku
-								</VBtn>
-								<VBtn color="primary" :loading="['change-user-setting', 'change-agent-setting'].includes(actionLoading)" @click="saveRtpSetting">
-									<VIcon start icon="tabler-device-floppy" />
-									Kaydet
-								</VBtn>
-							</VCol>
+									<VTextField
+										v-model="rtpForm.value"
+										label="Değer"
+										density="compact"
+										hint="Örn. 0.6 = %60. Doğru category/key kombinasyonunu Betinovi'den teyit edip burada test edin."
+										persistent-hint
+									/>
+								</VCol>
+								<VCol cols="12" class="d-flex flex-wrap gap-2">
+									<VBtn variant="tonal" color="secondary" :loading="['user-setting', 'agent-setting'].includes(actionLoading)" @click="fetchRtpSetting">
+										<VIcon start icon="tabler-search" />
+										Oku
+									</VBtn>
+									<VBtn color="primary" :loading="['change-user-setting', 'change-agent-setting'].includes(actionLoading)" @click="saveRtpSetting">
+										<VIcon start icon="tabler-device-floppy" />
+										Kaydet
+									</VBtn>
+								</VCol>
 						</VRow>
 					</VCardText>
 				</VCard>
@@ -836,16 +872,28 @@ onBeforeUnmount(() => {
 						<span v-else class="text-medium-emphasis">-</span>
 					</template>
 					<template #item.actions="{ item }">
-						<VBtn
-							size="small"
-							color="primary"
-							variant="tonal"
-							:disabled="!canManageControlGame"
-							@click="openGiveCallDialog((item.raw || item)._player)"
-						>
-							<VIcon start icon="tabler-target-arrow" size="16" />
-							Call Ver
-						</VBtn>
+						<div class="d-flex gap-2">
+							<VBtn
+								size="small"
+								color="primary"
+								variant="tonal"
+								:disabled="!canManageControlGame"
+								@click="openGiveCallDialog((item.raw || item)._player)"
+							>
+								<VIcon start icon="tabler-target-arrow" size="16" />
+								Call Ver
+							</VBtn>
+							<VBtn
+								size="small"
+								color="secondary"
+								variant="tonal"
+								:disabled="!canManageControlGame"
+								@click="prefillRtpFormForPlayer((item.raw || item)._player)"
+							>
+								<VIcon start icon="tabler-settings" size="16" />
+								RTP Tanımla
+							</VBtn>
+						</div>
 					</template>
 				</VDataTable>
 			</VCardText>
