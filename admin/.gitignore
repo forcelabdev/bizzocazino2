@@ -30,6 +30,6 @@ dist-ssr
 *.sw?
 .yarn
 
-# iconify dist files
-src/@iconify/icons-bundle.js
+# The generated Iconify bundle is committed so Vercel can resolve the import
+# even when a custom build command bypasses npm lifecycle hooks.
 .env
