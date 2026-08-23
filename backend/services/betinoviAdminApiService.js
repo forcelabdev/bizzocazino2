@@ -550,66 +550,11 @@ const buildControlGamePayload = (methodName, payload = {}, config = {}) => {
 
 			return nextPayload;
 		}
-		case "GetUserSetting": {
-			const nextPayload = cleanPayload(
-				{
-					userCode: source.userCode,
-					gameCode: source.gameCode,
-					currencyCode,
-					vendorCode: source.vendorCode,
-					category: source.category,
-					key: source.key ?? "",
-				},
-				["key"],
-			);
-			ensureRequired(nextPayload, [
-				"userCode",
-				"gameCode",
-				"currencyCode",
-				"vendorCode",
-				"category",
-			]);
-
-			return nextPayload;
-		}
-		case "ChangeUserSetting": {
-			const nextPayload = {
-				...buildControlGamePayload("GetUserSetting", source, config),
-				value: source.value,
-			};
-			ensureRequired(nextPayload, ["value"]);
-
-			return nextPayload;
-		}
-		case "GetAgentSetting": {
-			const nextPayload = cleanPayload(
-				{
-					gameCode: source.gameCode,
-					currencyCode,
-					vendorCode: source.vendorCode,
-					category: source.category,
-					key: source.key ?? "",
-				},
-				["key"],
-			);
-			ensureRequired(nextPayload, [
-				"gameCode",
-				"currencyCode",
-				"vendorCode",
-				"category",
-			]);
-
-			return nextPayload;
-		}
-		case "ChangeAgentSetting": {
-			const nextPayload = {
-				...buildControlGamePayload("GetAgentSetting", source, config),
-				value: source.value,
-			};
-			ensureRequired(nextPayload, ["value"]);
-
-			return nextPayload;
-		}
+		// NOT: "GetUserSetting" / "ChangeUserSetting" / "GetAgentSetting" /
+		// "ChangeAgentSetting" Betinovi ForceLab API Specification v1.0.3'te
+		// belgelenmiş metodlar DEĞİL. Kalıcı kullanıcı RTP tanımı bu API
+		// üzerinden desteklenmiyor; sadece GetGameUrl çağrısına gönderilen
+		// oturum bazlı lowRtp/highRtp (bkz. "apply-call"/"give-call") var.
 		default:
 			return source;
 	}

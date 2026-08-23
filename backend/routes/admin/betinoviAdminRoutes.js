@@ -19,6 +19,10 @@ const REPORT_METHOD_KEYS = {
 	"risk-users": "riskUsers",
 };
 
+// NOT: Betinovi ForceLab API Specification v1.0.3'te "GetUserSetting",
+// "ChangeUserSetting", "GetAgentSetting", "ChangeAgentSetting" gibi bir
+// metod YOK. Bunlar daha önce hatalı şekilde eklenmişti ve kaldırıldı.
+// Sadece resmi manuelde belgelenen metodlar burada eşleniyor.
 const CONTROL_GAME_METHOD_KEYS = {
 	"vendor-games": "vendorGames",
 	"online-users": "onlineUsers",
@@ -28,10 +32,6 @@ const CONTROL_GAME_METHOD_KEYS = {
 	"apply-call": "applyCall",
 	"give-call": "applyCall",
 	"cancel-call": "cancelCall",
-	"user-setting": "getUserSetting",
-	"change-user-setting": "changeUserSetting",
-	"agent-setting": "getAgentSetting",
-	"change-agent-setting": "changeAgentSetting",
 	"free-round-list": "freeRoundList",
 	"apply-free-round": "applyFreeRound",
 };
@@ -40,8 +40,6 @@ const CONTROL_GAME_MUTATIONS = new Set([
 	"apply-call",
 	"give-call",
 	"cancel-call",
-	"change-user-setting",
-	"change-agent-setting",
 	"apply-free-round",
 ]);
 
