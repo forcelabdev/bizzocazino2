@@ -49,8 +49,10 @@ const {
 } = require("../utils/galaxyPay");
 const pockersGamesRoute = require("./pokerApi");
 const raceApiRoute = require("./raceApi");
+const noticeApiRoute = require("./noticeApi");
 router.use("/poker_api", pockersGamesRoute);
 router.use("/api/race", raceApiRoute);
+router.use("/api/notices", noticeApiRoute);
 router.use("/bonus-settings", bonusSettingRoutes);
 router.use("/promo-codes", promoCodeRoutes);
 router.use("/payment/pix", pixRoutes);

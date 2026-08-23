@@ -33,6 +33,7 @@ const Deposit = require("../../database/models/Deposit");
 const Withdrawal = require("../../database/models/Withdrawal");
 const CryptoTransaction = require("../../database/models/CryptoTransaction");
 const Notice = require("../../database/models/Notice"); // Notice modelini import edin
+const { resolveNoticeAudience } = require("../../utils/noticeAudienceResolver");
 const Provider = require("../../database/models/Providers"); // Provider modelini import edin
 const DrakonProvider = require("../../database/models/drakonProvider"); // Provider modelini import edin
 const Game = require("../../database/models/Game"); // Game modelini import edin
@@ -5134,10 +5135,33 @@ router.post("/notices", checkPermission("notice.create"), upload.single("image")
 	try {
 		const noticeData = { ...req.body };
 		if (req.file) noticeData.image = `/uploads/${req.file.filename}`;
-		const notice = new Notice(noticeData);
+
+		// 🎯 multipart/form-data ile geldiği için audience JSON string olabilir.
+		let audience = { type: "all", conditions: [] };
+		if (noticeData.audience) {
+			try {
+				audience = typeof noticeData.audience === "string" ? JSON.parse(noticeData.audience) : noticeData.audience;
+			} catch {
+				audience = { type: "all", conditions: [] };
+			}
+		}
+		delete noticeData.audience;
+
+		let recipients = null;
+		if (!noticeData.recipientId && audience.type !== "all") {
+			const resolved = await resolveNoticeAudience(audience);
+			recipients = resolved.recipients;
+		}
+
+		const notice = new Notice({
+			...noticeData,
+			audience: noticeData.recipientId ? undefined : audience,
+			recipients: recipients || undefined,
+		});
 		await notice.save();
-		res.status(201).json({ success: true, data: notice });
+		res.status(201).json({ success: true, data: notice, matchedCount: recipients ? recipients.length : null });
 	} catch (err) {
+		console.error("Bildirim oluşturma hatası:", err);
 		res.status(500).json({
 			success: false,
 			message: "Bildirim eklenemedi",
@@ -5146,8 +5170,13 @@ router.post("/notices", checkPermission("notice.create"), upload.single("image")
 });
 
 router.get("/notices", checkPermission("notice.read"), async (req, res) => {
-	const notices = await Notice.find().sort({ createdAt: -1 });
-	res.json({ success: true, data: notices });
+	const notices = await Notice.find().sort({ createdAt: -1 }).lean();
+	const data = notices.map((notice) => ({
+		...notice,
+		recipientsCount: Array.isArray(notice.recipients) ? notice.recipients.length : null,
+		readCount: Array.isArray(notice.readBy) ? notice.readBy.length : 0,
+	}));
+	res.json({ success: true, data });
 });
 
 router.get("/notices/user/:userId", checkPermission("notice.read"), async (req, res) => {
@@ -10572,7 +10601,7 @@ router.put(
 // E-posta Şablonları (SiteSettings içinde)
 // SMTP credential bilgileri backend/.env üzerinden okunur, sadece şablonlar
 // ve gönderici görünen ad/adres burada yönetilir.
-// ═══════════���═══════════════════════════════════���════════���══════════════════
+// ═══════════���═══════════════════════════════════���══════��═���══════════════════
 
 const buildEmailTemplatesPayload = (siteSettings) => {
 	const tpl = (siteSettings && siteSettings.emailTemplates) || {};

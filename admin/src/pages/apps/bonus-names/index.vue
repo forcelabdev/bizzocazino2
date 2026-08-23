@@ -334,6 +334,97 @@ onMounted(fetchCategories)
         </VCardActions>
       </VCard>
     </VDialog>
+
+    <!-- Toplu Bonus Raporu Dialog -->
+    <VDialog
+      v-model="reportDialogOpen"
+      max-width="900"
+    >
+      <VCard>
+        <VCardTitle class="d-flex align-center justify-space-between">
+          <span>{{ t("bonusNames.reportTitle", { name: reportCategory?.name }) }}</span>
+          <VBtn
+            icon
+            size="small"
+            variant="text"
+            @click="reportDialogOpen = false"
+          >
+            <VIcon icon="tabler-x" />
+          </VBtn>
+        </VCardTitle>
+        <VCardText>
+          <VRow class="mb-2" align="center">
+            <VCol cols="12" md="4">
+              <VTextField
+                v-model="reportDateFrom"
+                type="date"
+                :label="t('bonusNames.dateFrom')"
+                density="compact"
+                @change="fetchCategoryReport"
+              />
+            </VCol>
+            <VCol cols="12" md="4">
+              <VTextField
+                v-model="reportDateTo"
+                type="date"
+                :label="t('bonusNames.dateTo')"
+                density="compact"
+                @change="fetchCategoryReport"
+              />
+            </VCol>
+            <VCol cols="12" md="4" class="d-flex justify-end">
+              <VBtn
+                color="success"
+                variant="tonal"
+                prepend-icon="tabler-file-spreadsheet"
+                :loading="reportExporting"
+                :disabled="!reportData?.rows?.length"
+                @click="exportCategoryReport"
+              >
+                {{ t("bonusNames.exportExcel") }}
+              </VBtn>
+            </VCol>
+          </VRow>
+
+          <div v-if="reportLoading" class="d-flex justify-center py-8">
+            <VProgressCircular indeterminate color="primary" />
+          </div>
+
+          <template v-else-if="reportData">
+            <div class="d-flex gap-4 mb-4">
+              <VChip color="primary" label>{{ t("bonusNames.reportCount", { count: reportData.count }) }}</VChip>
+              <VChip color="success" label>{{ t("bonusNames.reportTotal", { total: reportData.totalAmount?.toLocaleString('tr-TR') }) }}</VChip>
+            </div>
+
+            <VTable density="compact" fixed-header height="360">
+              <thead>
+                <tr>
+                  <th>{{ t("fields.username") }}</th>
+                  <th>{{ t("bonusNames.amount") }}</th>
+                  <th>{{ t("bonusNames.note") }}</th>
+                  <th>{{ t("bonusNames.actor") }}</th>
+                  <th>{{ t("bonusNames.date") }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="row in reportData.rows" :key="row._id">
+                  <td>{{ row.username }}</td>
+                  <td>{{ row.amount?.toLocaleString('tr-TR') }}</td>
+                  <td>{{ row.note }}</td>
+                  <td>{{ row.actorUsername }}</td>
+                  <td>{{ new Date(row.createdAt).toLocaleString('tr-TR') }}</td>
+                </tr>
+                <tr v-if="!reportData.rows.length">
+                  <td colspan="5" class="text-center text-medium-emphasis py-6">
+                    {{ t("bonusNames.reportEmpty") }}
+                  </td>
+                </tr>
+              </tbody>
+            </VTable>
+          </template>
+        </VCardText>
+      </VCard>
+    </VDialog>
   </div>
 </template>
 

@@ -186,6 +186,34 @@ const submit = async () => {
   }
 }
 
+// 🎯 Toplu işlem sonucunu Excel'e aktar (bkz. bulkBonusService.js -> results.batchId)
+const exportingResults = ref(false)
+const exportResults = async () => {
+  if (!results.value?.results?.length) return
+  exportingResults.value = true
+  try {
+    const XLSXModule = await import("xlsx")
+    const XLSX = XLSXModule.default || XLSXModule
+    const rows = results.value.results.map(row => ({
+      [t("fields.username")]: row.username,
+      [t("status")]: statusMeta(row.status).label,
+      [t("bulkBonus.amount")]: row.amount ?? "",
+      [t("details")]: row.message || "",
+    }))
+    const worksheet = XLSX.utils.json_to_sheet(rows)
+
+    worksheet["!cols"] = [{ wch: 22 }, { wch: 20 }, { wch: 14 }, { wch: 34 }]
+    const workbook = XLSX.utils.book_new()
+
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Toplu Bonus Sonucu")
+    XLSX.writeFile(workbook, `toplu-bonus-sonucu-${results.value.batchId || Date.now()}.xlsx`, { compression: true })
+  } catch (err) {
+    console.error("Toplu bonus sonucu dışa aktarılamadı:", err)
+  } finally {
+    exportingResults.value = false
+  }
+}
+
 const statusMeta = status => {
   const map = {
     success: { color: "success", label: t("bulkBonus.statusSuccess"), icon: "tabler-check" },
@@ -420,11 +448,23 @@ onMounted(() => {
     </VCard>
 
     <VCard v-if="results">
-      <VCardTitle class="d-flex align-center justify-space-between">
+      <VCardTitle class="d-flex align-center justify-space-between flex-wrap gap-2">
         <span>{{ t("bulkBonus.resultsTitle") }}</span>
-        <VChip color="primary">
-          {{ t("bulkBonus.resultsSummary", { success: results.successCount, total: results.total }) }}
-        </VChip>
+        <div class="d-flex align-center gap-2">
+          <VChip color="primary">
+            {{ t("bulkBonus.resultsSummary", { success: results.successCount, total: results.total }) }}
+          </VChip>
+          <VBtn
+            size="small"
+            color="success"
+            variant="tonal"
+            prepend-icon="tabler-file-spreadsheet"
+            :loading="exportingResults"
+            @click="exportResults"
+          >
+            {{ t("bulkBonus.exportResults") }}
+          </VBtn>
+        </div>
       </VCardTitle>
       <VCardText>
         <VTable density="comfortable">

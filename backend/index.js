@@ -87,7 +87,11 @@ app.use("/", require("./routes")(io));
 app.use("/public", express.static(path.join(__dirname, "public")));
 
 // 🌍 Site genelinde aktif kullanıcı takibi
+// Not: Set kendisi burada tutuluyor (yerel emit sayacı için), ama gerçek
+// User ObjectId'leri de utils/io.js'teki merkezi sete yazılıyor — Notice
+// segmentasyonu (audience: "online"/"offline") bunu okur.
 const onlineUsers = new Set();
+const ioUtils = require("./utils/io");
 
 io.on("connection", (socket) => {
 	// console.log("🌍 Yeni ziyaretçi bağlandı:", socket.id);
@@ -95,12 +99,14 @@ io.on("connection", (socket) => {
 	// Eğer kullanıcı login olmuşsa token'dan userId gönder
 	const userId = socket.handshake.auth?.userId || socket.id;
 	onlineUsers.add(userId);
+	ioUtils.addOnlineUser(userId);
 
 	// herkese gönder
 	io.emit("siteOnline", { online: onlineUsers.size });
 
 	socket.on("disconnect", () => {
 		onlineUsers.delete(userId);
+		ioUtils.removeOnlineUser(userId);
 		io.emit("siteOnline", { online: onlineUsers.size });
 		// console.log("❌ Kullanıcı ayrıldı:", userId);
 	});

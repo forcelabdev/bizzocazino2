@@ -438,7 +438,7 @@
 		"totalWon": "Toplam Kazanç",
 		"totalDeposit": "Toplam Yatırım",
 		"totalWithdraw": "Toplam Çekim",
-		"identityNumber": "Kimlik Numarası",
+		"identityNumber": "Kimlik Numaras��",
 		"identityVerified": "Kimlik Doğrulandı",
 		"emailVerified": "E-posta Doğrulandı"
 	},
@@ -1268,6 +1268,7 @@
 		"submitting": "Gönderiliyor...",
 		"resultsTitle": "İşlem Sonuçları",
 		"resultsSummary": "{success} / {total} başarılı",
+		"exportResults": "Excel'e Aktar",
 		"statusSuccess": "Eklendi",
 		"statusNotFound": "Kullanıcı bulunamadı",
 		"statusNoWallet": "Cüzdan bulunamadı",
@@ -1291,8 +1292,19 @@
 		"status": "Durum",
 		"active": "Aktif",
 		"inactive": "Pasif",
-			"deleteConfirm": "Silme Onayı",
-			"deleteMessage": "\"{name}\" bonus adını silmek istediğinizden emin misiniz?"
+		"deleteConfirm": "Silme Onayı",
+		"deleteMessage": "\"{name}\" bonus adını silmek istediğinizden emin misiniz?",
+		"reportTitle": "\"{name}\" Bonus Raporu",
+		"dateFrom": "Başlangıç Tarihi",
+		"dateTo": "Bitiş Tarihi",
+		"exportExcel": "Excel'e Aktar",
+		"reportCount": "{count} kayıt",
+		"reportTotal": "Toplam: {total} ₺",
+		"amount": "Tutar",
+		"note": "Not",
+		"actor": "İşlemi Yapan",
+		"date": "Tarih",
+		"reportEmpty": "Bu tarih aralığında kayıt bulunamadı."
 		},
 		"lossBonusAdmin": {
 			"title": "Kayıp Bonusu",
