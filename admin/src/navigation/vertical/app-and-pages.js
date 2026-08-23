@@ -133,6 +133,12 @@ export default [
         subject: "finance.promo",
       },
       {
+        title: "platform.bulkBonus",
+        to: "apps-bulk-bonus",
+        action: "read",
+        subject: "finance.manualAdjustments",
+      },
+      {
         title: "platform.bonusNames",
         to: "apps-bonus-names",
         action: "read",

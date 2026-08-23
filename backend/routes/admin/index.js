@@ -213,9 +213,13 @@ const {
 	updateUserBalance,
 	getWallet,
 } = require("../../utils/wallet");
-const {
-	createAdminManualAdjustment,
-} = require("../../services/adminManualAdjustmentService");
+	const {
+		createAdminManualAdjustment,
+	} = require("../../services/adminManualAdjustmentService");
+	const {
+		createBulkManualBonus,
+		listAffiliateCodes,
+	} = require("../../services/bulkBonusService");
 const {
 	buildUserUpdateChanges,
 	createAdminUserAuditLog,
@@ -2844,6 +2848,74 @@ router.post(
 	},
 );
 
+// 🔹 Toplu Bonus Yükle: affiliate kodu filtresi için seçim listesi
+router.get(
+	"/bulk-bonus/affiliate-codes",
+	checkPermission(["finance.manualAdjustments.manage", "users.update"]),
+	async (req, res) => {
+		try {
+			const data = await listAffiliateCodes();
+			res.status(200).json({ success: true, data });
+		} catch (error) {
+			console.error("Affiliate code list error:", error);
+			res.status(500).json({ success: false, message: "Sunucu hatası." });
+		}
+	},
+);
+
+// 🔹 Toplu Bonus Yükle: birden fazla kullanıcıya aynı bonusu tek seferde ekler
+router.post(
+	"/bulk-bonus",
+	checkPermission(["finance.manualAdjustments.manage", "users.update"]),
+	async (req, res) => {
+		try {
+			const category = String(req.body.category || "").trim();
+
+			if (!(await manualBonusCategoryController.isValidCategoryName(category))) {
+				return res.status(400).json({
+					success: false,
+					message: "INVALID_MANUAL_BONUS_CATEGORY",
+					data: await manualBonusCategoryController.getActiveCategoryNamesRaw(),
+				});
+			}
+
+			const result = await createBulkManualBonus({
+				usernames: req.body.usernames,
+				amount: req.body.amount,
+				category,
+				note: req.body.note,
+				wageringMultiplier: req.body.wageringMultiplier,
+				applyWithdrawalLock: req.body.applyWithdrawalLock,
+				minDeposit: req.body.minDeposit,
+				minWithdraw: req.body.minWithdraw,
+				affiliateCode: req.body.affiliateCode,
+				actorUser: req.adminUser || null,
+			});
+
+			res.status(201).json({
+				success: true,
+				message: "Toplu bonus işlemi tamamlandı",
+				data: result,
+			});
+		} catch (error) {
+			console.error("Bulk bonus create error:", error);
+
+			if (
+				[
+					"NO_USERNAMES_PROVIDED",
+					"TOO_MANY_USERNAMES",
+					"INVALID_ADJUSTMENT_AMOUNT",
+					"INVALID_ADJUSTMENT_CATEGORY",
+				].includes(error.message)
+			) {
+				return res.status(400).json({ success: false, message: error.message });
+			}
+
+			res.status(500).json({ success: false, message: "Sunucu hatası." });
+		}
+	},
+);
+
 router.get("/users/:id/transactions", checkPermission("users.read"), async (req, res) => {
 	try {
 		const { id } = req.params;
@@ -4620,7 +4692,7 @@ router.get("/settings", checkPermission("platform.read"), async (req, res) => {
 	}
 });
 
-// ✅ GET /admin/settings  → mevcut ayarları getir
+// ��� GET /admin/settings  → mevcut ayarları getir
 router.get("/settings", checkPermission("platform.read"), async (req, res) => {
 	try {
 		const settings = await Setting.findOne({});
