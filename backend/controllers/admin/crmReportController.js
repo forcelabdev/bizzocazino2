@@ -1,5 +1,15 @@
 const crmReportService = require("../../services/crmReportService");
 
+// bonusCategory çoklu seçime izin verir. Express/qs tekrarlanan query key'lerini
+// (bonusCategory=A&bonusCategory=B) zaten diziye çevirir; tekil değeri de
+// diziye normalize ederiz ki servis katmanı her zaman aynı şekli görsün.
+const toArray = (value) => {
+	if (value === undefined || value === null || value === "") return undefined;
+	const arr = Array.isArray(value) ? value : [value];
+	const cleaned = arr.filter((v) => v !== undefined && v !== null && v !== "");
+	return cleaned.length ? cleaned : undefined;
+};
+
 const parseQuery = (req) => ({
 	startDate: req.query.startDate,
 	endDate: req.query.endDate,
@@ -7,7 +17,7 @@ const parseQuery = (req) => ({
 	depositMax: req.query.depositMax,
 	bucket: req.query.bucket,
 	bonusOrigin: req.query.bonusOrigin,
-	bonusCategory: req.query.bonusCategory,
+	bonusCategory: toArray(req.query.bonusCategory),
 	search: req.query.search,
 	page: req.query.page,
 	limit: req.query.limit,
