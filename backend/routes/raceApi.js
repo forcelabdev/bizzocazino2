@@ -12,11 +12,13 @@ const raceService = require("../services/raceService");
  * `AGENT_TOKEN` pattern'i ile aynı yaklaşım.
  */
 const requireApiToken = (req, res, next) => {
-	const configuredToken = process.env.RACE_API_TOKEN;
+	// RACE_API_TOKEN tanımlı değilse TOKEN_SECRET'a düşer, böylece kullanıcı
+	// ek bir env değişkeni eklemeden de bu endpoint korunmuş olarak çalışır.
+	const configuredToken = process.env.RACE_API_TOKEN || process.env.TOKEN_SECRET;
 	if (!configuredToken) {
 		return res.status(503).json({
 			success: false,
-			message: "Race API henüz yapılandırılmadı (RACE_API_TOKEN eksik).",
+			message: "Race API henüz yapılandırılmadı.",
 		});
 	}
 
