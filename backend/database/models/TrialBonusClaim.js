@@ -64,6 +64,7 @@ trialBonusClaimSchema.index(
 	{
 		unique: true,
 		partialFilterExpression: { status: "pending" },
+		name: "user_1_status_pending",
 	}
 );
 trialBonusClaimSchema.index(
@@ -71,6 +72,7 @@ trialBonusClaimSchema.index(
 	{
 		unique: true,
 		partialFilterExpression: { status: "approved" },
+		name: "user_1_status_approved",
 	}
 );
 trialBonusClaimSchema.index({ status: 1, createdAt: -1 });
