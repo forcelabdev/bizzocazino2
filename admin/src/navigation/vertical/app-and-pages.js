@@ -280,37 +280,13 @@ export default [
     title: "betinoviReports.title",
     icon: { icon: "tabler-report-analytics" },
     action: "read",
-    subject: "reports.betinovi",
+    subject: "finance.balanceAnalysis",
     children: [
       {
-        title: "betinoviReports.wagerIndex",
-        to: "apps-reports-betinovi-wager",
+        title: "betinoviReports.crmReport",
+        to: "apps-reports-crm",
         action: "read",
-        subject: "reports.betinovi",
-      },
-      {
-        title: "betinoviReports.byAgent",
-        to: "apps-reports-betinovi-by-agent",
-        action: "read",
-        subject: "reports.betinovi",
-      },
-      {
-        title: "betinoviReports.byVendor",
-        to: "apps-reports-betinovi-by-vendor",
-        action: "read",
-        subject: "reports.betinovi",
-      },
-      {
-        title: "betinoviReports.settlement",
-        to: "apps-reports-betinovi-settlement",
-        action: "read",
-        subject: "reports.betinovi",
-      },
-      {
-        title: "betinoviReports.riskUsers",
-        to: "apps-reports-betinovi-risk-users",
-        action: "read",
-        subject: "reports.betinovi",
+        subject: "finance.balanceAnalysis",
       },
       {
         title: "betinoviReports.balanceAnalysis",

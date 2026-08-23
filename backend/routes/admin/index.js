@@ -11,6 +11,7 @@ const lossBonusController = require("../../controllers/admin/lossBonusController
 const depositBonusController = require("../../controllers/admin/depositBonusController");
 const trialBonusController = require("../../controllers/admin/trialBonusController");
 const balanceAnalysisController = require("../../controllers/admin/balanceAnalysisController");
+const crmReportController = require("../../controllers/admin/crmReportController");
 const reloadBonusController = require("../../controllers/admin/reloadBonusController");
 const callScenarioController = require("../../controllers/admin/callScenarioController");
 const playerSegmentsController = require("../../controllers/admin/playerSegments");
@@ -2482,6 +2483,37 @@ router.get(
 		"users.read",
 	]),
 	trialBonusController.getUserSummary,
+);
+
+// CRM Raporu (yatırım aralığı, alınan/eklenen bonus, bakiye kırılımı)
+router.get(
+	"/crm-report/summary",
+	checkPermission([
+		"finance.balanceAnalysis.read",
+		"finance.balanceAnalysis.manage",
+		"reports.read",
+	]),
+	crmReportController.getSummary,
+);
+
+router.get(
+	"/crm-report/buckets",
+	checkPermission([
+		"finance.balanceAnalysis.read",
+		"finance.balanceAnalysis.manage",
+		"reports.read",
+	]),
+	crmReportController.getBuckets,
+);
+
+router.get(
+	"/crm-report/members",
+	checkPermission([
+		"finance.balanceAnalysis.read",
+		"finance.balanceAnalysis.manage",
+		"reports.read",
+	]),
+	crmReportController.getMembers,
 );
 
 // Bakiye Analizi (manuel bonus/bakiye + kampanya + Filux + xPayment)
@@ -9444,7 +9476,7 @@ router.delete(
 
 // ═══���═══════════════════════════════════════════════════════════════════════
 // Kategori İkonları Yönetimi
-// ═══════════════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════��════════
 
 const CATEGORY_ICONS = ["lobby", "originals", "favorites", "hot"];
 

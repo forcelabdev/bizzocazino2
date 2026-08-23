@@ -542,12 +542,8 @@
 		"filterByType": "Filter by Type"
 	},
 	"betinoviReports": {
-		"title": "Report",
-		"wagerIndex": "By wager index",
-		"byAgent": "By agent",
-		"byVendor": "By vendor",
-		"settlement": "Settlement",
-		"riskUsers": "Risk Users",
+		"title": "Reports",
+		"crmReport": "CRM Report",
 		"balanceAnalysis": "Balance Analysis"
 	},
 	"controlGame": {

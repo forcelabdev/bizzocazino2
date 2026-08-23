@@ -526,12 +526,8 @@
 		"filterByType": "Tipe Göre Filtrele"
 	},
 	"betinoviReports": {
-		"title": "Rapor",
-		"wagerIndex": "Bahis indeksine göre",
-		"byAgent": "Temsilciye göre",
-		"byVendor": "Vendora göre",
-		"settlement": "Mutabakat",
-		"riskUsers": "Riskli Kullanıcılar",
+		"title": "Raporlar",
+		"crmReport": "CRM Raporu",
 		"balanceAnalysis": "Bakiye Analizi"
 	},
 	"controlGame": {
