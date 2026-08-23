@@ -37,6 +37,9 @@ const Provider = require("../../database/models/Providers"); // Provider modelin
 const DrakonProvider = require("../../database/models/drakonProvider"); // Provider modelini import edin
 const Game = require("../../database/models/Game"); // Game modelini import edin
 const PromoCode = require("../../database/models/PromoCode"); // Promocode modelini import edin
+const TicketEvent = require("../../database/models/TicketEvent");
+const Ticket = require("../../database/models/Ticket");
+const ticketService = require("../../services/ticketService");
 const Leaderboard = require("../../database/models/Leaderboard"); // Leaderboard modelini import edin
 const News = require("../../database/models/News"); // News modelini import edin
 const CustomerService = require("../../database/models/CustomerService"); // CustomerService modelini import edin
@@ -4707,6 +4710,99 @@ router.delete("/promocodes/:id", checkPermission("finance.promo.manage"), async 
 			success: false,
 			message: "Promocode silinemedi",
 		});
+	}
+});
+
+// 7.1 BİLET ETKİNLİĞİ (Ticket Events)
+const normalizeTicketEventPayload = (body = {}) => {
+	const startsAt = body.startsAt ? new Date(body.startsAt) : null;
+	const expiresAt = body.expiresAt ? new Date(body.expiresAt) : null;
+	const amountPerTicket = Number(body.amountPerTicket);
+	if (!String(body.name || "").trim() || !Number.isFinite(amountPerTicket) || amountPerTicket <= 0) {
+		throw new Error("INVALID_TICKET_EVENT");
+	}
+	if (startsAt && expiresAt && startsAt >= expiresAt) throw new Error("INVALID_DATE_RANGE");
+	const wageringRequirement = Math.max(0, Number(body.wageringRequirement) || 0);
+	const maxTicketsPerUser = Math.max(0, Number(body.maxTicketsPerUser) || 0);
+	return {
+		name: String(body.name).trim(),
+		isActive: body.isActive !== false,
+		startsAt,
+		expiresAt,
+		amountPerTicket,
+		wageringRequirement,
+		maxTicketsPerUser,
+		eligibleAffiliateCodes: [...new Set((Array.isArray(body.eligibleAffiliateCodes) ? body.eligibleAffiliateCodes : []).map((c) => String(c).trim()).filter(Boolean))],
+		note: String(body.note || "").trim(),
+		updatedAt: new Date(),
+	};
+};
+
+const TICKET_EVENT_VALIDATION_MESSAGES = {
+	INVALID_TICKET_EVENT: "Etkinlik adı ve bilet başına gereken tutar zorunludur; tutar sıfırdan büyük olmalıdır.",
+	INVALID_DATE_RANGE: "Bitiş tarihi başlangıç tarihinden sonra olmalıdır.",
+};
+
+router.get("/ticket-events", checkPermission("finance.tickets.read"), async (req, res) => {
+	const events = await TicketEvent.find().sort({ createdAt: -1 }).lean();
+	const stats = await Promise.all(events.map((event) => ticketService.getEventTicketStats(event._id)));
+	res.json({ success: true, data: events.map((event, i) => ({ ...event, stats: stats[i] })) });
+});
+
+router.post("/ticket-events", checkPermission("finance.tickets.manage"), async (req, res) => {
+	try {
+		const event = await TicketEvent.create(normalizeTicketEventPayload(req.body));
+		res.status(201).json({ success: true, data: event });
+	} catch (err) {
+		res.status(400).json({ success: false, message: TICKET_EVENT_VALIDATION_MESSAGES[err?.message] || "Bilet etkinliği eklenemedi." });
+	}
+});
+
+router.put("/ticket-events/:id", checkPermission("finance.tickets.manage"), async (req, res) => {
+	try {
+		const event = await TicketEvent.findByIdAndUpdate(req.params.id, { $set: normalizeTicketEventPayload(req.body) }, { new: true, runValidators: true });
+		if (!event) return res.status(404).json({ success: false, message: "Bilet etkinliği bulunamadı." });
+		res.json({ success: true, data: event });
+	} catch (err) {
+		res.status(400).json({ success: false, message: TICKET_EVENT_VALIDATION_MESSAGES[err?.message] || "Bilet etkinliği güncellenemedi." });
+	}
+});
+
+router.delete("/ticket-events/:id", checkPermission("finance.tickets.manage"), async (req, res) => {
+	try {
+		await TicketEvent.findByIdAndDelete(req.params.id);
+		await Ticket.deleteMany({ event: req.params.id });
+		res.json({ success: true, message: "Bilet etkinliği silindi." });
+	} catch (err) {
+		res.status(500).json({ success: false, message: "Bilet etkinliği silinemedi." });
+	}
+});
+
+router.get("/ticket-events/:id/tickets", checkPermission("finance.tickets.read"), async (req, res) => {
+	const { status } = req.query;
+	const filter = { event: req.params.id };
+	if (status && ["pending", "approved", "cancelled"].includes(status)) filter.status = status;
+	const tickets = await Ticket.find(filter)
+		.populate("user", "username name email")
+		.sort({ createdAt: -1 })
+		.limit(500)
+		.lean();
+	res.json({ success: true, data: tickets });
+});
+
+router.post("/ticket-events/:id/manual-ticket", checkPermission("finance.tickets.manage"), async (req, res) => {
+	try {
+		const { userId, quantity } = req.body;
+		if (!userId) return res.status(400).json({ success: false, message: "Kullanıcı seçimi zorunludur." });
+		const tickets = await ticketService.addManualTicket({
+			adminId: req.adminUser?._id || null,
+			userId,
+			eventId: req.params.id,
+			quantity,
+		});
+		res.status(201).json({ success: true, data: tickets });
+	} catch (err) {
+		res.status(err?.status || 400).json({ success: false, message: err?.message || "Manuel bilet eklenemedi.", code: err?.code });
 	}
 });
 

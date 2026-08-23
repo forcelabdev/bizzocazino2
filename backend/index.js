@@ -120,6 +120,14 @@ cron.schedule("0 3 * * *", () => {
 	updateExchangeRates();
 });
 
+// 🎟️ Bilet Etkinliği: onaylanmış yatırımları tarayıp bilet üretir (her dakika)
+const { syncApprovedDeposits } = require("./services/ticketService");
+cron.schedule("* * * * *", () => {
+	syncApprovedDeposits().catch((err) =>
+		console.error("❌ Ticket sync hatası:", err.message)
+	);
+});
+
 // Set app port
 const PORT = process.env.SERVER_PORT || 5000;
 
