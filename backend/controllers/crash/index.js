@@ -8,6 +8,7 @@ const Rain = require("../../database/models/Rain");
 const Leaderboard = require("../../database/models/Leaderboard");
 const BalanceTransaction = require("../../database/models/BalanceTransaction");
 const { getActiveWalletIndex } = require("../../utils/wallet");
+const { onBetSettled } = require("../../utils/wagerHooks");
 const Setting = require("../../database/models/Setting");
 // Load utils
 const { socketRemoveAntiSpam } = require("../../utils/socket");
@@ -363,6 +364,9 @@ const crashGameComplete = async (io) => {
 						.lean()
 				);
 
+				// 🎯 Bilet çevrimi + Race puanı hook'u (bahis kaybedildi, tam tutar çevrime sayılır)
+				onBetSettled({ userId: bet.user._id, amount: bet.amount, category: "originals" });
+
 				// Add update bet query to bets promises array
 				promisesBets.push(
 					CrashBet.findByIdAndUpdate(
@@ -544,6 +548,9 @@ const crashBetCashout = async (io, multiplier, bet) => {
 				.select("amount payout actions user updatedAt createdAt")
 				.lean(),
 		]);
+
+		// 🎯 Bilet çevrimi + Race puanı hook'u (cashout ile kazanılan bahis)
+		onBetSettled({ userId: updatedUser._id, amount: amountLimits, category: "originals" });
 
 		// Güncel kullanıcıyı frontend'e gönder
 		io.of("/general")

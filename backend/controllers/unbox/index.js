@@ -9,6 +9,7 @@ const Leaderboard = require("../../database/models/Leaderboard");
 const Rain = require("../../database/models/Rain");
 const BalanceTransaction = require("../../database/models/BalanceTransaction");
 const Setting = require("../../database/models/Setting");
+const { onBetSettled } = require("../../utils/wagerHooks");
 // Load utils
 const { socketRemoveAntiSpam } = require("../../utils/socket");
 const { settingGet } = require("../../utils/setting");
@@ -307,6 +308,9 @@ const unboxSendBetSocket = async (io, socket, user, data, callback) => {
 		let gamesDatabase = dataDatabase
 			.slice(3, 3 + unboxCount)
 			.map((game) => game.toObject());
+
+		// 🎯 Bilet çevrimi + Race puanı hook'u (kutu maliyeti = çevrim tutarı)
+		onBetSettled({ userId: user._id, amount: amountBetTotal, category: "originals" });
 
 		io.of("/general").emit("rain", { rain: dataDatabase[2] });
 

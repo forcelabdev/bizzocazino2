@@ -128,6 +128,17 @@ cron.schedule("* * * * *", () => {
 	);
 });
 
+// 🏁 Çevrim Turnuvası (Race): durum geçişleri + manuel katılımcı otomatik artışı (her dakika)
+const raceService = require("./services/raceService");
+cron.schedule("* * * * *", () => {
+	raceService.advanceTournamentStates().catch((err) =>
+		console.error("❌ Race durum güncelleme hatası:", err.message)
+	);
+	raceService.tickManualEntries().catch((err) =>
+		console.error("❌ Race manuel katılımcı artış hatası:", err.message)
+	);
+});
+
 // Set app port
 const PORT = process.env.SERVER_PORT || 5000;
 

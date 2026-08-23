@@ -8,6 +8,7 @@ const Rain = require("../../database/models/Rain");
 const Leaderboard = require("../../database/models/Leaderboard");
 const BalanceTransaction = require("../../database/models/BalanceTransaction");
 const { getActiveWalletIndex } = require("../../utils/wallet");
+const { onBetSettled } = require("../../utils/wagerHooks");
 const Setting = require("../../database/models/Setting");
 // Load utils
 const { socketRemoveAntiSpam } = require("../../utils/socket");
@@ -413,6 +414,9 @@ const rollGameComplete = async (io) => {
 					)
 					.lean()
 			);
+
+			// 🎯 Bilet çevrimi + Race puanı hook'u
+			onBetSettled({ userId: bet.user._id, amount: amountLimits, category: "originals" });
 
 			if (bet.user.affiliates.referrer && amountAffiliate > 0) {
 				promisesAffiliates.push(

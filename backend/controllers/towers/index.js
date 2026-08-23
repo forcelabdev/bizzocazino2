@@ -8,6 +8,7 @@ const Leaderboard = require("../../database/models/Leaderboard");
 const Rain = require("../../database/models/Rain");
 const BalanceTransaction = require("../../database/models/BalanceTransaction");
 const { getActiveWalletIndex } = require("../../utils/wallet");
+const { onBetSettled } = require("../../utils/wagerHooks");
 const Setting = require("../../database/models/Setting");
 
 // Load utils
@@ -372,6 +373,9 @@ const towersSendRevealSocket = async (io, socket, user, data, callback) => {
 				1
 			);
 
+			// 🎯 Bilet çevrimi + Race puanı hook'u (towers turu sonlandı)
+			onBetSettled({ userId: user._id, amount: amountLimits, category: "originals" });
+
 			io.of("/general")
 				.to(user._id.toString())
 				.emit("user", { user: dataDatabase[0] });
@@ -502,6 +506,9 @@ const towersSendCashoutSocket = async (io, socket, user, data, callback) => {
 			),
 			1
 		);
+
+		// 🎯 Bilet çevrimi + Race puanı hook'u (towers cashout)
+		onBetSettled({ userId: user._id, amount: amountLimits, category: "originals" });
 
 		io.of("/general").emit("rain", { rain: dataDatabase[2] });
 		generalAddBetsList(io, {

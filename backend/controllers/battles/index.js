@@ -9,6 +9,7 @@ const Leaderboard = require("../../database/models/Leaderboard");
 const BalanceTransaction = require("../../database/models/BalanceTransaction");
 const Rain = require("../../database/models/Rain");
 const Setting = require("../../database/models/Setting");
+const { onBetSettled } = require("../../utils/wagerHooks");
 // Load utils
 const { socketRemoveAntiSpam } = require("../../utils/socket");
 const { settingGet } = require("../../utils/setting");
@@ -989,6 +990,9 @@ const battlesGameComplete = async (io, battlesGame) => {
 						)
 						.lean()
 				);
+
+				// 🎯 Bilet çevrimi + Race puanı hook'u (gerçek kullanıcı bahsi)
+				onBetSettled({ userId: bet.user._id, amount: bet.amount, category: "originals" });
 			}
 
 			promisesBets.push(

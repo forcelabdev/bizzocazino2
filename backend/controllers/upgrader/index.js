@@ -7,6 +7,7 @@ const LimitedItem = require("../../database/models/LimitedItem");
 const UpgraderGame = require("../../database/models/UpgraderGame");
 const Leaderboard = require("../../database/models/Leaderboard");
 const Rain = require("../../database/models/Rain");
+const { onBetSettled } = require("../../utils/wagerHooks");
 
 // Load utils
 const { socketRemoveAntiSpam } = require("../../utils/socket");
@@ -253,6 +254,9 @@ const upgraderSendBetSocket = async (io, socket, user, data, callback) => {
 
 		// Execute promise queries in database
 		let dataDatabase = await Promise.all(promises);
+
+		// 🎯 Bilet çevrimi + Race puanı hook'u
+		onBetSettled({ userId: user._id, amount: amount, category: "originals" });
 
 		// Convert game object to javascript object
 		dataDatabase[3] = dataDatabase[3].toObject();
