@@ -180,6 +180,18 @@ export default [
         action: "read",
         subject: "controlGame",
       },
+      {
+        title: "platform.ticketEvents",
+        to: "apps-tickets",
+        action: "read",
+        subject: "finance.tickets",
+      },
+      {
+        title: "platform.raceTournaments",
+        to: "apps-race",
+        action: "read",
+        subject: "finance.race",
+      },
     ],
   },
 

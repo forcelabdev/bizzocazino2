@@ -4790,6 +4790,18 @@ router.get("/ticket-events/:id/tickets", checkPermission("finance.tickets.read")
 	res.json({ success: true, data: tickets });
 });
 
+router.get("/ticket-events/user-search", checkPermission("finance.tickets.manage"), async (req, res) => {
+	const q = String(req.query.q || "").trim();
+	if (q.length < 2) return res.json({ success: true, data: [] });
+	const users = await User.find({
+		$or: [
+			{ username: { $regex: q, $options: "i" } },
+			{ email: { $regex: q, $options: "i" } },
+		],
+	}).select("username email name").limit(15).lean();
+	res.json({ success: true, data: users });
+});
+
 router.post("/ticket-events/:id/manual-ticket", checkPermission("finance.tickets.manage"), async (req, res) => {
 	try {
 		const { userId, quantity } = req.body;

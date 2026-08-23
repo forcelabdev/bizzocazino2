@@ -618,7 +618,9 @@
 			"reloadBonus": "Reload Bonusu",
 			"callScenarios": "Çağrı Senaryoları",
 			"freeSpinBonus": "Freespin Bonusu",
-			"bankAccounts": "Banka Hesapları"
+			"bankAccounts": "Banka Hesapları",
+			"ticketEvents": "Bilet Etkinliği",
+			"raceTournaments": "Çevrim Turnuvası"
 		},
 	"paymentMethods": {
 		"title": "Ödeme Yöntem Yönetimi",
@@ -861,7 +863,7 @@
 		"title": "Oyun Geçmişi",
 		"subtitle": "Kullanıcının tüm bahis ve oyun işlemleri",
 		"userCode": "Kullanıcı Kodu",
-		"vendor": "Sağlayıc��",
+		"vendor": "Sağlayıc����",
 		"game": "Oyun Adı",
 		"roundId": "Round ID",
 		"currency": "Para Birimi",
