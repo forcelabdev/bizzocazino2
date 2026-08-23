@@ -54,12 +54,63 @@ const isWithinDateRange = createdAt => {
 const resetDateFilter = () => {
   dateFrom.value = null
   dateTo.value = null
+  methodFilter.value = []
 }
 
-const filteredDeposits = computed(() => deposits.value.filter(item => isWithinDateRange(item.createdAt)))
-const filteredWithdrawals = computed(() => withdrawals.value.filter(item => isWithinDateRange(item.createdAt)))
-const filteredManualBonuses = computed(() => manualBonuses.value.filter(item => isWithinDateRange(item.createdAt)))
-const filteredShopPurchases = computed(() => shopPurchases.value.filter(item => isWithinDateRange(item.createdAt)))
+// 🎯 Yöntem filtresi (client-side; sekme değiştikçe seçim sıfırlanır)
+// Her sekmede "yöntem" farklı bir alana karşılık gelir: yatırım/çekimde
+// ödeme yöntemi, bonus geçmişinde bonus adı, mağazada ürün adı.
+const methodFilter = ref([])
+
+const getMethodValue = (tab, item) => {
+  if (tab === "deposits" || tab === "withdrawals") return item.methodName || item.method || "-"
+  if (tab === "bonus-history") return item.bonusName || item.category || "-"
+  if (tab === "shop") return item.title || "-"
+
+  return "-"
+}
+
+const rawListForTab = tab => {
+  if (tab === "deposits") return deposits.value
+  if (tab === "withdrawals") return withdrawals.value
+  if (tab === "bonus-history") return manualBonuses.value
+  if (tab === "shop") return shopPurchases.value
+
+  return []
+}
+
+// 🎯 Aktif sekmedeki verilerden benzersiz yöntem listesi (tarih filtresinden
+// bağımsız olarak tüm kayıtlar üzerinden hesaplanır, seçenekler küçülmesin)
+const availableMethods = computed(() => {
+  const values = rawListForTab(activeTab.value).map(item => getMethodValue(activeTab.value, item))
+
+  return [...new Set(values)].filter(Boolean).sort((a, b) => a.localeCompare(b, "tr"))
+})
+
+const methodLabel = computed(() => {
+  if (activeTab.value === "bonus-history") return t("manualAdjustments.bonusName")
+  if (activeTab.value === "shop") return t("title")
+
+  return t("methodOrAddress")
+})
+
+const isMethodMatch = item => {
+  if (!methodFilter.value.length) return true
+
+  return methodFilter.value.includes(getMethodValue(activeTab.value, item))
+}
+
+const resetMethodFilter = () => {
+  methodFilter.value = []
+}
+
+// Sekme değişince yöntem seçenekleri de değiştiği için seçimi sıfırla
+watch(activeTab, resetMethodFilter)
+
+const filteredDeposits = computed(() => deposits.value.filter(item => isWithinDateRange(item.createdAt) && isMethodMatch(item)))
+const filteredWithdrawals = computed(() => withdrawals.value.filter(item => isWithinDateRange(item.createdAt) && isMethodMatch(item)))
+const filteredManualBonuses = computed(() => manualBonuses.value.filter(item => isWithinDateRange(item.createdAt) && isMethodMatch(item)))
+const filteredShopPurchases = computed(() => shopPurchases.value.filter(item => isWithinDateRange(item.createdAt) && isMethodMatch(item)))
 
 // 📤 Aktif alt sekmenin (yatırım/çekim/bonus/mağaza) filtrelenmiş verisini xlsx olarak dışa aktar
 const isExporting = ref(false)
@@ -292,7 +343,24 @@ watch(
         <VCol
           cols="12"
           sm="4"
-          class="d-flex gap-2 flex-wrap"
+        >
+          <!-- 🎯 Yöntem filtresi: aktif sekmedeki kayıtlardan çıkarılan
+               benzersiz değerler arasından çoklu seçim yapılabilir -->
+          <VSelect
+            v-model="methodFilter"
+            :items="availableMethods"
+            :label="methodLabel"
+            multiple
+            chips
+            closable-chips
+            clearable
+            density="comfortable"
+          />
+        </VCol>
+        <VCol
+          cols="12"
+          sm="8"
+          class="d-flex gap-2 flex-wrap align-center"
         >
           <VBtn
             variant="tonal"
