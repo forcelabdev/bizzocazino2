@@ -14,6 +14,7 @@ import vuetify from "vite-plugin-vuetify";
 import DefineOptions from "unplugin-vue-define-options/vite";
 
 // https://vitejs.dev/config/
+// (dev proxy config reload trigger)
 // Backend route prefixes that are mounted at the API server root (see
 // backend/routes/index.js). The admin dev server proxies these to the local
 // backend so the browser only ever talks to a single origin (no CORS).

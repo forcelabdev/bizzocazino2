@@ -5819,69 +5819,6 @@ router.get(
 						},
 					},
 				]),
-
-				// 🎁 Bugün (TR günü) verilen bonus toplamı (AdminManualAdjustment)
-				AdminManualAdjustment.aggregate([
-					{
-						$match: {
-							kind: "bonus",
-							direction: "credit",
-							createdAt: { $gte: todayStartTR },
-						},
-					},
-					{ $group: { _id: null, total: { $sum: "$appliedAmount" } } },
-				]),
-
-				// 🎰 Bugün verilen freespin adedi + yaklaşık kazanç
-				// (bkz. "Kapsam Dışı / Varsayımlar": provider'dan freespin bayrağı
-				// gelmediği için grant süresi + oyun eşleşmesiyle yaklaşık hesaplanır)
-				FreeSpinGrant.aggregate([
-					{ $match: { createdAt: { $gte: todayStartTR } } },
-					{
-						$lookup: {
-							from: "transactions",
-							let: {
-								uid: { $toString: "$targetUser" },
-								gcode: "$gameCode",
-								gfrom: "$createdAt",
-								gto: "$expiresAt",
-							},
-							pipeline: [
-								{
-									$match: {
-										$expr: {
-											$and: [
-												{ $eq: ["$user_code", "$$uid"] },
-												{ $eq: ["$game_code", "$$gcode"] },
-												{ $gte: ["$created_at", "$$gfrom"] },
-												{ $lte: ["$created_at", "$$gto"] },
-											],
-										},
-									},
-								},
-								{
-									$group: {
-										_id: null,
-										winSum: { $sum: { $ifNull: ["$win_money", 0] } },
-									},
-								},
-							],
-							as: "playedWin",
-						},
-					},
-					{
-						$group: {
-							_id: null,
-							totalGrants: { $sum: 1 },
-							totalSpinCount: { $sum: { $ifNull: ["$spinCount", 0] } },
-							totalWinEstimate: {
-								$sum: {
-									$ifNull: [{ $arrayElemAt: ["$playedWin.winSum", 0] }, 0],
-								},
-							},
-						},
-					},
-					]),
 				]);
 
 			// 🎁 Bugün (TR günü) verilen bonus toplamı (AdminManualAdjustment)
@@ -10440,7 +10377,7 @@ router.post(
 	},
 );
 
-// ════��══════════════════════════════════════════════════════════════════════
+// ════��════════════════════════════════════��═════════════════════════════════
 // Provider Ayarları (SiteSettings içinde)
 // ═════════════════════════════════════════��═════════════════════════════════
 
@@ -10691,7 +10628,7 @@ router.put(
 // E-posta Şablonları (SiteSettings içinde)
 // SMTP credential bilgileri backend/.env üzerinden okunur, sadece şablonlar
 // ve gönderici görünen ad/adres burada yönetilir.
-// ═══════════���═══════════════════════════════════���══════��═���══════════════════
+// ═══════════���═══════════════════════════════════���══════��═���══════��═══════════
 
 const buildEmailTemplatesPayload = (siteSettings) => {
 	const tpl = (siteSettings && siteSettings.emailTemplates) || {};
@@ -10928,7 +10865,7 @@ router.post(
 
 // ═══════════════════════════════════════════���═══════════════════════════════
 // Forcelab Finance Ayarları (SiteSettings içinde)
-// ════���══════════════════════════════════════════════════════════════════════
+// ════���════════════════════════════��═════════════════════════════════════════
 
 router.get(
 	"/forcelab-finance/settings",
