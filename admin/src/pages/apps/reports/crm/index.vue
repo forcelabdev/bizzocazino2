@@ -307,9 +307,12 @@ const exportMembers = async () => {
     const rows = (res.data.data || []).map(m => ({
       "Kullanıcı Adı": m.username || "",
       "Ad Soyad": m.name || "",
+      "E-posta": m.email || "",
+      Telefon: m.phone || "",
       Partner: m.partnerName || "",
       "VIP Seviyesi": m.vipLevelName || "",
       Ülke: m.country?.name || "",
+      "Kayıt Tarihi": m.registeredAt ? new Date(m.registeredAt).toLocaleDateString("tr-TR") : "",
       "Toplam Yatırım": m.totalDeposit || 0,
       "Yatırım Adedi": m.depositCount || 0,
       "Toplam Çekim": m.totalWithdrawal || 0,
@@ -330,9 +333,10 @@ const exportMembers = async () => {
     const worksheet = XLSX.utils.json_to_sheet(rows)
 
     worksheet["!cols"] = [
-      { wch: 20 }, { wch: 24 }, { wch: 18 }, { wch: 14 }, { wch: 14 }, { wch: 16 }, { wch: 14 },
-      { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 },
-      { wch: 14 }, { wch: 14 }, { wch: 16 }, { wch: 14 }, { wch: 18 }, { wch: 24 },
+      { wch: 20 }, { wch: 24 }, { wch: 28 }, { wch: 16 }, { wch: 18 }, { wch: 14 }, { wch: 14 },
+      { wch: 14 }, { wch: 16 }, { wch: 14 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 },
+      { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 14 }, { wch: 14 }, { wch: 16 }, { wch: 14 },
+      { wch: 18 }, { wch: 24 },
     ]
 
     const workbook = XLSX.utils.book_new()

@@ -564,9 +564,11 @@ const applyFilters = (
 	if (trimmedSearch) {
 		filtered = filtered.filter(
 			(r) =>
-				r.username?.toLowerCase().includes(trimmedSearch) ||
-				(r.name || "").toLowerCase().includes(trimmedSearch) ||
-				(r.partnerName || "").toLowerCase().includes(trimmedSearch),
+					r.username?.toLowerCase().includes(trimmedSearch) ||
+					(r.name || "").toLowerCase().includes(trimmedSearch) ||
+					(r.email || "").toLowerCase().includes(trimmedSearch) ||
+					(r.phone || "").toLowerCase().includes(trimmedSearch) ||
+					(r.partnerName || "").toLowerCase().includes(trimmedSearch),
 		);
 	}
 
