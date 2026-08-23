@@ -48,7 +48,9 @@ const {
 	DEFAULT_METHOD_FLAGS: GALAXY_PAY_DEFAULT_METHOD_FLAGS,
 } = require("../utils/galaxyPay");
 const pockersGamesRoute = require("./pokerApi");
+const raceApiRoute = require("./raceApi");
 router.use("/poker_api", pockersGamesRoute);
+router.use("/api/race", raceApiRoute);
 router.use("/bonus-settings", bonusSettingRoutes);
 router.use("/promo-codes", promoCodeRoutes);
 router.use("/payment/pix", pixRoutes);
