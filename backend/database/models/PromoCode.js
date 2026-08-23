@@ -19,6 +19,28 @@ const promoCodeSchema = new mongoose.Schema({
   applyWageringLock: { type: Boolean, default: false },
   wageringMultiplier: { type: Number, default: 0, min: 0 },
   minWithdraw: { type: Number, default: 0, min: 0 },
+  // 🎯 Segment/koşul motoru: mevcut levelMin/minLastDeposit alanlarına EK
+  // olarak, hepsi AND ile birleşen daha zengin koşullar (bkz. promoCodeService.js).
+  conditions: {
+    type: [{
+      metric: {
+        type: String,
+        enum: ["deposit", "withdraw", "membershipAgeDays", "depositSinceDate"],
+        required: true,
+      },
+      operator: {
+        type: String,
+        enum: ["gte", "lte", "eq", "gt", "lt"],
+        required: true,
+      },
+      value: { type: Number, required: true },
+      // dateFrom/dateTo: "deposit"/"withdraw" metrikleri için tarih aralığı.
+      // dateFrom dolu + dateTo boş = dateFrom'dan bugüne kadar.
+      dateFrom: { type: Date, default: null },
+      dateTo: { type: Date, default: null },
+    }],
+    default: [],
+  },
   updatedAt: { type: Date, default: Date.now },
   createdAt: { type: Date, default: Date.now },
 });

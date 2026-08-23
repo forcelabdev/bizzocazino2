@@ -4,6 +4,7 @@ const PromoCodeClaim = require("../database/models/PromoCodeClaim");
 const User = require("../database/models/User");
 const ForcelabFinanceTransaction = require("../database/models/ForcelabFinanceTransaction");
 const BalanceTransaction = require("../database/models/BalanceTransaction");
+const { evaluateConditions } = require("../utils/promoConditionEngine");
 
 class PromoCodeError extends Error {
 	constructor(code, message, status = 400) { super(message); this.code = code; this.status = status; }
@@ -46,6 +47,22 @@ const claimPromoCode = async ({ code, userId }) => {
 				if (!deposit || lastDepositAmount < promo.minLastDeposit) throw new PromoCodeError("DEPOSIT_REQUIRED", `Son onaylı yatırım en az ${promo.minLastDeposit} ₺ olmalıdır.`);
 			}
 
+			// 🎯 Segment/koşul motoru: PromoCode.conditions içindeki tüm koşullar (AND).
+			// Not: bu sorgular session dışında (aggregate session desteklemez) ama
+			// transaction commit edilmeden hesaplanan sonuçlar sadece okunur, veri
+			// tutarlılığını bozmaz.
+			let evaluatedConditions = [];
+			if (Array.isArray(promo.conditions) && promo.conditions.length) {
+				const evaluation = await evaluateConditions(user, promo.conditions);
+				evaluatedConditions = evaluation.results;
+				if (!evaluation.allPassed) {
+					throw new PromoCodeError(
+						"CONDITION_NOT_MET",
+						`Koşul karşılanmadı: ${evaluation.firstFailed.label} (mevcut değer: ${evaluation.firstFailed.observedValue})`,
+					);
+				}
+			}
+
 			user.balance = Number(user.balance || 0) + promo.reward;
 			if (promo.applyWageringLock) {
 				user.limits.betToWithdraw = Number(user.limits.betToWithdraw || 0) + (promo.reward * promo.wageringMultiplier);
@@ -70,6 +87,7 @@ const claimPromoCode = async ({ code, userId }) => {
 					wageringMultiplier: promo.wageringMultiplier,
 					minWithdraw: promo.minWithdraw,
 				},
+				evaluatedConditions,
 			}], { session });
 			await BalanceTransaction.create([{ amount: promo.reward, type: "promoCodeClaim", user: user._id, state: "completed" }], { session });
 			result = {

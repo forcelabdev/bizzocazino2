@@ -14,8 +14,42 @@ const formValid = ref(false)
 const refForm = ref()
 const searchQuery = ref('')
 const saveError = ref('')
-const emptyPromo = () => ({ code: '', reward: 0, levelMin: 0, isActive: true, startsAt: '', expiresAt: '', affiliateCodes: [], redeemptionsMax: 0, perUserLimit: 1, minLastDeposit: 0, applyWageringLock: false, wageringMultiplier: 0, minWithdraw: 0 })
+const emptyPromo = () => ({ code: '', reward: 0, levelMin: 0, isActive: true, startsAt: '', expiresAt: '', affiliateCodes: [], redeemptionsMax: 0, perUserLimit: 1, minLastDeposit: 0, applyWageringLock: false, wageringMultiplier: 0, minWithdraw: 0, conditions: [] })
 const promoToEdit = ref(emptyPromo())
+
+// 🎯 Segment/koşul motoru (bkz. backend/utils/promoConditionEngine.js)
+const CONDITION_METRIC_OPTIONS = [
+  { title: 'Yatırım tutarı (₺)', value: 'deposit' },
+  { title: 'Çekim tutarı (₺)', value: 'withdraw' },
+  { title: 'Üyelik yaşı (gün)', value: 'membershipAgeDays' },
+  { title: 'Belirli tarihten itibaren yatırım (₺)', value: 'depositSinceDate' },
+]
+const CONDITION_OPERATOR_OPTIONS = [
+  { title: 'büyük eşit (≥)', value: 'gte' },
+  { title: 'küçük eşit (≤)', value: 'lte' },
+  { title: 'eşit (=)', value: 'eq' },
+  { title: 'büyük (>)', value: 'gt' },
+  { title: 'küçük (<)', value: 'lt' },
+]
+const DATE_METRICS = ['deposit', 'withdraw', 'depositSinceDate']
+const QUICK_RANGE_OPTIONS = [
+  { title: 'Belirli tarihten itibaren', value: 'custom' },
+  { title: 'Son 7 gün', value: 7 },
+  { title: 'Son 14 gün', value: 14 },
+  { title: 'Son 30 gün', value: 30 },
+]
+
+const addCondition = () => {
+  promoToEdit.value.conditions.push({ metric: 'deposit', operator: 'gte', value: 0, dateFrom: '', dateTo: '', quickRange: 'custom' })
+}
+const removeCondition = index => { promoToEdit.value.conditions.splice(index, 1) }
+const applyQuickRange = condition => {
+  if (condition.quickRange === 'custom') return
+  const days = Number(condition.quickRange)
+  const from = new Date(Date.now() - days * 24 * 60 * 60 * 1000)
+  condition.dateFrom = from.toISOString().slice(0, 10)
+  condition.dateTo = ''
+}
 
 const nonNegativeValidator = value => (value === '' || value === null || Number(value) >= 0) || 'Negatif değer girilemez.'
 const positiveRewardValidator = value => Number(value) > 0 || 'Ödül tutarı sıfırdan büyük olmalıdır.'
@@ -42,9 +76,20 @@ const fetchData = async () => {
   } catch (err) { console.error('Promosyon verileri alınamadı:', err) }
 }
 const localDate = value => value ? new Date(new Date(value).getTime() - new Date(value).getTimezoneOffset() * 60000).toISOString().slice(0, 16) : ''
+const localDateOnly = value => value ? new Date(value).toISOString().slice(0, 10) : ''
+const conditionsFromApi = conditions => (conditions || []).map(condition => ({
+  metric: condition.metric,
+  operator: condition.operator,
+  value: condition.value,
+  dateFrom: localDateOnly(condition.dateFrom),
+  dateTo: localDateOnly(condition.dateTo),
+  quickRange: 'custom',
+}))
 const openDrawer = (item = null) => {
   saveError.value = ''
-  promoToEdit.value = item ? { ...emptyPromo(), ...item, startsAt: localDate(item.startsAt), expiresAt: localDate(item.expiresAt), affiliateCodes: [...(item.affiliateCodes || [])] } : emptyPromo()
+  promoToEdit.value = item
+    ? { ...emptyPromo(), ...item, startsAt: localDate(item.startsAt), expiresAt: localDate(item.expiresAt), affiliateCodes: [...(item.affiliateCodes || [])], conditions: conditionsFromApi(item.conditions) }
+    : emptyPromo()
   isDrawerOpen.value = true
 }
 const closeDrawer = () => { isDrawerOpen.value = false; saveError.value = ''; nextTick(() => { refForm.value?.reset(); refForm.value?.resetValidation() }) }
@@ -52,7 +97,10 @@ const onSubmit = () => refForm.value?.validate().then(async ({ valid }) => {
   if (!valid) return
   saveError.value = ''
   try {
-    const item = promoToEdit.value
+    const item = {
+      ...promoToEdit.value,
+      conditions: promoToEdit.value.conditions.map(({ metric, operator, value, dateFrom, dateTo }) => ({ metric, operator, value: Number(value), dateFrom: dateFrom || null, dateTo: dateTo || null })),
+    }
     if (item._id) await axios.put(`/admin/promocodes/${item._id}`, item)
     else await axios.post('/admin/promocodes', item)
     closeDrawer(); await fetchData()
@@ -78,11 +126,15 @@ onMounted(fetchData)
     <VCard>
       <VDataTable :items="filteredPromocodes" :headers="[
         { title: t('code'), key: 'code' }, { title: t('reward'), key: 'reward' }, { title: 'Durum', key: 'isActive' },
-        { title: 'Affiliate', key: 'affiliateCodes' }, { title: t('maxUsage'), key: 'redeemptionsMax' },
+        { title: 'Affiliate', key: 'affiliateCodes' }, { title: 'Segment', key: 'conditions' }, { title: t('maxUsage'), key: 'redeemptionsMax' },
         { title: t('totalUsage'), key: 'redeemptionsTotal' }, { title: t('actions'), key: 'actions', sortable: false },
       ]">
         <template #item.isActive="{ item }"><VChip :color="item.raw.isActive ? 'success' : 'secondary'" size="small">{{ item.raw.isActive ? 'Aktif' : 'Pasif' }}</VChip></template>
         <template #item.affiliateCodes="{ item }">{{ item.raw.affiliateCodes?.length ? `${item.raw.affiliateCodes.length} kod` : 'Tümü' }}</template>
+        <template #item.conditions="{ item }">
+          <VChip v-if="item.raw.conditions?.length" color="info" size="small">{{ item.raw.conditions.length }} koşul</VChip>
+          <span v-else class="text-medium-emphasis">—</span>
+        </template>
         <template #item.actions="{ item }">
           <IconBtn @click="openDrawer(item.raw)"><VIcon icon="tabler-edit" /></IconBtn>
           <IconBtn @click="deletePromocode(item.raw._id)"><VIcon icon="tabler-trash" /></IconBtn>
@@ -104,6 +156,47 @@ onMounted(fetchData)
           <VCol cols="12" md="6"><AppTextField v-model="promoToEdit.redeemptionsMax" label="Toplam kullanım limiti (0 = sınırsız)" type="number" min="0" /></VCol>
           <VCol cols="12" md="6"><AppTextField v-model="promoToEdit.perUserLimit" label="Kullanıcı başı limit" type="number" min="1" /></VCol>
           <VCol cols="12"><AppTextField v-model="promoToEdit.minLastDeposit" label="Minimum son onaylı yatırım (₺)" hint="0 girilirse yatırım şartı uygulanmaz." persistent-hint type="number" min="0" /></VCol>
+
+          <VCol cols="12">
+            <VDivider class="mb-4" />
+            <div class="d-flex justify-space-between align-center mb-3">
+              <span class="text-subtitle-1">Segment Koşulları</span>
+              <VBtn size="small" variant="tonal" prepend-icon="tabler-plus" @click="addCondition">Koşul Ekle</VBtn>
+            </div>
+            <div v-if="!promoToEdit.conditions.length" class="text-body-2 text-medium-emphasis mb-2">
+              Koşul eklenmediyse sadece yukarıdaki temel kurallar uygulanır. Eklenen tüm koşullar VE (AND) ile birleştirilir.
+            </div>
+            <VCard v-for="(condition, index) in promoToEdit.conditions" :key="index" variant="tonal" class="mb-3">
+              <VCardText>
+                <VRow dense>
+                  <VCol cols="12" md="4">
+                    <VSelect v-model="condition.metric" :items="CONDITION_METRIC_OPTIONS" label="Metrik" density="compact" />
+                  </VCol>
+                  <VCol cols="12" md="3">
+                    <VSelect v-model="condition.operator" :items="CONDITION_OPERATOR_OPTIONS" label="Operatör" density="compact" />
+                  </VCol>
+                  <VCol cols="12" md="4">
+                    <AppTextField v-model="condition.value" label="Değer" type="number" density="compact" />
+                  </VCol>
+                  <VCol cols="12" md="1" class="d-flex align-center justify-end">
+                    <IconBtn @click="removeCondition(index)"><VIcon icon="tabler-trash" /></IconBtn>
+                  </VCol>
+                  <template v-if="DATE_METRICS.includes(condition.metric)">
+                    <VCol cols="12" md="4">
+                      <VSelect v-model="condition.quickRange" :items="QUICK_RANGE_OPTIONS" label="Tarih aralığı" density="compact" @update:model-value="applyQuickRange(condition)" />
+                    </VCol>
+                    <VCol cols="12" md="4">
+                      <AppTextField v-model="condition.dateFrom" label="Başlangıç tarihi" type="date" density="compact" :disabled="condition.quickRange !== 'custom'" />
+                    </VCol>
+                    <VCol cols="12" md="4">
+                      <AppTextField v-model="condition.dateTo" label="Bitiş tarihi (boş = bugüne kadar)" type="date" density="compact" :disabled="condition.quickRange !== 'custom'" />
+                    </VCol>
+                  </template>
+                </VRow>
+              </VCardText>
+            </VCard>
+          </VCol>
+
           <VCol cols="12"><VDivider class="mb-4" /><VSwitch v-model="promoToEdit.applyWageringLock" label="Çevrim şartı uygula" color="primary" /></VCol>
           <VCol v-if="promoToEdit.applyWageringLock" cols="12" md="6"><AppTextField v-model="promoToEdit.wageringMultiplier" label="Çevrim katı" type="number" min="0" /></VCol>
           <VCol v-if="promoToEdit.applyWageringLock" cols="12" md="6"><AppTextField v-model="promoToEdit.minWithdraw" label="Minimum çekim (₺)" type="number" min="0" /></VCol>

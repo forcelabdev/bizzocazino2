@@ -2398,6 +2398,13 @@ router.delete(
 	manualBonusCategoryController.deleteCategory,
 );
 
+// 🎯 Toplu Bonus Raporu: bir bonus adına (kategoriye) ait tüm eklemeleri listeler.
+router.get(
+	"/manual-bonus-categories/:name/report",
+	checkPermission(["finance.manualAdjustments.manage", "finance.promo.manage"]),
+	manualBonusCategoryController.getCategoryReport,
+);
+
 // Kayıp Bonusu (Loss Bonus)
 router.get(
 	"/loss-bonus/settings",
@@ -4776,6 +4783,34 @@ router.delete("/leaderboards/:id", checkPermission("users.manage"), async (req, 
 });
 
 // 7. PROMOCODE
+const PROMO_CONDITION_METRICS = ["deposit", "withdraw", "membershipAgeDays", "depositSinceDate"];
+const PROMO_CONDITION_OPERATORS = ["gte", "lte", "eq", "gt", "lt"];
+
+// 🎯 Segment/koşul motoru: gönderilen koşul satırlarını doğrular ve normalize eder.
+const normalizePromoConditions = (rawConditions) => {
+	if (!Array.isArray(rawConditions)) return [];
+
+	return rawConditions
+		.filter((condition) => condition && condition.metric)
+		.map((condition) => {
+			const metric = String(condition.metric);
+			const operator = String(condition.operator || "gte");
+			const value = Number(condition.value);
+
+			if (!PROMO_CONDITION_METRICS.includes(metric)) throw new Error("INVALID_CONDITION_METRIC");
+			if (!PROMO_CONDITION_OPERATORS.includes(operator)) throw new Error("INVALID_CONDITION_OPERATOR");
+			if (!Number.isFinite(value)) throw new Error("INVALID_CONDITION_VALUE");
+
+			return {
+				metric,
+				operator,
+				value,
+				dateFrom: condition.dateFrom ? new Date(condition.dateFrom) : null,
+				dateTo: condition.dateTo ? new Date(condition.dateTo) : null,
+			};
+		});
+};
+
 const normalizePromoPayload = (body = {}) => {
 	const startsAt = body.startsAt ? new Date(body.startsAt) : null;
 	const expiresAt = body.expiresAt ? new Date(body.expiresAt) : null;
@@ -4791,6 +4826,7 @@ const normalizePromoPayload = (body = {}) => {
 	const minLastDeposit = Math.max(0, Number(body.minLastDeposit) || 0);
 	const minWithdraw = Math.max(0, Number(body.minWithdraw) || 0);
 	if (minLastDeposit < 0 || minWithdraw < 0 || reward < 0) throw new Error("INVALID_PROMO");
+	const conditions = normalizePromoConditions(body.conditions);
 	return {
 		code: String(body.code).trim().toUpperCase(), reward,
 		levelMin: Math.max(0, Number(body.levelMin) || 0), isActive: body.isActive !== false,
@@ -4801,7 +4837,9 @@ const normalizePromoPayload = (body = {}) => {
 		minLastDeposit,
 		applyWageringLock,
 		wageringMultiplier,
-		minWithdraw, updatedAt: new Date(),
+		minWithdraw,
+		conditions,
+		updatedAt: new Date(),
 	};
 };
 
@@ -4815,6 +4853,9 @@ const PROMO_VALIDATION_MESSAGES = {
 	INVALID_DATE_RANGE: "Bitiş tarihi başlangıç tarihinden sonra olmalıdır.",
 	INVALID_USER_LIMIT: "Kullanıcı başı limit, toplam kullanım limitinden büyük olamaz.",
 	INVALID_WAGERING_MULTIPLIER: "Çevrim şartı açıkken çevrim katı sıfırdan büyük olmalıdır.",
+	INVALID_CONDITION_METRIC: "Geçersiz koşul metriği seçildi.",
+	INVALID_CONDITION_OPERATOR: "Geçersiz koşul operatörü seçildi.",
+	INVALID_CONDITION_VALUE: "Koşul değeri sayısal ve geçerli olmalıdır.",
 };
 
 const resolvePromoErrorMessage = (err, fallback) => PROMO_VALIDATION_MESSAGES[err?.message] || fallback;

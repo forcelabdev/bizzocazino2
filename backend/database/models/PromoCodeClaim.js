@@ -15,6 +15,18 @@ const promoCodeClaimSchema = new mongoose.Schema({
 		wageringMultiplier: { type: Number, default: 0 },
 		minWithdraw: { type: Number, default: 0 },
 	},
+	// 🎯 Segment/koşul motoru (PromoCode.conditions) değerlendirme anlık görüntüsü.
+	// Her koşulun karşılanıp karşılanmadığı ve o anki gözlemlenen değer saklanır.
+	evaluatedConditions: {
+		type: [{
+			metric: { type: String },
+			operator: { type: String },
+			value: { type: Number },
+			observedValue: { type: Number },
+			passed: { type: Boolean },
+		}],
+		default: [],
+	},
 	createdAt: { type: Date, default: Date.now },
 });
 
