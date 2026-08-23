@@ -79,6 +79,18 @@ const formatMoney = value => {
   return `₺${number.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
+const formatDate = value => {
+  if (!value) return "-"
+
+  return new Date(value).toLocaleString("tr-TR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  })
+}
+
 const fetchSummary = async () => {
   summaryLoading.value = true
   try {
@@ -372,19 +384,29 @@ onMounted(refreshAll)
     <VAlert
       variant="tonal"
       color="success"
-      class="mb-3 d-flex align-center justify-space-between"
+      class="mb-3"
     >
-      <span class="font-weight-medium">Kalan Agent Bakiyesi</span>
-      <span class="text-h6 text-success">{{ formatMoney(summary?.remainingAgentBalance) }}</span>
+      <div class="d-flex flex-wrap align-center justify-space-between gap-2">
+        <span class="font-weight-medium">Kalan Agent Bakiyesi</span>
+        <span class="text-h6 text-success">{{ formatMoney(summary?.remainingAgentBalance) }}</span>
+      </div>
+      <p class="text-caption text-medium-emphasis mb-0 mt-1">
+        Başlangıç: {{ formatMoney(summary?.settings?.agentBalanceInitial) }} · {{ formatDate(summary?.settings?.agentBalanceOriginAt) }} tarihinden sonraki Filux + xPayment yatırımları düşülmüştür.
+      </p>
     </VAlert>
 
     <VAlert
       variant="tonal"
       color="warning"
-      class="mb-6 d-flex align-center justify-space-between"
+      class="mb-6"
     >
-      <span class="font-weight-medium">Kalan Bonus Bakiyesi</span>
-      <span class="text-h6 text-warning">{{ formatMoney(summary?.remainingBonusBalance) }}</span>
+      <div class="d-flex flex-wrap align-center justify-space-between gap-2">
+        <span class="font-weight-medium">Kalan Bonus Bakiyesi</span>
+        <span class="text-h6 text-warning">{{ formatMoney(summary?.remainingBonusBalance) }}</span>
+      </div>
+      <p class="text-caption text-medium-emphasis mb-0 mt-1">
+        Başlangıç: {{ formatMoney(summary?.settings?.bonusBalanceInitial) }} · {{ formatDate(summary?.settings?.bonusBalanceOriginAt) }} tarihinden sonraki eklenen bonuslar düşülmüştür.
+      </p>
     </VAlert>
 
     <VCard>
