@@ -314,6 +314,19 @@ const getSegmentUsers = async (key, { search = "", page = 1, limit = 20 } = {}) 
 	matched.sort((a, b) => (a.user.username || "").localeCompare(b.user.username || ""));
 
 	const total = matched.length;
+
+	// limit = -1 (Excel dışa aktarımı gibi) tüm eşleşen kayıtları, sayfalama
+	// yapmadan döndürür.
+	if (Number(limit) === -1) {
+		return {
+			users: matched.map(formatUserListItem),
+			total,
+			page: 1,
+			limit: total,
+			totalPages: 1,
+		};
+	}
+
 	const safeLimit = Math.min(Math.max(Number(limit) || 20, 1), 100);
 	const safePage = Math.max(Number(page) || 1, 1);
 	const startIndex = (safePage - 1) * safeLimit;
