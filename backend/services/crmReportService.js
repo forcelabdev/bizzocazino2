@@ -421,7 +421,7 @@ const buildMemberRecords = async ({ startDate, endDate } = {}) => {
 		adminRole: { $exists: false },
 	})
 		.select(
-			"_id username name affiliates wallets createdAt xp country tags",
+			"_id username name local phone affiliates wallets createdAt xp country tags",
 		)
 		.lean();
 
@@ -465,6 +465,8 @@ const buildMemberRecords = async ({ startDate, endDate } = {}) => {
 			userId: uid,
 			username: u.username,
 			name: u.name || null,
+			email: u.local?.email || null,
+			phone: u.phone || null,
 			partnerName: redeemedCode
 				? codeToPartner[redeemedCode] || redeemedCode
 				: null,
