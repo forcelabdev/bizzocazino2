@@ -1,5 +1,6 @@
 const axios = require("axios");
 const SiteSettings = require("../database/models/SiteSettings");
+const Transaction = require("../database/models/Transaction");
 
 const DEFAULT_ADMIN_API_SETTINGS = {
 	betinoviReports: {
@@ -634,6 +635,77 @@ const getControlGameVendors = async () => {
 };
 
 /**
+ * Vendor API (GetCurrentPlayers) bazen aynı userCode için birden fazla satır
+ * döner: kullanıcı bir oyundan çıkıp başka bir oyuna girdiğinde eski oturum
+ * satırı hemen düşmeyebiliyor, bu da panelde "aynı oyuncu 2 kez, biri eski
+ * oyunda kalmış" görünümüne yol açıyor. Burada userCode başına SADECE tek
+ * satır bırakılır: o kullanıcının `transactions` koleksiyonundaki en güncel
+ * (created_at DESC) game_code'una eşleşen satır "gerçek/güncel" sayılır.
+ * Eşleşme bulunamazsa (örn. transaction'lar henüz yazılmadıysa) o kullanıcı
+ * için vendor listesindeki ilk satır kullanılır; asla iki satır birden
+ * bırakılmaz.
+ */
+const dedupeCurrentPlayersByLatestTransaction = async (players) => {
+	if (!Array.isArray(players) || players.length < 2) return players;
+
+	const byUserCode = new Map();
+	for (const player of players) {
+		const code = player?.userCode;
+		if (!code) continue;
+		if (!byUserCode.has(code)) byUserCode.set(code, []);
+		byUserCode.get(code).push(player);
+	}
+
+	const duplicateUserCodes = [...byUserCode.entries()]
+		.filter(([, rows]) => rows.length > 1)
+		.map(([code]) => code);
+
+	if (!duplicateUserCodes.length) return players;
+
+	const latestGameByUserCode = new Map();
+	await Promise.all(
+		duplicateUserCodes.map(async (userCode) => {
+			try {
+				const latestTxn = await Transaction.findOne({ user_code: userCode })
+					.sort({ created_at: -1 })
+					.select("game_code")
+					.lean();
+				if (latestTxn?.game_code) {
+					latestGameByUserCode.set(userCode, latestTxn.game_code);
+				}
+			} catch {
+				// Sorgu başarısız olursa bu kullanıcı için fallback (ilk satır) kullanılır.
+			}
+		}),
+	);
+
+	const seenUserCodes = new Set();
+	const deduped = [];
+	for (const player of players) {
+		const code = player?.userCode;
+		if (!code) {
+			deduped.push(player);
+			continue;
+		}
+		if (seenUserCodes.has(code)) continue;
+
+		const rows = byUserCode.get(code);
+		if (rows.length > 1) {
+			const latestGameCode = latestGameByUserCode.get(code);
+			const matched = latestGameCode
+				? rows.find((row) => row.gameCode === latestGameCode)
+				: null;
+			deduped.push(matched || rows[0]);
+		} else {
+			deduped.push(player);
+		}
+		seenUserCodes.add(code);
+	}
+
+	return deduped;
+};
+
+/**
  * "Akıllı kombinasyon": GetCurrentPlayers'tan gelen oyuncu listesini döner,
  * hasPendingCall === true olan oyuncular için (sadece bunlar için, paralel)
  * GetCallList ile zenginleştirme yapar. Diğer oyuncular için vendor API'sine
@@ -648,9 +720,10 @@ const getEnrichedCurrentPlayers = async (vendorCode) => {
 	const playersData = await betinoviAdminRequest("controlGame", onlineUsersMethod, {
 		vendorCode,
 	});
-	const players = Array.isArray(playersData?.playerInfos)
+	const rawPlayers = Array.isArray(playersData?.playerInfos)
 		? playersData.playerInfos
 		: [];
+	const players = await dedupeCurrentPlayersByLatestTransaction(rawPlayers);
 
 	const pendingPlayers = players.filter((player) => player.hasPendingCall);
 
