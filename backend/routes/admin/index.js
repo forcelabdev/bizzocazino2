@@ -216,10 +216,11 @@ const {
 	const {
 		createAdminManualAdjustment,
 	} = require("../../services/adminManualAdjustmentService");
-	const {
-		createBulkManualBonus,
-		listAffiliateCodes,
-	} = require("../../services/bulkBonusService");
+		const {
+			createBulkManualBonus,
+			listAffiliateCodes,
+			listLastBonusCategories,
+		} = require("../../services/bulkBonusService");
 const {
 	buildUserUpdateChanges,
 	createAdminUserAuditLog,
@@ -2893,6 +2894,21 @@ router.get(
 	},
 );
 
+// Toplu Bonus: son işlem sayılabilecek bonus türleri
+router.get(
+	"/bulk-bonus/bonus-categories",
+	checkPermission(["finance.manualAdjustments.manage", "users.update"]),
+	async (req, res) => {
+		try {
+			const data = await listLastBonusCategories();
+			res.status(200).json({ success: true, data });
+		} catch (error) {
+			console.error("Bulk bonus category list error:", error);
+			res.status(500).json({ success: false, message: "Sunucu hatası." });
+		}
+	},
+);
+
 // 🔹 Toplu Bonus Yükle: birden fazla kullanıcıya aynı bonusu tek seferde ekler
 router.post(
 	"/bulk-bonus",
@@ -2919,6 +2935,8 @@ router.post(
 				minDeposit: req.body.minDeposit,
 				minWithdraw: req.body.minWithdraw,
 				affiliateCode: req.body.affiliateCode,
+				enforceLastBonusRule: req.body.enforceLastBonusRule,
+				lastBonusCategories: req.body.lastBonusCategories,
 				actorUser: req.adminUser || null,
 			});
 
@@ -11147,7 +11165,7 @@ router.put(
 			res.status(200).json({ success: true, message: "MeelDev ayarları güncellendi." });
 		} catch (error) {
 			console.error("MeelDev ayarları kaydedilirken hata:", error);
-			res.status(500).json({ success: false, error: "Ayarlar kaydedilirken bir hata oluştu." });
+			res.status(500).json({ success: false, error: "Ayarlar kaydedilirken bir hata olu��tu." });
 		}
 	},
 );

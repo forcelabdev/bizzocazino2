@@ -1,5 +1,8 @@
 const mongoose = require("mongoose");
 const User = require("../database/models/User");
+const ForcelabFinanceTransaction = require("../database/models/ForcelabFinanceTransaction");
+const AdminManualAdjustment = require("../database/models/AdminManualAdjustment");
+const ManualBonusCategory = require("../database/models/ManualBonusCategory");
 const { createAdminManualAdjustment } = require("./adminManualAdjustmentService");
 const { applyWageringLock } = require("../utils/bonusLock");
 
@@ -51,6 +54,24 @@ const parseUsernames = (raw) => {
 
 const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
+const listLastBonusCategories = async () => {
+	const [definedCategories, usedCategories] = await Promise.all([
+		ManualBonusCategory.find({ active: true }).select("name").lean(),
+		AdminManualAdjustment.distinct("category", {
+			kind: "bonus",
+			direction: "credit",
+			category: { $exists: true, $nin: [null, ""] },
+		}),
+	]);
+
+	return [
+		...new Set([
+			...definedCategories.map((item) => String(item.name || "").trim()),
+			...usedCategories.map((name) => String(name || "").trim()),
+		].filter(Boolean)),
+	].sort((a, b) => a.localeCompare(b, "tr"));
+};
+
 /**
  * Admin panelindeki "Toplu Bonus Yükle" ekranı için: verilen kullanıcı adı
  * listesindeki her kullanıcıya aynı bonus tutarını/kategorisini tek tek
@@ -72,6 +93,8 @@ const createBulkManualBonus = async ({
 	minDeposit = 0,
 	minWithdraw = 0,
 	affiliateCode = "",
+	enforceLastBonusRule = true,
+	lastBonusCategories = [],
 	actorUser = null,
 }) => {
 	const parsedUsernames = parseUsernames(usernames);
@@ -96,6 +119,14 @@ const createBulkManualBonus = async ({
 	const wageringMult = Number(wageringMultiplier) || 0;
 	const shouldLockWithdrawal = Boolean(applyWithdrawalLock) && wageringMult > 0;
 	const normalizedAffiliateCode = String(affiliateCode || "").trim();
+	const shouldEnforceLastBonusRule = Boolean(enforceLastBonusRule);
+	const normalizedLastBonusCategories = [
+		...new Set(
+			(Array.isArray(lastBonusCategories) ? lastBonusCategories : [])
+				.map((name) => String(name || "").trim())
+				.filter(Boolean),
+		),
+	];
 
 	const usernameRegexes = parsedUsernames.map(
 		(name) => new RegExp(`^${escapeRegex(name)}$`, "i")
@@ -108,6 +139,55 @@ const createBulkManualBonus = async ({
 	const userByLowerUsername = new Map(
 		matchedUsers.map((u) => [String(u.username || "").toLowerCase(), u])
 	);
+
+	const lastDepositByUserId = new Map();
+	const blockingBonusByUserId = new Map();
+
+	if (shouldEnforceLastBonusRule && matchedUsers.length) {
+		const userIds = matchedUsers.map((user) => user._id);
+		const deposits = await ForcelabFinanceTransaction.find({
+			user: { $in: userIds },
+			status: "approved",
+		})
+			.select("user approvedAt createdAt")
+			.sort({ approvedAt: -1, createdAt: -1 })
+			.lean();
+
+		for (const deposit of deposits) {
+			const userId = String(deposit.user);
+			if (!lastDepositByUserId.has(userId)) {
+				lastDepositByUserId.set(
+					userId,
+					deposit.approvedAt || deposit.createdAt,
+				);
+			}
+		}
+
+		if (normalizedLastBonusCategories.length) {
+			const bonusRows = await AdminManualAdjustment.find({
+				targetUser: { $in: userIds },
+				kind: "bonus",
+				direction: "credit",
+				category: { $in: normalizedLastBonusCategories },
+				appliedAmount: { $gt: 0 },
+			})
+				.select("targetUser category appliedAmount createdAt")
+				.sort({ createdAt: -1 })
+				.lean();
+
+			for (const bonus of bonusRows) {
+				const userId = String(bonus.targetUser);
+				const lastDepositAt = lastDepositByUserId.get(userId);
+				if (
+					lastDepositAt &&
+					bonus.createdAt > lastDepositAt &&
+					!blockingBonusByUserId.has(userId)
+				) {
+					blockingBonusByUserId.set(userId, bonus);
+				}
+			}
+		}
+	}
 
 	const batchId = new mongoose.Types.ObjectId();
 	const results = [];
@@ -132,6 +212,32 @@ const createBulkManualBonus = async ({
 				message: "Seçilen affiliate koduna ait üye değil",
 			});
 			continue;
+		}
+
+		if (shouldEnforceLastBonusRule) {
+			const userId = String(user._id);
+			const lastDepositAt = lastDepositByUserId.get(userId);
+			if (!lastDepositAt) {
+				results.push({
+					username,
+					status: "no_approved_deposit",
+					message: "Onaylı yatırımı bulunamadı",
+				});
+				continue;
+			}
+
+			const blockingBonus = blockingBonusByUserId.get(userId);
+			if (blockingBonus) {
+				results.push({
+					username,
+					status: "last_bonus_blocked",
+					message: `Son yatırım sonrası ${blockingBonus.category} alınmış`,
+					blockingBonusCategory: blockingBonus.category,
+					blockingBonusAt: blockingBonus.createdAt,
+					lastDepositAt,
+				});
+				continue;
+			}
 		}
 
 		const wallet = resolveDefaultWallet(user);
@@ -163,6 +269,8 @@ const createBulkManualBonus = async ({
 					withdrawalLockApplied: shouldLockWithdrawal,
 					minDeposit: Number(minDeposit) || 0,
 					minWithdraw: Number(minWithdraw) || 0,
+					enforceLastBonusRule: shouldEnforceLastBonusRule,
+					lastBonusCategories: normalizedLastBonusCategories,
 				},
 			});
 
@@ -254,5 +362,6 @@ const listAffiliateCodes = async () => {
 module.exports = {
 	createBulkManualBonus,
 	listAffiliateCodes,
+	listLastBonusCategories,
 	MAX_USERNAMES,
 };

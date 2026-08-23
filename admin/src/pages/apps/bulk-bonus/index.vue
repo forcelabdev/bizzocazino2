@@ -59,6 +59,24 @@ const affiliateOptions = computed(() => [
   })),
 ])
 
+// ------- Son işlem sayılacak bonuslar -------
+const lastBonusCategoryOptions = ref([])
+const lastBonusCategoriesLoading = ref(false)
+
+const fetchLastBonusCategories = async () => {
+  lastBonusCategoriesLoading.value = true
+  try {
+    const res = await axios.get("/admin/bulk-bonus/bonus-categories")
+
+    lastBonusCategoryOptions.value = res.data.data || []
+    form.value.lastBonusCategories = [...lastBonusCategoryOptions.value]
+  } catch (err) {
+    console.error("Son işlem bonus türleri alınamadı:", err)
+  } finally {
+    lastBonusCategoriesLoading.value = false
+  }
+}
+
 // ------- Form durumu -------
 const defaultForm = {
   usernamesRaw: "",
@@ -66,6 +84,8 @@ const defaultForm = {
   amount: null,
   note: "",
   affiliateCode: "",
+  enforceLastBonusRule: true,
+  lastBonusCategories: [],
   applyWageringLock: false,
   wageringMultiplier: 1,
   minDeposit: 0,
@@ -102,7 +122,10 @@ const resetResults = () => {
 }
 
 const clearForm = () => {
-  form.value = { ...defaultForm }
+  form.value = {
+    ...defaultForm,
+    lastBonusCategories: [...lastBonusCategoryOptions.value],
+  }
   resetResults()
 }
 
@@ -146,6 +169,8 @@ const submit = async () => {
       amount: Number(form.value.amount),
       note: form.value.note,
       affiliateCode: form.value.affiliateCode || "",
+      enforceLastBonusRule: form.value.enforceLastBonusRule,
+      lastBonusCategories: form.value.lastBonusCategories,
       applyWithdrawalLock: form.value.applyWageringLock,
       wageringMultiplier: form.value.applyWageringLock ? Number(form.value.wageringMultiplier) || 0 : 0,
       minDeposit: Number(form.value.minDeposit) || 0,
@@ -167,6 +192,8 @@ const statusMeta = status => {
     not_found: { color: "secondary", label: t("bulkBonus.statusNotFound"), icon: "tabler-user-question" },
     no_wallet: { color: "warning", label: t("bulkBonus.statusNoWallet"), icon: "tabler-wallet-off" },
     affiliate_mismatch: { color: "warning", label: t("bulkBonus.statusAffiliateMismatch"), icon: "tabler-filter-off" },
+    no_approved_deposit: { color: "warning", label: t("bulkBonus.statusNoApprovedDeposit"), icon: "tabler-cash-off" },
+    last_bonus_blocked: { color: "error", label: t("bulkBonus.statusLastBonusBlocked"), icon: "tabler-ban" },
     error: { color: "error", label: t("bulkBonus.statusError"), icon: "tabler-alert-triangle" },
   }
 
@@ -176,6 +203,7 @@ const statusMeta = status => {
 onMounted(() => {
   fetchCategories()
   fetchAffiliateCodes()
+  fetchLastBonusCategories()
 })
 </script>
 
@@ -270,6 +298,42 @@ onMounted(() => {
               persistent-hint
               :disabled="!canManage"
             />
+          </VCol>
+
+          <VCol cols="12">
+            <VDivider class="mb-2" />
+            <p class="text-subtitle-2 mb-2">
+              {{ t("bulkBonus.lastBonusRuleTitle") }}
+            </p>
+            <VSwitch
+              v-model="form.enforceLastBonusRule"
+              :label="t('bulkBonus.enforceLastBonusRule')"
+              :hint="t('bulkBonus.enforceLastBonusRuleHint')"
+              persistent-hint
+              :disabled="!canManage"
+            />
+          </VCol>
+
+          <VCol
+            v-if="form.enforceLastBonusRule"
+            cols="12"
+          >
+            <VAutocomplete
+              v-model="form.lastBonusCategories"
+              :items="lastBonusCategoryOptions"
+              :loading="lastBonusCategoriesLoading"
+              :label="t('bulkBonus.lastBonusCategories')"
+              :hint="t('bulkBonus.lastBonusCategoriesHint')"
+              persistent-hint
+              multiple
+              chips
+              closable-chips
+              clearable
+              :disabled="!canManage"
+            />
+            <p class="text-caption text-medium-emphasis mt-2 mb-0">
+              {{ t("bulkBonus.lastBonusCategoriesSummary", { count: form.lastBonusCategories.length }) }}
+            </p>
           </VCol>
 
           <VCol cols="12">
