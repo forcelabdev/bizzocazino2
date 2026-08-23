@@ -7,10 +7,13 @@ const parseQuery = (req) => ({
 	depositMax: req.query.depositMax,
 	bucket: req.query.bucket,
 	bonusOrigin: req.query.bonusOrigin,
+	bonusCategory: req.query.bonusCategory,
 	search: req.query.search,
 	page: req.query.page,
 	limit: req.query.limit,
 	gameType: req.query.gameType,
+	providerCode: req.query.providerCode,
+	gameCode: req.query.gameCode,
 	vipLevel: req.query.vipLevel,
 	country: req.query.country,
 	activityStatus: req.query.activityStatus,
@@ -81,6 +84,25 @@ exports.getFilterOptions = async (req, res) => {
 		return res
 			.status(500)
 			.json({ success: false, message: "Filtre seçenekleri alınamadı." });
+	}
+};
+
+/**
+ * @desc    Seçilen oyun türü/sağlayıcı için bağlı sağlayıcı ve oyun listesi
+ * @route   GET /admin/crm-report/game-options
+ */
+exports.getGameOptions = async (req, res) => {
+	try {
+		const options = await crmReportService.getGameOptions(
+			req.query.gameType,
+			req.query.providerCode,
+		);
+		return res.status(200).json({ success: true, data: options });
+	} catch (err) {
+		console.error("[crmReport] getGameOptions error:", err);
+		return res
+			.status(500)
+			.json({ success: false, message: "Oyun seçenekleri alınamadı." });
 	}
 };
 

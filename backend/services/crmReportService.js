@@ -14,6 +14,9 @@ const XPaymentTransaction = require("../database/models/XPaymentTransaction");
 const Transaction = require("../database/models/Transaction");
 const Vip = require("../database/models/Vip");
 const Tag = require("../database/models/Tag");
+const Game = require("../database/models/Game");
+const GameProvider = require("../database/models/GameProvider");
+const ManualBonusCategory = require("../database/models/ManualBonusCategory");
 const { RIVO_WALLET } = require("../utils/rivoWallet");
 
 const APPROVED_STATUS = "approved";
@@ -238,8 +241,9 @@ const aggregateAdjustmentsByUser = async (dateRange) => {
 				manualBalance: 0,
 				claimedCount: 0,
 				manualBonusCount: 0,
-				manualBalanceCount: 0,
-			});
+					manualBalanceCount: 0,
+					manualBonusCategories: new Set(),
+				});
 		}
 		return map.get(key);
 	};
@@ -256,6 +260,7 @@ const aggregateAdjustmentsByUser = async (dateRange) => {
 			} else {
 				entry.manualBonus += amount;
 				entry.manualBonusCount += count;
+				if (row._id.category) entry.manualBonusCategories.add(row._id.category);
 			}
 		} else if (row._id.kind === "balance") {
 			entry.manualBalance += amount;
@@ -294,7 +299,12 @@ const aggregateGameStatsByUser = async (dateRange) => {
 		},
 		{
 			$group: {
-				_id: { user: "$user_code", category: "$category" },
+				_id: {
+					user: "$user_code",
+					category: "$category",
+					providerCode: "$provider_code",
+					gameCode: "$game_code",
+				},
 				betTotal: { $sum: { $ifNull: ["$bet_money", 0] } },
 				winTotal: { $sum: { $ifNull: ["$win_money", 0] } },
 				count: { $sum: 1 },
@@ -312,11 +322,13 @@ const aggregateGameStatsByUser = async (dateRange) => {
 				winTotal: 0,
 				betCount: 0,
 				lastActivityAt: null,
-				byCategory: GAME_CATEGORY_KEYS.reduce((acc, k) => {
-					acc[k] = { bet: 0, win: 0, count: 0 };
-					return acc;
-				}, {}),
-			});
+					byCategory: GAME_CATEGORY_KEYS.reduce((acc, k) => {
+						acc[k] = { bet: 0, win: 0, count: 0 };
+						return acc;
+					}, {}),
+					playedProviderCodes: new Set(),
+					playedGameKeys: new Set(),
+				});
 		}
 		return map.get(key);
 	};
@@ -336,6 +348,14 @@ const aggregateGameStatsByUser = async (dateRange) => {
 			entry.byCategory[category].bet += betTotal;
 			entry.byCategory[category].win += winTotal;
 			entry.byCategory[category].count += count;
+		}
+		if (row._id.providerCode) {
+			entry.playedProviderCodes.add(row._id.providerCode);
+		}
+		if (row._id.gameCode) {
+			entry.playedGameKeys.add(
+				`${row._id.providerCode || ""}::${row._id.gameCode}`,
+			);
 		}
 		if (
 			row.lastActivityAt &&
@@ -398,13 +418,16 @@ const getActivityStatus = (lastActivityAt, betCount) => {
 const buildMemberRecords = async ({ startDate, endDate } = {}) => {
 	const dateRange = buildDateRange(startDate, endDate);
 
-	const [depositMap, adjustmentMap, gameStatsMap, vipLevels, tagDocs] =
+	const [depositMap, adjustmentMap, gameStatsMap, vipLevels, tagDocs, partnerDocs] =
 		await Promise.all([
 			aggregateDepositsByUser(dateRange),
 			aggregateAdjustmentsByUser(dateRange),
 			aggregateGameStatsByUser(dateRange),
 			Vip.find({}).sort({ level: 1 }).select("level levelName requiredXp").lean(),
 			Tag.find({}).select("name color category").lean(),
+			User.find({ "affiliates.code": { $exists: true, $ne: null } })
+				.select("username affiliates.code")
+				.lean(),
 		]);
 
 	const tagById = new Map(tagDocs.map((t) => [String(t._id), t]));
@@ -437,8 +460,10 @@ const buildMemberRecords = async ({ startDate, endDate } = {}) => {
 		.lean();
 
 	const codeToPartner = {};
-	userDocs.forEach((u) => {
-		if (u.affiliates?.code) codeToPartner[u.affiliates.code] = u.username;
+	partnerDocs.forEach((u) => {
+		if (u.affiliates?.code && u.username) {
+			codeToPartner[u.affiliates.code] = u.username;
+		}
 	});
 
 	const records = [];
@@ -454,6 +479,7 @@ const buildMemberRecords = async ({ startDate, endDate } = {}) => {
 			claimedBonus: 0,
 			manualBonus: 0,
 			manualBalance: 0,
+			manualBonusCategories: new Set(),
 		};
 		const gameStats = gameStatsMap.get(uid) || {
 			betTotal: 0,
@@ -464,6 +490,8 @@ const buildMemberRecords = async ({ startDate, endDate } = {}) => {
 				acc[k] = { bet: 0, win: 0, count: 0 };
 				return acc;
 			}, {}),
+			playedProviderCodes: new Set(),
+			playedGameKeys: new Set(),
 		};
 		const redeemedCode = u.affiliates?.redeemedCode || null;
 		const { vipLevel, vipLevelName } = resolveVipLevel(u.xp, vipLevels);
@@ -478,6 +506,7 @@ const buildMemberRecords = async ({ startDate, endDate } = {}) => {
 			name: u.name || null,
 			email: u.local?.email || null,
 			phone: u.phone || null,
+			redeemedCode,
 			partnerName: redeemedCode
 				? codeToPartner[redeemedCode] || redeemedCode
 				: null,
@@ -506,6 +535,9 @@ const buildMemberRecords = async ({ startDate, endDate } = {}) => {
 				? round2(gameStats.betTotal / gameStats.betCount)
 				: 0,
 			gameBreakdown: gameStats.byCategory,
+			playedProviderCodes: [...gameStats.playedProviderCodes],
+			playedGameKeys: [...gameStats.playedGameKeys],
+			manualBonusCategories: [...adj.manualBonusCategories],
 			lastActivityAt: gameStats.lastActivityAt,
 			activityStatus: getActivityStatus(
 				gameStats.lastActivityAt,
@@ -524,8 +556,11 @@ const applyFilters = (
 		depositMax,
 		bucket,
 		bonusOrigin,
+		bonusCategory,
 		search,
 		gameType,
+		providerCode,
+		gameCode,
 		vipLevel,
 		country,
 		activityStatus,
@@ -551,8 +586,26 @@ const applyFilters = (
 	} else if (bonusOrigin === "manual") {
 		filtered = filtered.filter((r) => r.manualBonus > 0);
 	}
+	if (bonusCategory) {
+		filtered = filtered.filter((r) =>
+			r.manualBonusCategories.includes(bonusCategory),
+		);
+	}
 	if (gameType && GAME_CATEGORY_KEYS.includes(gameType)) {
 		filtered = filtered.filter((r) => r.gameBreakdown[gameType]?.count > 0);
+	}
+	if (providerCode) {
+		filtered = filtered.filter((r) =>
+			r.playedProviderCodes.includes(providerCode),
+		);
+	}
+	if (gameCode) {
+		const gameKey = `${providerCode || ""}::${gameCode}`;
+		filtered = filtered.filter((r) =>
+			providerCode
+				? r.playedGameKeys.includes(gameKey)
+				: r.playedGameKeys.some((key) => key.endsWith(`::${gameCode}`)),
+		);
 	}
 	if (vipLevel !== undefined && vipLevel !== null && vipLevel !== "") {
 		const level = Number(vipLevel);
@@ -568,7 +621,7 @@ const applyFilters = (
 		filtered = filtered.filter((r) => r.tags.some((t) => t.id === tag));
 	}
 	if (partner) {
-		filtered = filtered.filter((r) => r.partnerName === partner);
+		filtered = filtered.filter((r) => r.redeemedCode === partner);
 	}
 
 	const trimmedSearch = String(search || "").trim().toLowerCase();
@@ -731,22 +784,32 @@ const getGameTypeBuckets = async (query = {}) => {
  * bağımsız statik/global seçenek listeleri.
  */
 const getFilterOptions = async () => {
-	const [countries, vipLevels, tags, partnerDocs] = await Promise.all([
-		User.aggregate([
-			{ $match: { "country.code": { $exists: true, $ne: null } } },
-			{ $group: { _id: "$country.code", name: { $first: "$country.name" } } },
-			{ $sort: { _id: 1 } },
-		]),
-		Vip.find({}).select("level levelName").sort({ level: 1 }).lean(),
-		Tag.find({}).select("name color category").sort({ name: 1 }).lean(),
-		User.find({ "affiliates.code": { $exists: true, $ne: null } })
-			.select("username")
-			.lean(),
-	]);
+	const [countries, vipLevels, tags, partnerDocs, manualBonusCategoryDocs] =
+		await Promise.all([
+			User.aggregate([
+				{ $match: { "country.code": { $exists: true, $ne: null } } },
+				{ $group: { _id: "$country.code", name: { $first: "$country.name" } } },
+				{ $sort: { _id: 1 } },
+			]),
+			Vip.find({}).select("level levelName").sort({ level: 1 }).lean(),
+			Tag.find({}).select("name color category").sort({ name: 1 }).lean(),
+			User.find({ "affiliates.code": { $exists: true, $ne: null } })
+				.select("username affiliates.code")
+				.lean(),
+			ManualBonusCategory.find({ active: true })
+				.select("name order")
+				.sort({ order: 1, name: 1 })
+				.lean(),
+		]);
 
-	const partners = [...new Set(partnerDocs.map((u) => u.username).filter(Boolean))].sort(
-		(a, b) => a.localeCompare(b),
-	);
+	const partners = partnerDocs
+		.filter((u) => u.username && u.affiliates?.code)
+		.map((u) => ({
+			code: u.affiliates.code,
+			username: u.username,
+			title: `${u.username} (${u.affiliates.code})`,
+		}))
+		.sort((a, b) => a.title.localeCompare(b.title));
 
 	return {
 		countries: countries.map((c) => ({ code: c._id, name: c.name || c._id })),
@@ -754,11 +817,75 @@ const getFilterOptions = async () => {
 		tags: tags.map((t) => ({ id: String(t._id), name: t.name, color: t.color })),
 		partners,
 		gameTypes: GAME_CATEGORIES,
+		manualBonusCategories: manualBonusCategoryDocs.map((c) => c.name),
 		activityStatuses: Object.values(ACTIVITY_STATUSES).map((s) => ({
 			key: s.key,
 			label: s.label,
 		})),
 	};
+};
+
+const getGameOptions = async (gameType, providerCode) => {
+	if (!gameType || !GAME_CATEGORY_KEYS.includes(gameType)) {
+		return { providers: [], games: [] };
+	}
+
+	const rows = await Transaction.aggregate([
+		{ $match: { created_at: { $gte: OPERATIONS_START_AT } } },
+		{
+			$addFields: {
+				category: {
+					$switch: {
+						branches: [
+							{ case: { $eq: [{ $toLower: "$game_type" }, "slot"] }, then: "slot" },
+							{ case: { $eq: [{ $toLower: "$game_type" }, "live"] }, then: "live" },
+							{ case: { $eq: [{ $toLower: "$game_type" }, "sb"] }, then: "sportsbook" },
+						],
+						default: "other",
+					},
+				},
+			},
+		},
+		{
+			$match: {
+				category: gameType,
+				provider_code: { $exists: true, $ne: null },
+				game_code: { $exists: true, $ne: null },
+			},
+		},
+		{ $group: { _id: { providerCode: "$provider_code", gameCode: "$game_code" } } },
+	]);
+
+	const providerCodes = [...new Set(rows.map((r) => r._id.providerCode).filter(Boolean))];
+	const [providerDocs, gameDocs] = await Promise.all([
+		GameProvider.find({ code: { $in: providerCodes } }).select("code name").lean(),
+		Game.find({
+			provider_code: { $in: providerCodes },
+			game_code: { $in: rows.map((r) => r._id.gameCode) },
+		})
+			.select("provider_code game_code game_name")
+			.lean(),
+	]);
+
+	const providerNameByCode = new Map(providerDocs.map((p) => [p.code, p.name]));
+	const gameNameByKey = new Map(
+		gameDocs.map((g) => [`${g.provider_code}::${g.game_code}`, g.game_name]),
+	);
+	const providers = providerCodes
+		.map((code) => ({ code, name: providerNameByCode.get(code) || code }))
+		.sort((a, b) => a.name.localeCompare(b.name));
+	const games = rows
+		.filter((row) => !providerCode || row._id.providerCode === providerCode)
+		.map((row) => ({
+			code: row._id.gameCode,
+			providerCode: row._id.providerCode,
+			name:
+				gameNameByKey.get(`${row._id.providerCode}::${row._id.gameCode}`) ||
+				row._id.gameCode,
+		}))
+		.sort((a, b) => a.name.localeCompare(b.name));
+
+	return { providers, games };
 };
 
 /**
@@ -798,5 +925,6 @@ module.exports = {
 	getBuckets,
 	getGameTypeBuckets,
 	getFilterOptions,
+	getGameOptions,
 	getMembers,
 };

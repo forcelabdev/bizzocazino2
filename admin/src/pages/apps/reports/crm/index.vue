@@ -15,11 +15,17 @@ const customStart = ref(null)
 const customEnd = ref(null)
 
 const bonusOrigin = ref("all") // all | claimed | manual
+const bonusCategory = ref(null)
 const bucket = ref(null)
 const depositMin = ref(null)
 const depositMax = ref(null)
 
 const gameType = ref(null) // slot | live | sportsbook | other
+const providerCode = ref(null)
+const gameCode = ref(null)
+const providerOptions = ref([])
+const gameOptions = ref([])
+const gameOptionsLoading = ref(false)
 const vipLevel = ref(null)
 const country = ref(null)
 const activityStatus = ref(null)
@@ -41,6 +47,7 @@ const filterOptions = ref({
   tags: [],
   partners: [],
   gameTypes: [],
+  manualBonusCategories: [],
   activityStatuses: [],
 })
 

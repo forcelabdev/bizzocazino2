@@ -2531,6 +2531,16 @@ router.get(
 );
 
 router.get(
+	"/crm-report/game-options",
+	checkPermission([
+		"finance.balanceAnalysis.read",
+		"finance.balanceAnalysis.manage",
+		"reports.read",
+	]),
+	crmReportController.getGameOptions,
+);
+
+router.get(
 	"/crm-report/members",
 	checkPermission([
 		"finance.balanceAnalysis.read",
