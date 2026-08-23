@@ -187,9 +187,10 @@ const userSchema = new mongoose.Schema(
 			points: { type: Number, default: 0 },
 		},
 
-		limits: {
-			betToWithdraw: { type: Number, default: 0 },
-			betToRain: { type: Number, default: 0 },
+			limits: {
+				betToWithdraw: { type: Number, default: 0 },
+				minWithdraw: { type: Number, default: 0 },
+				betToRain: { type: Number, default: 0 },
 			blockAffiliate: { type: Boolean, default: false },
 			blockRain: { type: Boolean, default: false },
 			blockTip: { type: Boolean, default: false },
