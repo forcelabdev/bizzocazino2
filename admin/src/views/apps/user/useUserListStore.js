@@ -181,6 +181,21 @@ export const useUserListStore = defineStore('UserListStore', {
       return axios.post(`/admin/deposit-bonus/claims/${claimId}/reject`, { reason }).then(res => res.data)
     },
 
+    // ✅ Deneme Bonusu: kullanıcı özeti (Kontroller sekmesi için)
+    fetchUserTrialBonusSummary(userId) {
+      return axios.get(`/admin/users/${userId}/trial-bonus`).then(res => res.data.data)
+    },
+
+    // ✅ Deneme Bonusu: talebi onayla (Kontroller sekmesinden)
+    approveTrialBonusClaim(claimId) {
+      return axios.post(`/admin/trial-bonus/claims/${claimId}/approve`).then(res => res.data)
+    },
+
+    // ✅ Deneme Bonusu: talebi reddet (Kontroller sekmesinden)
+    rejectTrialBonusClaim(claimId, reason = "") {
+      return axios.post(`/admin/trial-bonus/claims/${claimId}/reject`, { reason }).then(res => res.data)
+    },
+
     // ✅ Reload Bonusu: genel ayarları getir
     fetchReloadBonusSettings() {
       return axios.get('/admin/reload-bonus/settings').then(res => res.data.data)

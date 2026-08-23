@@ -151,6 +151,12 @@ export default [
         subject: "finance.depositBonus",
       },
       {
+        title: "platform.trialBonus",
+        to: "apps-trial-bonus",
+        action: "read",
+        subject: "finance.trialBonus",
+      },
+      {
         title: "platform.reloadBonus",
         to: "apps-reload-bonus",
         action: "read",

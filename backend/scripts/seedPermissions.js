@@ -293,6 +293,20 @@ const defaultPermissions = [
 		action: "manage",
 		group: "Finans",
 	},
+	{
+		code: "finance.trialBonus.read",
+		name: "Finans - Deneme Bonusu Görüntüle",
+		resource: "finance.trialBonus",
+		action: "read",
+		group: "Finans",
+	},
+	{
+		code: "finance.trialBonus.manage",
+		name: "Finans - Deneme Bonusu Yönet",
+		resource: "finance.trialBonus",
+		action: "manage",
+		group: "Finans",
+	},
 
 	// Games
 	{
@@ -763,6 +777,7 @@ const defaultRoles = [
 			"finance.manualAdjustments.manage",
 			"finance.lossBonus.manage",
 			"finance.depositBonus.manage",
+			"finance.trialBonus.manage",
 			"finance.reloadBonus.manage",
 			"callScenarios.manage",
 			"games.read",
@@ -794,6 +809,7 @@ const defaultRoles = [
 			"finance.manualAdjustments.manage",
 			"finance.lossBonus.manage",
 			"finance.depositBonus.manage",
+			"finance.trialBonus.manage",
 			"finance.reloadBonus.manage",
 			"callScenarios.manage",
 			"users.read",
@@ -875,6 +891,7 @@ const defaultRoles = [
 			"finance.manualAdjustments.read",
 			"finance.lossBonus.read",
 			"finance.depositBonus.read",
+			"finance.trialBonus.read",
 			"finance.reloadBonus.read",
 			"callScenarios.read",
 			"games.read",

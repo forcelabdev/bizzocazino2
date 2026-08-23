@@ -9,6 +9,7 @@ const adminWingoController = require("../../controllers/adminWingoController");
 const manualBonusCategoryController = require("../../controllers/admin/manualBonusCategoryController");
 const lossBonusController = require("../../controllers/admin/lossBonusController");
 const depositBonusController = require("../../controllers/admin/depositBonusController");
+const trialBonusController = require("../../controllers/admin/trialBonusController");
 const reloadBonusController = require("../../controllers/admin/reloadBonusController");
 const callScenarioController = require("../../controllers/admin/callScenarioController");
 const playerSegmentsController = require("../../controllers/admin/playerSegments");
@@ -2426,6 +2427,60 @@ router.get(
 		"users.read",
 	]),
 	depositBonusController.getUserSummary,
+);
+
+// Deneme Bonusu (Trial Bonus)
+router.get(
+	"/trial-bonus/settings",
+	checkPermission(["finance.trialBonus.read", "finance.trialBonus.manage"]),
+	trialBonusController.getSettings,
+);
+
+router.put(
+	"/trial-bonus/settings",
+	checkPermission("finance.trialBonus.manage"),
+	trialBonusController.updateSettings,
+);
+
+router.get(
+	"/trial-bonus/claims",
+	checkPermission(["finance.trialBonus.read", "finance.trialBonus.manage"]),
+	trialBonusController.listClaims,
+);
+
+router.post(
+	"/trial-bonus/claims/:id/approve",
+	checkPermission("finance.trialBonus.manage"),
+	trialBonusController.approveClaim,
+);
+
+router.post(
+	"/trial-bonus/claims/:id/reject",
+	checkPermission("finance.trialBonus.manage"),
+	trialBonusController.rejectClaim,
+);
+
+// Call Management (control-game) ekranında "Deneme Bonusu" rozeti/filtresi
+// için toplu bakış — RTP/oyun sonucu hesaplaması yapmaz, sadece hangi
+// kullanıcıların onaylı deneme bonusu olduğunu ve tutarını döner.
+router.post(
+	"/trial-bonus/lookup",
+	checkPermission([
+		"finance.trialBonus.read",
+		"finance.trialBonus.manage",
+		"controlGame.read",
+	]),
+	trialBonusController.lookup,
+);
+
+router.get(
+	"/users/:id/trial-bonus",
+	checkPermission([
+		"finance.trialBonus.read",
+		"finance.trialBonus.manage",
+		"users.read",
+	]),
+	trialBonusController.getUserSummary,
 );
 
 router.get(
@@ -10828,7 +10883,7 @@ router.post(
 
 // ═══════════════════════════════════════════════════���═══════════════════════
 // MeelDev Admin Endpoints
-// ═══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════��═══════════════════════════════
 
 const MeelDevTransaction = require("../../database/models/MeelDevTransaction");
 const {
