@@ -179,6 +179,7 @@ const Reward = require("../../database/models/Reward");
 const Mission = require("../../database/models/Mission");
 const BonusSetting = require("../../database/models/BonusSetting");
 const AdminManualAdjustment = require("../../database/models/AdminManualAdjustment");
+const FreeSpinGrant = require("../../database/models/FreeSpinGrant");
 const AdminUserAuditLog = require("../../database/models/AdminUserAuditLog");
 
 const FuturesBet = require("../../database/models/FuturesBet");
@@ -5459,6 +5460,14 @@ router.get(
 			const now = Date.now();
 			const yesterday = new Date(now - 24 * 60 * 60 * 1000);
 
+			// 🔹 TR (Europe/Istanbul, UTC+3, DST yok) gününün 00:00'ı.
+			// Sunucu saat dilimi ne olursa olsun UTC üzerinden hesaplanır.
+			const TR_OFFSET_MS = 3 * 60 * 60 * 1000;
+			const nowTr = new Date(now + TR_OFFSET_MS);
+			const todayStartTR = new Date(
+				Date.UTC(nowTr.getUTCFullYear(), nowTr.getUTCMonth(), nowTr.getUTCDate()) - TR_OFFSET_MS,
+			);
+
 			// 🔹 Tüm query'leri paralel çalıştır (Promise.all ile)
 			const [
 				setting,
@@ -5470,6 +5479,8 @@ router.get(
 				galaxyPayAggAll,
 				fluxKriptoAggAll,
 				xPaymentsAggAll,
+				bonusTodayAgg,
+				freeSpinsTodayAgg,
 			] = await Promise.all([
 				// Ayarlar
 				Setting.findOne().select("exchangeRates").lean(),
@@ -5511,6 +5522,15 @@ router.get(
 									},
 								},
 							],
+							today: [
+								{ $match: { createdAt: { $gte: todayStartTR } } },
+								{
+									$group: {
+										_id: "$type",
+										total: { $sum: "$amount" },
+									},
+								},
+							],
 						},
 					},
 				]),
@@ -5530,6 +5550,15 @@ router.get(
 							],
 							last24h: [
 								{ $match: { createdAt: { $gte: yesterday } } },
+								{
+									$group: {
+										_id: "$type",
+										total: { $sum: "$amount" },
+									},
+								},
+							],
+							today: [
+								{ $match: { createdAt: { $gte: todayStartTR } } },
 								{
 									$group: {
 										_id: "$type",
@@ -5562,6 +5591,15 @@ router.get(
 									},
 								},
 							],
+							today: [
+								{ $match: { createdAt: { $gte: todayStartTR } } },
+								{
+									$group: {
+										_id: "$type",
+										total: { $sum: "$amount" },
+									},
+								},
+							],
 						},
 					},
 				]),
@@ -5574,6 +5612,10 @@ router.get(
 							],
 							last24h: [
 								{ $match: { createdAt: { $gte: yesterday } } },
+								{ $group: { _id: "$type", total: { $sum: "$amount" } } },
+							],
+							today: [
+								{ $match: { createdAt: { $gte: todayStartTR } } },
 								{ $group: { _id: "$type", total: { $sum: "$amount" } } },
 							],
 						},
@@ -5590,6 +5632,73 @@ router.get(
 								{ $match: { createdAt: { $gte: yesterday } } },
 								{ $group: { _id: "$type", total: { $sum: "$amount" } } },
 							],
+							today: [
+								{ $match: { createdAt: { $gte: todayStartTR } } },
+								{ $group: { _id: "$type", total: { $sum: "$amount" } } },
+							],
+						},
+					},
+				]),
+
+				// 🎁 Bugün (TR günü) verilen bonus toplamı (AdminManualAdjustment)
+				AdminManualAdjustment.aggregate([
+					{
+						$match: {
+							kind: "bonus",
+							direction: "credit",
+							createdAt: { $gte: todayStartTR },
+						},
+					},
+					{ $group: { _id: null, total: { $sum: "$appliedAmount" } } },
+				]),
+
+				// 🎰 Bugün verilen freespin adedi + yaklaşık kazanç
+				// (bkz. "Kapsam Dışı / Varsayımlar": provider'dan freespin bayrağı
+				// gelmediği için grant süresi + oyun eşleşmesiyle yaklaşık hesaplanır)
+				FreeSpinGrant.aggregate([
+					{ $match: { createdAt: { $gte: todayStartTR } } },
+					{
+						$lookup: {
+							from: "transactions",
+							let: {
+								uid: { $toString: "$targetUser" },
+								gcode: "$gameCode",
+								gfrom: "$createdAt",
+								gto: "$expiresAt",
+							},
+							pipeline: [
+								{
+									$match: {
+										$expr: {
+											$and: [
+												{ $eq: ["$user_code", "$$uid"] },
+												{ $eq: ["$game_code", "$$gcode"] },
+												{ $gte: ["$created_at", "$$gfrom"] },
+												{ $lte: ["$created_at", "$$gto"] },
+											],
+										},
+									},
+								},
+								{
+									$group: {
+										_id: null,
+										winSum: { $sum: { $ifNull: ["$win_money", 0] } },
+									},
+								},
+							],
+							as: "playedWin",
+						},
+					},
+					{
+						$group: {
+							_id: null,
+							totalGrants: { $sum: 1 },
+							totalSpinCount: { $sum: { $ifNull: ["$spinCount", 0] } },
+							totalWinEstimate: {
+								$sum: {
+									$ifNull: [{ $arrayElemAt: ["$playedWin.winSum", 0] }, 0],
+								},
+							},
 						},
 					},
 				]),
@@ -5615,22 +5724,27 @@ router.get(
 			};
 
 			// Facet sonuçlarını parse et
-			const cryptoFacet = cryptoAggAll[0] || { all: [], last24h: [] };
-			const bankFacet = bankAggAll[0] || { all: [], last24h: [] };
-			const galaxyPayFacet = galaxyPayAggAll[0] || { all: [], last24h: [] };
-			const fluxKriptoFacet = fluxKriptoAggAll[0] || { all: [], last24h: [] };
-			const xPaymentsFacet = xPaymentsAggAll[0] || { all: [], last24h: [] };
+			const cryptoFacet = cryptoAggAll[0] || { all: [], last24h: [], today: [] };
+			const bankFacet = bankAggAll[0] || { all: [], last24h: [], today: [] };
+			const galaxyPayFacet = galaxyPayAggAll[0] || { all: [], last24h: [], today: [] };
+			const fluxKriptoFacet = fluxKriptoAggAll[0] || { all: [], last24h: [], today: [] };
+			const xPaymentsFacet = xPaymentsAggAll[0] || { all: [], last24h: [], today: [] };
 
 			const cryptoAllTotals = parseAggResult(cryptoFacet.all);
 			const cryptoLast24hTotals = parseAggResult(cryptoFacet.last24h);
+			const cryptoTodayTotals = parseAggResult(cryptoFacet.today);
 			const bankAllTotals = parseAggResult(bankFacet.all);
 			const bankLast24hTotals = parseAggResult(bankFacet.last24h);
+			const bankTodayTotals = parseAggResult(bankFacet.today);
 			const galaxyPayAllTotals = parseAggResult(galaxyPayFacet.all);
 			const galaxyPayLast24hTotals = parseAggResult(galaxyPayFacet.last24h);
+			const galaxyPayTodayTotals = parseAggResult(galaxyPayFacet.today);
 			const fluxKriptoAllTotals = parseAggResult(fluxKriptoFacet.all);
 			const fluxKriptoLast24hTotals = parseAggResult(fluxKriptoFacet.last24h);
+			const fluxKriptoTodayTotals = parseAggResult(fluxKriptoFacet.today);
 			const xPaymentsAllTotals = parseAggResult(xPaymentsFacet.all);
 			const xPaymentsLast24hTotals = parseAggResult(xPaymentsFacet.last24h);
+			const xPaymentsTodayTotals = parseAggResult(xPaymentsFacet.today);
 
 			// Toplam hesaplama (Crypto + Bank + diğer sağlayıcılar)
 			const allTotals = {
@@ -5661,6 +5775,28 @@ router.get(
 					fluxKriptoLast24hTotals.withdrawals +
 					xPaymentsLast24hTotals.withdrawals,
 			};
+			// 🔹 Bugün (TR günü, 00:00'dan şimdiye) toplamları
+			const todayTotals = {
+				deposits:
+					cryptoTodayTotals.deposits +
+					bankTodayTotals.deposits +
+					galaxyPayTodayTotals.deposits +
+					fluxKriptoTodayTotals.deposits +
+					xPaymentsTodayTotals.deposits,
+				withdrawals:
+					cryptoTodayTotals.withdrawals +
+					bankTodayTotals.withdrawals +
+					galaxyPayTodayTotals.withdrawals +
+					fluxKriptoTodayTotals.withdrawals +
+					xPaymentsTodayTotals.withdrawals,
+			};
+
+			const bonusTodayTry = bonusTodayAgg?.[0]?.total || 0;
+			const freeSpinsTodaySummary = freeSpinsTodayAgg?.[0] || {
+				totalGrants: 0,
+				totalSpinCount: 0,
+				totalWinEstimate: 0,
+			};
 
 			// Response data
 			const responseData = {
@@ -5673,6 +5809,16 @@ router.get(
 				totalWithdrawalsTry: allTotals.withdrawals,
 				deposits24hTry: last24hTotals.deposits,
 				withdrawals24hTry: last24hTotals.withdrawals,
+
+				// Bugün (TR günü, 00:00'dan itibaren)
+				depositsTodayTry: todayTotals.deposits,
+				withdrawalsTodayTry: todayTotals.withdrawals,
+				bonusTodayTry,
+				freeSpinsTodayCount: freeSpinsTodaySummary.totalSpinCount,
+				freeSpinsTodayGrantsCount: freeSpinsTodaySummary.totalGrants,
+				// Yaklaşık değer: provider'dan freespin bayrağı gelmediği için
+				// grant süresi + oyun eşleşmesiyle hesaplanır, kesin değildir.
+				freeSpinsTodayWinTry: freeSpinsTodaySummary.totalWinEstimate,
 
 				// Finans detay - Crypto
 				cryptoDepositsTry: cryptoAllTotals.deposits,

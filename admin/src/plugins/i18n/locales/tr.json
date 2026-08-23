@@ -1009,7 +1009,15 @@
 		"pending": "Beklemede",
 		"processing": "İşleniyor",
 		"rejected": "Reddedildi",
-		"user": "Kullanıcı"
+		"user": "Kullanıcı",
+		"todaySummary": "Bugünkü Özet (TR Günü)",
+		"depositsToday": "Bugünkü Onaylı Yatırım",
+		"withdrawalsToday": "Bugünkü Onaylı Çekim",
+		"bonusToday": "Bugünkü Bonus Toplamı",
+		"freeSpinsToday": "Bugünkü Freespin",
+		"freeSpinsTodayCount": "adet",
+		"freeSpinsTodayWin": "yaklaşık kazanç",
+		"approxNotice": "Yaklaşık değer"
 	},
 	"siteSettings": "Site Ayarları",
 	"settingsSaved": "Ayarlar başarıyla kaydedildi",

@@ -1,4 +1,5 @@
 const express = require("express");
+const mongoose = require("mongoose");
 const { checkPermission } = require("../../middleware/permission");
 const {
 	getClientAdminApiSettings,
@@ -8,6 +9,7 @@ const {
 	getEnrichedCurrentPlayers,
 	getAgentBalanceSummary,
 } = require("../../services/betinoviAdminApiService");
+const FreeSpinGrant = require("../../database/models/FreeSpinGrant");
 
 const router = express.Router();
 
@@ -245,6 +247,42 @@ router.post(
 				method,
 				req.body,
 			);
+
+			// 🎰 Freespin başarıyla uygulandıysa, Dashboard "bugün verilen
+			// freespin" raporlaması için yerel bir defter kaydı oluşturulur.
+			if (type === "apply-free-round") {
+				try {
+					const {
+						userCode,
+						vendorCode,
+						gameCode,
+						currencyCode,
+						betAmount,
+						spinCount,
+						expireHours,
+					} = req.body || {};
+
+					if (mongoose.Types.ObjectId.isValid(userCode)) {
+						const expireHoursNum = Number(expireHours) || 0;
+						await FreeSpinGrant.create({
+							targetUser: userCode,
+							actorUser: req.adminUser?._id || req.adminUser || null,
+							vendorCode,
+							gameCode,
+							currencyCode: currencyCode || "TRY",
+							betAmount: Number(betAmount) || 0,
+							spinCount: Number(spinCount) || 0,
+							expireHours: expireHoursNum,
+							expiresAt: new Date(Date.now() + expireHoursNum * 60 * 60 * 1000),
+							providerResponse: data,
+						});
+					}
+				} catch (grantError) {
+					// Rapor kaydı başarısız olsa da freespin işlemi zaten uygulandı;
+					// kullanıcıya hata döndürmeyip sadece loglanır.
+					console.error("FreeSpinGrant kayıt hatası:", grantError.message);
+				}
+			}
 
 			res.status(200).json({
 				success: true,

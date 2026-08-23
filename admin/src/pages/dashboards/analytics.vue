@@ -9,6 +9,7 @@ import AnalyticsProjectTable from "@/views/dashboards/analytics/AnalyticsProject
 import AnalyticsSalesByCountries from "@/views/dashboards/analytics/AnalyticsSalesByCountries.vue";
 import AnalyticsSalesOverview from "@/views/dashboards/analytics/AnalyticsSalesOverview.vue";
 import AnalyticsSourceVisits from "@/views/dashboards/analytics/AnalyticsSourceVisits.vue";
+import AnalyticsTodaySummary from "@/views/dashboards/analytics/AnalyticsTodaySummary.vue";
 import AnalyticsTotalEarning from "@/views/dashboards/analytics/AnalyticsTotalEarning.vue";
 import AnalyticsWebsiteAnalytics from "@/views/dashboards/analytics/AnalyticsWebsiteAnalytics.vue";
 
@@ -127,6 +128,11 @@ onMounted(() => {
 
 <template>
 	<VRow class="match-height">
+		<!-- 👉 Bugünkü Özet (TR günü) -->
+		<VCol cols="12">
+			<AnalyticsTodaySummary />
+		</VCol>
+
 		<!-- 👉 Website analytics -->
 		<VCol cols="12" md="6">
 			<AnalyticsWebsiteAnalytics />
