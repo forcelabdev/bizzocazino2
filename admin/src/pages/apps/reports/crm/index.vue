@@ -51,6 +51,8 @@ const page = ref(1)
 const itemsPerPage = ref(20)
 const search = ref("")
 const isExporting = ref(false)
+const isExportingBuckets = ref(false)
+const isExportingGameBuckets = ref(false)
 
 const periods = [
   { value: "today", title: "Bugün" },
@@ -333,10 +335,29 @@ const exportMembers = async () => {
     const worksheet = XLSX.utils.json_to_sheet(rows)
 
     worksheet["!cols"] = [
-      { wch: 20 }, { wch: 24 }, { wch: 28 }, { wch: 16 }, { wch: 18 }, { wch: 14 }, { wch: 14 },
-      { wch: 14 }, { wch: 16 }, { wch: 14 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 },
-      { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 14 }, { wch: 14 }, { wch: 16 }, { wch: 14 },
-      { wch: 18 }, { wch: 24 },
+      { wch: 20 },
+      { wch: 24 },
+      { wch: 28 },
+      { wch: 16 },
+      { wch: 18 },
+      { wch: 14 },
+      { wch: 14 },
+      { wch: 14 },
+      { wch: 16 },
+      { wch: 14 },
+      { wch: 16 },
+      { wch: 16 },
+      { wch: 16 },
+      { wch: 16 },
+      { wch: 16 },
+      { wch: 16 },
+      { wch: 16 },
+      { wch: 14 },
+      { wch: 14 },
+      { wch: 16 },
+      { wch: 14 },
+      { wch: 18 },
+      { wch: 24 },
     ]
 
     const workbook = XLSX.utils.book_new()
@@ -349,6 +370,76 @@ const exportMembers = async () => {
     console.error("CRM raporu dışa aktarılamadı:", error)
   } finally {
     isExporting.value = false
+  }
+}
+
+const exportBucketsToExcel = async () => {
+  if (isExportingBuckets.value || !buckets.value.length) return
+  isExportingBuckets.value = true
+  try {
+    const XLSXModule = await import("xlsx")
+    const XLSX = XLSXModule.default || XLSXModule
+
+    const rows = buckets.value.map(row => ({
+      Aralık: row.label,
+      "Üye Sayısı": row.memberCount || 0,
+      "Toplam Yatırım": row.totalDeposit || 0,
+      "Ort. Yatırım": row.avgDeposit || 0,
+      "Alınan Bonus": row.totalClaimedBonus || 0,
+      "Eklenen Bonus": row.totalManualBonus || 0,
+    }))
+
+    const worksheet = XLSX.utils.json_to_sheet(rows)
+
+    worksheet["!cols"] = [
+      { wch: 18 }, { wch: 14 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 },
+    ]
+
+    const workbook = XLSX.utils.book_new()
+
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Yatırım Kırılımı")
+    XLSX.writeFile(workbook, `crm-yatirim-kirilimi-${new Date().toISOString().slice(0, 10)}.xlsx`, {
+      compression: true,
+    })
+  } catch (error) {
+    console.error("Yatırım kırılımı dışa aktarılamadı:", error)
+  } finally {
+    isExportingBuckets.value = false
+  }
+}
+
+const exportGameBucketsToExcel = async () => {
+  if (isExportingGameBuckets.value || !gameBuckets.value.length) return
+  isExportingGameBuckets.value = true
+  try {
+    const XLSXModule = await import("xlsx")
+    const XLSX = XLSXModule.default || XLSXModule
+
+    const rows = gameBuckets.value.map(row => ({
+      "Oyun Türü": row.label,
+      "Üye Sayısı": row.memberCount || 0,
+      "Toplam Bahis": row.betTotal || 0,
+      "Toplam Kazanç": row.winTotal || 0,
+      "Net (Site)": row.netResult || 0,
+      "Ort. Bahis": row.avgBet || 0,
+    }))
+
+    const worksheet = XLSX.utils.json_to_sheet(rows)
+
+    worksheet["!cols"] = [
+      { wch: 18 }, { wch: 14 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 },
+    ]
+
+    const workbook = XLSX.utils.book_new()
+
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Oyun Türü Kırılımı")
+    XLSX.writeFile(workbook, `crm-oyun-turu-kirilimi-${new Date().toISOString().slice(0, 10)}.xlsx`, {
+      compression: true,
+    })
+  } catch (error) {
+    console.error("Oyun türü kırılımı dışa aktarılamadı:", error)
+  } finally {
+    isExportingGameBuckets.value = false
   }
 }
 
@@ -864,9 +955,22 @@ onMounted(() => {
 
     <VCard class="mb-6">
       <VCardText>
-        <h6 class="text-h6 mb-4">
-          Yatırım Aralığına Göre Kırılım
-        </h6>
+        <div class="d-flex flex-wrap align-center justify-space-between gap-2 mb-4">
+          <h6 class="text-h6 mb-0">
+            Yatırım Aralığına Göre Kırılım
+          </h6>
+          <VBtn
+            variant="tonal"
+            color="secondary"
+            size="small"
+            prepend-icon="tabler-file-spreadsheet"
+            :loading="isExportingBuckets"
+            :disabled="!buckets.length"
+            @click="exportBucketsToExcel"
+          >
+            Excel&apos;e Aktar
+          </VBtn>
+        </div>
         <VTable density="comfortable">
           <thead>
             <tr>
@@ -918,9 +1022,22 @@ onMounted(() => {
 
     <VCard class="mb-6">
       <VCardText>
-        <h6 class="text-h6 mb-4">
-          Oyun Türüne Göre Kırılım
-        </h6>
+        <div class="d-flex flex-wrap align-center justify-space-between gap-2 mb-4">
+          <h6 class="text-h6 mb-0">
+            Oyun Türüne Göre Kırılım
+          </h6>
+          <VBtn
+            variant="tonal"
+            color="secondary"
+            size="small"
+            prepend-icon="tabler-file-spreadsheet"
+            :loading="isExportingGameBuckets"
+            :disabled="!gameBuckets.length"
+            @click="exportGameBucketsToExcel"
+          >
+            Excel&apos;e Aktar
+          </VBtn>
+        </div>
         <VTable density="comfortable">
           <thead>
             <tr>
