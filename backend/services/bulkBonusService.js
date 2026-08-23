@@ -198,29 +198,57 @@ const createBulkManualBonus = async ({
 
 /**
  * "Sadece X affiliate'in üyeleri alsın" filtresi için admin ekranındaki
- * affiliate kodu seçim listesini üretir: her kod için kaç üye o kodla kayıt
- * olmuş (`affiliates.redeemedCode`) bilgisiyle birlikte.
+ * affiliate kodu seçim listesini üretir.
+ *
+ * ÖNEMLİ: Liste, gerçekte üyelerin kayıt olurken kullandığı kodlardan
+ * (`affiliates.redeemedCode`) türetilir — sadece kendi `affiliates.code`
+ * alanı set edilmiş kullanıcılardan değil. Aksi halde, kodun sahibinin
+ * profilinde `affiliates.code` set edilmemiş olduğu durumlarda (veya kod
+ * sahibi artık farklı bir alanla eşleşmediğinde) gerçekten kullanılan ve
+ * üyesi olan kodlar listede hiç görünmez ve "0 üye" gibi yanıltıcı bir
+ * sonuç oluşur. Bu yüzden önce gerçek kullanım (redeemedCode) sayılır,
+ * ardından her kod için varsa sahibi (`affiliates.code` eşleşmesi) eklenir.
  */
 const listAffiliateCodes = async () => {
-	const [owners, counts] = await Promise.all([
-		User.find({ "affiliates.code": { $exists: true, $nin: [null, ""] } })
-			.select("username affiliates.code")
-			.lean(),
+	const [usageCounts, owners] = await Promise.all([
 		User.aggregate([
 			{ $match: { "affiliates.redeemedCode": { $exists: true, $nin: [null, ""] } } },
 			{ $group: { _id: "$affiliates.redeemedCode", count: { $sum: 1 } } },
 		]),
+		User.find({ "affiliates.code": { $exists: true, $nin: [null, ""] } })
+			.select("username affiliates.code")
+			.lean(),
 	]);
 
-	const countByCode = new Map(counts.map((c) => [c._id, c.count]));
+	// Kod eşleştirmesi büyük/küçük harfe duyarsız yapılır, çünkü kayıt
+	// akışı affiliateCode'u kullanıcının girdiği haliyle saklar.
+	const ownerByCodeLower = new Map(
+		owners
+			.filter((owner) => owner.affiliates?.code)
+			.map((owner) => [String(owner.affiliates.code).toLowerCase(), owner])
+	);
 
-	return owners
+	const codesFromUsage = usageCounts.map((entry) => ({
+		code: entry._id,
+		ownerUsername: ownerByCodeLower.get(String(entry._id).toLowerCase())?.username || "",
+		referredCount: entry.count,
+	}));
+
+	const seenCodeLower = new Set(codesFromUsage.map((c) => c.code.toLowerCase()));
+
+	// Henüz hiç üyesi olmayan (0 üye) ama tanımlı olan kodları da listeye
+	// ekle - admin bu affiliate'i seçip ileride kullanabilsin.
+	const codesWithoutUsage = owners
+		.filter((owner) => owner.affiliates?.code && !seenCodeLower.has(String(owner.affiliates.code).toLowerCase()))
 		.map((owner) => ({
 			code: owner.affiliates.code,
 			ownerUsername: owner.username || "",
-			referredCount: countByCode.get(owner.affiliates.code) || 0,
-		}))
-		.sort((a, b) => b.referredCount - a.referredCount);
+			referredCount: 0,
+		}));
+
+	return [...codesFromUsage, ...codesWithoutUsage].sort(
+		(a, b) => b.referredCount - a.referredCount
+	);
 };
 
 module.exports = {
