@@ -636,7 +636,8 @@
 			"freeSpinBonus": "Freespin Bonusu",
 			"bankAccounts": "Banka Hesapları",
 			"ticketEvents": "Bilet Etkinliği",
-			"raceTournaments": "Çevrim Turnuvası"
+			"raceTournaments": "Çevrim Turnuvası",
+			"sportsTournaments": "Spor Turnuvası"
 		},
 	"paymentMethods": {
 		"title": "Ödeme Yöntem Yönetimi",

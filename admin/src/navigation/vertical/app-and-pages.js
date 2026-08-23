@@ -215,6 +215,13 @@ export default [
         action: "read",
         subject: "sports",
       },
+      {
+        title: "Spor Turnuvası",
+        to: "apps-sports-tournament",
+        icon: { icon: "tabler-trophy" },
+        action: "read",
+        subject: "sports.tournament",
+      },
 
       {
         title: "gameshistorytitle",
