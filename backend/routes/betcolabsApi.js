@@ -17,11 +17,14 @@ const { getMaxAccountBalance } = require("../config");
 const {
 	BET_ACCESS_BLOCKED_CODE,
 	BET_ACCESS_BLOCKED_MESSAGE,
+	CATEGORY_BET_LIMIT_EXCEEDED_CODE,
 	getProviderVisibleBalance,
 	isUserBetAccessBlocked,
+	evaluateCategoryBetLimit,
 } = require("../utils/userBetAccess");
 const { generalUserGetRakeback } = require("../utils/general/user");
 const { getClientIp } = require("../utils/ip");
+const { onBetSettled } = require("../utils/wagerHooks");
 
 // Betcolabs API Credentials
 const BETCOLABS_BASE_URL = process.env.BETCOLABS_API_ENDPOINT;
@@ -632,11 +635,34 @@ router.post("/callback", async (req, res) => {
 				}
 
 				const betAmount = parseFloat(amount) || 0;
+
+				// 🎯 Bet Limitleme: kategori bazlı tam blokaj / maksimum tutar kontrolü.
+				const limitCheck = evaluateCategoryBetLimit(user, "sportsBook", betAmount);
+				if (!limitCheck.allowed) {
+					return res.status(200).json({
+						success: false,
+						error: limitCheck.reason,
+						details:
+							limitCheck.reason === CATEGORY_BET_LIMIT_EXCEEDED_CODE
+								? `Bu kategori için maksimum bahis tutarı ${limitCheck.max} ile sınırlıdır.`
+								: "Bu oyun kategorisine erişiminiz kısıtlanmıştır.",
+						balance: 0,
+					});
+				}
+
 				const balanceBefore = activeWallet.balance;
 
 				// Deduct balance
 				const balanceAfter = await updateUserBalance(user, -betAmount, {
 					emitSocket: true,
+				});
+
+				// 🎯 Bilet çevrimi + Race puanı hook'u (Betcolabs spor bahsi konuldu)
+				onBetSettled({
+					userId: user._id,
+					amount: betAmount,
+					category: "sportsBook",
+					providerCode: "betcolabs",
 				});
 
 				// Calculate rakeback

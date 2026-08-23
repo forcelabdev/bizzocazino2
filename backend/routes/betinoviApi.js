@@ -878,6 +878,26 @@ router.post("/callback", async (req, res) => {
 					});
 				}
 
+				// 🎯 Bet Limitleme: kategori bazlı tam blokaj / maksimum tutar kontrolü.
+				if (normalizedTxnType === 0) {
+					const betCategory =
+						SINGLE_GAME_VENDORS[normalizedVendorCode]?.game_type === "sport"
+							? "sportsBook"
+							: "slots";
+					const limitCheck = evaluateCategoryBetLimit(user, betCategory, normalizedAmount);
+					if (!limitCheck.allowed) {
+						return res.status(200).json({
+							status: 6,
+							msg: limitCheck.reason,
+							details:
+								limitCheck.reason === CATEGORY_BET_LIMIT_EXCEEDED_CODE
+									? `Bu kategori için maksimum bahis tutarı ${limitCheck.max} ile sınırlıdır.`
+									: "Bu oyun kategorisine erişiminiz kısıtlanmıştır.",
+							balance: 0,
+						});
+					}
+				}
+
 				let balanceBefore = activeWallet.balance || 0;
 
 				let rakebackAmount = 0;
@@ -939,6 +959,27 @@ router.post("/callback", async (req, res) => {
 								balance: 0,
 							};
 							return;
+						}
+
+						// 🎯 Bet Limitleme: transaction içinde tekrar doğrula (race condition güvenliği).
+						if (normalizedTxnType === 0) {
+							const betCategory =
+								SINGLE_GAME_VENDORS[normalizedVendorCode]?.game_type === "sport"
+									? "sportsBook"
+									: "slots";
+							const limitCheck = evaluateCategoryBetLimit(currentUser, betCategory, normalizedAmount);
+							if (!limitCheck.allowed) {
+								callbackResponse = {
+									status: 6,
+									msg: limitCheck.reason,
+									details:
+										limitCheck.reason === CATEGORY_BET_LIMIT_EXCEEDED_CODE
+											? `Bu kategori için maksimum bahis tutarı ${limitCheck.max} ile sınırlıdır.`
+											: "Bu oyun kategorisine erişiminiz kısıtlanmıştır.",
+									balance: balanceBefore,
+								};
+								return;
+							}
 						}
 
 						let linkedDebit = null;
