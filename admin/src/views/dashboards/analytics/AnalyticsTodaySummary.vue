@@ -1,6 +1,6 @@
 <script setup>
 import axios from "@/plugins/axios";
-import { onMounted, ref } from "vue";
+import { onBeforeUnmount, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 
 const { t } = useI18n();
@@ -15,11 +15,20 @@ const todayData = ref({
 	freeSpinsTodayWinTry: 0,
 });
 
+// 🎯 Bu istek arada bir başarısız olsa da widget'ın "0,00 ₺" gösterip
+// takılı kalmaması için: hata olduğunda son başarılı veriyi ekranda tutar
+// (sıfırlamaz) ve durumu ayrı bir bayrakla belirtir. 30 saniyede bir otomatik
+// yenilenir, böylece geçici bir hata bir sonraki denemede kendiliğinden düzelir.
+const isLoading = ref(true);
+const hasError = ref(false);
+let pollTimer = null
+
 const fetchAnalytics = async () => {
 	try {
 		const res = await axios.get("/admin/analytics");
 		if (res.data.success) {
 			const d = res.data.data;
+
 			todayData.value = {
 				depositsTodayTry: d.depositsTodayTry || 0,
 				withdrawalsTodayTry: d.withdrawalsTodayTry || 0,
@@ -27,9 +36,15 @@ const fetchAnalytics = async () => {
 				freeSpinsTodayCount: d.freeSpinsTodayCount || 0,
 				freeSpinsTodayWinTry: d.freeSpinsTodayWinTry || 0,
 			};
+			hasError.value = false;
+		} else {
+			hasError.value = true;
 		}
 	} catch (err) {
 		console.error("Analytics (today) fetch error:", err);
+		hasError.value = true;
+	} finally {
+		isLoading.value = false;
 	}
 };
 
@@ -42,6 +57,14 @@ const formatValue = (value) => {
 
 onMounted(() => {
 	fetchAnalytics();
+
+	// 🔁 30 sn'de bir otomatik yenile: geçici bir sunucu hatası/timeout
+	// olsa bile widget bir süre sonra kendiliğinden güncel veriye döner.
+	pollTimer = setInterval(fetchAnalytics, 30000);
+});
+
+onBeforeUnmount(() => {
+	if (pollTimer) clearInterval(pollTimer);
 });
 </script>
 
@@ -53,10 +76,26 @@ onMounted(() => {
 				<VChip color="primary" variant="tonal" size="small">
 					TR
 				</VChip>
+				<VProgressCircular
+					v-if="isLoading"
+					size="16"
+					width="2"
+					indeterminate
+					color="primary"
+				/>
 			</VCardTitle>
 		</VCardItem>
 
 		<VCardText>
+			<VAlert
+				v-if="hasError"
+				type="warning"
+				variant="tonal"
+				density="compact"
+				class="mb-4"
+			>
+				Bugünkü özet verileri güncellenirken bir sorun oluştu, otomatik olarak yeniden denenecek.
+			</VAlert>
 			<VRow>
 				<!-- Bugünkü Yatırım -->
 				<VCol cols="12" sm="6" lg="3">

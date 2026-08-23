@@ -5642,7 +5642,15 @@ router.get(
 				Date.UTC(nowTr.getUTCFullYear(), nowTr.getUTCMonth(), nowTr.getUTCDate()) - TR_OFFSET_MS,
 			);
 
-			// 🔹 Tüm query'leri paralel çalıştır (Promise.all ile)
+			// 🔹 Temel (kritik) query'leri paralel çalıştır (Promise.all ile).
+			// 🎯 "Bugünkü Özet" widget'ının bazen tamamen 0 görünmesinin nedeni:
+			// bonus/freespin sorguları (özellikle FreeSpinGrant -> transactions
+			// $lookup'ı) ağır/kırılgan olduğundan tek bir hata/timeout TÜM
+			// Promise.all'u reddediyor ve endpoint 500 dönüyordu; bu da
+			// depositsTodayTry/withdrawalsTodayTry gibi aslında sorunsuz
+			// hesaplanabilecek alanları da frontend'de "|| 0" varsayılanına
+			// düşürüyordu. Bu yüzden kritik olmayan iki sorgu artık ayrı ve
+			// kendi try/catch'i ile izole çalışıyor (bkz. aşağısı).
 			const [
 				setting,
 				totalUsers,
@@ -5653,8 +5661,6 @@ router.get(
 				galaxyPayAggAll,
 				fluxKriptoAggAll,
 				xPaymentsAggAll,
-				bonusTodayAgg,
-				freeSpinsTodayAgg,
 			] = await Promise.all([
 				// Ayarlar
 				Setting.findOne().select("exchangeRates").lean(),
@@ -5875,10 +5881,94 @@ router.get(
 							},
 						},
 					},
-				]),
+					]),
+				]);
+
+			// 🎁 Bugün (TR günü) verilen bonus toplamı (AdminManualAdjustment)
+			// 🎰 Bugün verilen freespin adedi + yaklaşık kazanç
+			// (bkz. "Kapsam Dışı / Varsayımlar": provider'dan freespin bayrağı
+			// gelmediği için grant süresi + oyun eşleşmesiyle yaklaşık hesaplanır)
+			//
+			// 🎯 Bu iki sorgu Promise.all dışında ve kendi try/catch'i ile
+			// çalışır: freespin sorgusu FreeSpinGrant -> transactions arasında
+			// $expr tabanlı bir $lookup içerir (indekslenmiş bir eşitlik değil),
+			// bu da veri arttıkça yavaşlayıp zaman zaman timeout ile
+			// başarısız olabilir. Eskiden bu hata Promise.all'u tamamen
+			// reddedip /admin/analytics'i 500 döndürüyor, bu da depositsToday/
+			// withdrawalsToday gibi aslında sağlıklı hesaplanan alanları da
+			// frontend'de "|| 0" varsayılanına düşürüyordu. Artık bir hata
+			// olursa sadece bonus/freespin kısmı 0 olarak döner, diğer tüm
+			// "Bugünkü Özet" alanları normal şekilde gelir.
+			const [bonusTodayAgg, freeSpinsTodayAgg] = await Promise.all([
+				AdminManualAdjustment.aggregate([
+					{
+						$match: {
+							kind: "bonus",
+							direction: "credit",
+							createdAt: { $gte: todayStartTR },
+						},
+					},
+					{ $group: { _id: null, total: { $sum: "$appliedAmount" } } },
+				]).catch(err => {
+					console.error("Bugünkü bonus toplamı alınamadı:", err.message);
+					return [];
+				}),
+
+				FreeSpinGrant.aggregate([
+					{ $match: { createdAt: { $gte: todayStartTR } } },
+					{
+						$lookup: {
+							from: "transactions",
+							let: {
+								uid: { $toString: "$targetUser" },
+								gcode: "$gameCode",
+								gfrom: "$createdAt",
+								gto: "$expiresAt",
+							},
+							pipeline: [
+								{
+									$match: {
+										$expr: {
+											$and: [
+												{ $eq: ["$user_code", "$$uid"] },
+												{ $eq: ["$game_code", "$$gcode"] },
+												{ $gte: ["$created_at", "$$gfrom"] },
+												{ $lte: ["$created_at", "$$gto"] },
+											],
+										},
+									},
+								},
+								{
+									$group: {
+										_id: null,
+										winSum: { $sum: { $ifNull: ["$win_money", 0] } },
+									},
+								},
+							],
+							as: "playedWin",
+						},
+					},
+					{
+						$group: {
+							_id: null,
+							totalGrants: { $sum: 1 },
+							totalSpinCount: { $sum: { $ifNull: ["$spinCount", 0] } },
+							totalWinEstimate: {
+								$sum: {
+									$ifNull: [{ $arrayElemAt: ["$playedWin.winSum", 0] }, 0],
+								},
+							},
+						},
+					},
+				])
+					.maxTimeMS(8000)
+					.catch(err => {
+						console.error("Bugünkü freespin özeti alınamadı:", err.message);
+						return [];
+					}),
 			]);
 
-			// Aggregation sonuçlarını parse et
+				// Aggregation sonuçlarını parse et
 			const rates = setting?.exchangeRates || {};
 
 			// Kullanıcı bahis/kazanç
@@ -11708,7 +11798,7 @@ router.post(
 	},
 );
 
-// ═══════════════════════════════════════════════════���═══════════════════════
+// ═══════════════════════════════════════════════════���═��═════════════════════
 // MeelDev Admin Endpoints
 // ═══════════════════════════════════════════��═══════════════════════════════
 
