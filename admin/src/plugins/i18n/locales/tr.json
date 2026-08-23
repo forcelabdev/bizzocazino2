@@ -48,9 +48,25 @@
 		"ipAddressesSection": "IP Adresleri",
 		"affiliateAndRole": "Affiliate & Rol",
 		"totalDeposit": "Toplam Yatırım",
-		"totalWithdraw": "Toplam Çekim"
-	},
-	"betAccess": {
+			"totalWithdraw": "Toplam Çekim"
+		},
+		"userNotes": {
+			"cardTitle": "Notlar ve Etiketler",
+			"riskUser": "Riskli Kullanıcı",
+			"tagsTitle": "Etiketler",
+			"addTag": "Etiket Ekle",
+			"noTags": "Henüz etiket eklenmemiş.",
+			"notesTitle": "Notlar",
+			"notePlaceholder": "Bu kullanıcı hakkında bir not yazın...",
+			"addNote": "Not Ekle",
+			"noNotes": "Henüz not eklenmemiş.",
+			"deleteNoteConfirm": "Bu notu silmek istediğinizden emin misiniz?",
+			"noteAdded": "Not eklendi.",
+			"noteDeleted": "Not silindi.",
+			"noteAddFailed": "Not eklenemedi.",
+			"noteDeleteFailed": "Not silinemedi."
+		},
+		"betAccess": {
 		"block": "Bet Alımını Kapat",
 		"restore": "Bet Alımını Aç",
 		"reasonPrompt": "Bet erişimini kapatma sebebi",
@@ -1063,7 +1079,7 @@
 	"cryptoWithdraw": "Kripto Çekim Aktif",
 	"minDeposit": "Minimum Yatırım",
 	"minWithdraw": "Minimum Çekim",
-	"networkFee": "Ağ Ücreti",
+	"networkFee": "Ağ ��creti",
 	"supportedCoins": "Desteklenen Coinler",
 	"twoFactorEnabled": "İki Faktörlü Kimlik Doğrulama",
 	"loginAlerts": "Giriş Uyarıları",

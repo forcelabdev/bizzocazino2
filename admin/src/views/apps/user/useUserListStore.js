@@ -151,6 +151,19 @@ export const useUserListStore = defineStore('UserListStore', {
       return axios.post(`/admin/tags/${tagId}/unassign`, { userIds: [userId] }).then(res => res.data)
     },
 
+    // ✅ Üye Profili: Notlar (bkz. UserRiskNotesCard.vue)
+    fetchUserNotes(userId) {
+      return axios.get(`/admin/users/${userId}/notes`).then(res => res.data.data)
+    },
+
+    createUserNote(userId, text) {
+      return axios.post(`/admin/users/${userId}/notes`, { text }).then(res => res.data)
+    },
+
+    deleteUserNote(userId, noteId) {
+      return axios.delete(`/admin/users/${userId}/notes/${noteId}`).then(res => res.data)
+    },
+
     // ✅ Kayıp Bonusu: kullanıcı özeti (Kontroller sekmesi için)
     fetchUserLossBonusSummary(userId) {
       return axios.get(`/admin/users/${userId}/loss-bonus`).then(res => res.data.data)

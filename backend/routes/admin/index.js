@@ -180,6 +180,7 @@ const Mission = require("../../database/models/Mission");
 const BonusSetting = require("../../database/models/BonusSetting");
 const AdminManualAdjustment = require("../../database/models/AdminManualAdjustment");
 const FreeSpinGrant = require("../../database/models/FreeSpinGrant");
+const UserNote = require("../../database/models/UserNote");
 const AdminUserAuditLog = require("../../database/models/AdminUserAuditLog");
 
 const FuturesBet = require("../../database/models/FuturesBet");
@@ -605,7 +606,8 @@ router.get("/users/:id", checkPermission("users.read"), async (req, res) => {
 	try {
 		const user = await User.findById(req.params.id)
 			.select("-local.password")
-			.populate("adminRole");
+			.populate("adminRole")
+			.populate("tags");
 		if (!user)
 			return res
 				.status(404)
@@ -1531,7 +1533,7 @@ router.delete(
 
 			res.status(200).json({
 				success: true,
-				message: "Partner bağlantısı kaldırıldı.",
+				message: "Partner bağlantıs�� kaldırıldı.",
 				data: buildAdminUserResponseData(updatedUser),
 			});
 		} catch (error) {
@@ -1541,8 +1543,110 @@ router.delete(
 	},
 );
 
-// Kullanıcının tüm oyun geçmişini döndürme
-router.get("/users/:id/history", checkPermission("users.read"), async (req, res) => {
+// 📝 Üye Profili — Notlar (bkz. UserRiskNotesCard.vue)
+	router.get(
+		"/users/:id/notes",
+		checkPermission("users.read"),
+		async (req, res) => {
+			try {
+				const { id } = req.params;
+				if (!mongoose.Types.ObjectId.isValid(id)) {
+					return res
+						.status(400)
+						.json({ success: false, message: "INVALID_USER_ID" });
+				}
+
+				const notes = await UserNote.find({ targetUser: id })
+					.sort({ createdAt: -1 })
+					.lean();
+
+				res.status(200).json({ success: true, data: notes });
+			} catch (error) {
+				console.error("Kullanıcı notları alınırken hata:", error);
+				res.status(500).json({ success: false, message: "Sunucu hatası" });
+			}
+		},
+	);
+
+	router.post(
+		"/users/:id/notes",
+		checkPermission("users.manage"),
+		async (req, res) => {
+			try {
+				const { id } = req.params;
+				const { text } = req.body || {};
+				const trimmedText = String(text || "").trim();
+
+				if (!mongoose.Types.ObjectId.isValid(id)) {
+					return res
+						.status(400)
+						.json({ success: false, message: "INVALID_USER_ID" });
+				}
+				if (!trimmedText) {
+					return res
+						.status(400)
+						.json({ success: false, message: "MISSING_REQUIRED_FIELDS" });
+				}
+
+				const targetExists = await User.exists({ _id: id });
+				if (!targetExists) {
+					return res
+						.status(404)
+						.json({ success: false, message: "Kullanıcı bulunamadı" });
+				}
+
+				const note = await UserNote.create({
+					targetUser: id,
+					author: req.adminUser?._id || null,
+					authorSnapshot: {
+						username: req.adminUser?.username || "",
+					},
+					text: trimmedText,
+				});
+
+				res.status(201).json({ success: true, data: note });
+			} catch (error) {
+				console.error("Kullanıcı notu eklenirken hata:", error);
+				res.status(500).json({ success: false, message: "Sunucu hatası" });
+			}
+		},
+	);
+
+	router.delete(
+		"/users/:id/notes/:noteId",
+		checkPermission("users.manage"),
+		async (req, res) => {
+			try {
+				const { id, noteId } = req.params;
+				if (
+					!mongoose.Types.ObjectId.isValid(id) ||
+					!mongoose.Types.ObjectId.isValid(noteId)
+				) {
+					return res
+						.status(400)
+						.json({ success: false, message: "INVALID_ID" });
+				}
+
+				const note = await UserNote.findOneAndDelete({
+					_id: noteId,
+					targetUser: id,
+				});
+				if (!note) {
+					return res
+						.status(404)
+						.json({ success: false, message: "NOTE_NOT_FOUND" });
+				}
+
+				res.status(200).json({ success: true, message: "NOTE_DELETED" });
+			} catch (error) {
+				console.error("Kullanıcı notu silinirken hata:", error);
+				res.status(500).json({ success: false, message: "Sunucu hatası" });
+			}
+		},
+	);
+
+	// Kullanıcının tüm oyun geçmişini döndürme
+	router.get("/users/:id/history", checkPermission("users.read"), async (req, res) => {
 	try {
 		const { id } = req.params;
 
@@ -2241,7 +2345,7 @@ router.get(
 	playerSegmentsController.getUsers,
 );
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════���════════════════
 // CRM: Tag Manager
 // ═══════════════════════════════════════════════════════════════════════════
 router.get("/tags", checkPermission("users.read"), tagsController.listTags);
@@ -8870,7 +8974,7 @@ router.get("/my-permissions", authenticateAdmin, async (req, res) => {
 	}
 });
 
-// ═══��═══════════════════════════════════════════════════════════════════════
+// ═══��═════════════════════════════════════���═════════════════════════════════
 // 🎨 SITE SETTINGS ENDPOINTS
 // ═════════════════════════════════════════════════════════════��═════════════
 
