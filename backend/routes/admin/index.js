@@ -10,6 +10,7 @@ const manualBonusCategoryController = require("../../controllers/admin/manualBon
 const lossBonusController = require("../../controllers/admin/lossBonusController");
 const depositBonusController = require("../../controllers/admin/depositBonusController");
 const reloadBonusController = require("../../controllers/admin/reloadBonusController");
+const callScenarioController = require("../../controllers/admin/callScenarioController");
 const playerSegmentsController = require("../../controllers/admin/playerSegments");
 const tagsController = require("../../controllers/admin/tags");
 const { generalGetChatOnlineCount } = require("../../utils/general/chat");
@@ -2323,6 +2324,67 @@ router.post(
 	"/users/:id/reload-bonus",
 	checkPermission("finance.reloadBonus.manage"),
 	reloadBonusController.createAssignment,
+);
+
+// Çağrı Senaryoları (Call Scenarios)
+router.get(
+	"/call-scenarios/templates",
+	checkPermission(["callScenarios.read", "callScenarios.manage"]),
+	callScenarioController.listTemplates,
+);
+
+router.post(
+	"/call-scenarios/templates",
+	checkPermission("callScenarios.manage"),
+	callScenarioController.createTemplate,
+);
+
+router.put(
+	"/call-scenarios/templates/:id",
+	checkPermission("callScenarios.manage"),
+	callScenarioController.updateTemplate,
+);
+
+router.get(
+	"/call-scenarios/check-duplicate",
+	checkPermission(["callScenarios.read", "callScenarios.manage"]),
+	callScenarioController.checkDuplicate,
+);
+
+router.get(
+	"/call-scenarios/assignments",
+	checkPermission(["callScenarios.read", "callScenarios.manage"]),
+	callScenarioController.listAssignments,
+);
+
+router.post(
+	"/call-scenarios/assignments/:id/cancel",
+	checkPermission("callScenarios.manage"),
+	callScenarioController.cancelAssignment,
+);
+
+router.post(
+	"/call-scenarios/assignments/:id/violate",
+	checkPermission("callScenarios.manage"),
+	callScenarioController.markViolated,
+);
+
+router.post(
+	"/call-scenarios/assignments/:id/complete",
+	checkPermission("callScenarios.manage"),
+	callScenarioController.completeAssignment,
+);
+
+router.get(
+	"/users/:id/call-scenarios",
+	checkPermission(["callScenarios.read", "callScenarios.manage", "users.read"]),
+	callScenarioController.getUserSummary,
+);
+
+router.post(
+	"/users/:id/call-scenarios",
+	checkPermission("callScenarios.manage"),
+	callScenarioController.createAssignment,
 );
 
 // Yatırım Bonusu (Deposit Bonus)
@@ -9657,7 +9719,7 @@ router.put(
 // E-posta Şablonları (SiteSettings içinde)
 // SMTP credential bilgileri backend/.env üzerinden okunur, sadece şablonlar
 // ve gönderici görünen ad/adres burada yönetilir.
-// ════════════════════════════════════════════════════════���══════════════════
+// ═══════════���════════════════════════════════════════════���══════════════════
 
 const buildEmailTemplatesPayload = (siteSettings) => {
 	const tpl = (siteSettings && siteSettings.emailTemplates) || {};

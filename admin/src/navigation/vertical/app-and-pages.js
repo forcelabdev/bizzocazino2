@@ -157,6 +157,12 @@ export default [
         subject: "finance.reloadBonus",
       },
       {
+        title: "platform.callScenarios",
+        to: "apps-call-scenarios",
+        action: "read",
+        subject: "callScenarios",
+      },
+      {
         title: "platform.freeSpinBonus",
         to: "apps-free-spin-bonus",
         action: "read",

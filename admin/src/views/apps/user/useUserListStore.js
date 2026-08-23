@@ -223,5 +223,62 @@ export const useUserListStore = defineStore('UserListStore', {
       return axios.post(`/admin/users/${userId}/reload-bonus`, payload).then(res => res.data)
     },
 
+    // ✅ Çağrı Senaryoları: şablon listesi
+    fetchCallScenarioTemplates(params = {}) {
+      return axios.get('/admin/call-scenarios/templates', { params }).then(res => res.data.data)
+    },
+
+    // ✅ Çağrı Senaryoları: yeni şablon oluştur
+    createCallScenarioTemplate(payload) {
+      return axios.post('/admin/call-scenarios/templates', payload).then(res => res.data)
+    },
+
+    // ✅ Çağrı Senaryoları: şablon güncelle
+    updateCallScenarioTemplate(templateId, payload) {
+      return axios.put(`/admin/call-scenarios/templates/${templateId}`, payload).then(res => res.data)
+    },
+
+    // ✅ Çağrı Senaryoları: üye+şablon için mükerrer kontrol (canlı uyarı)
+    checkCallScenarioDuplicate(userId, templateId) {
+      return axios.get('/admin/call-scenarios/check-duplicate', { params: { userId, templateId } }).then(res => res.data.data)
+    },
+
+    // ✅ Çağrı Senaryoları: tüm atamaların listesi (Atama Geçmişi tablosu)
+    fetchCallScenarioAssignments(params = {}) {
+      return axios.get('/admin/call-scenarios/assignments', { params }).then(res => {
+        return {
+          assignments: res.data.data,
+          total: res.data.total,
+          page: res.data.page,
+          totalPages: res.data.totalPages,
+        }
+      })
+    },
+
+    // ✅ Çağrı Senaryoları: kullanıcı özeti (Bonuslar sekmesi için)
+    fetchUserCallScenarioSummary(userId) {
+      return axios.get(`/admin/users/${userId}/call-scenarios`).then(res => res.data.data)
+    },
+
+    // ✅ Çağrı Senaryoları: kullanıcıya senaryo ataması oluştur
+    createUserCallScenarioAssignment(userId, payload) {
+      return axios.post(`/admin/users/${userId}/call-scenarios`, payload).then(res => res.data)
+    },
+
+    // ✅ Çağrı Senaryoları: bir atamayı iptal et
+    cancelCallScenarioAssignment(assignmentId, reason = "") {
+      return axios.post(`/admin/call-scenarios/assignments/${assignmentId}/cancel`, { reason }).then(res => res.data)
+    },
+
+    // ✅ Çağrı Senaryoları: bir atamayı kural ihlali olarak işaretle
+    violateCallScenarioAssignment(assignmentId, reason = "") {
+      return axios.post(`/admin/call-scenarios/assignments/${assignmentId}/violate`, { reason }).then(res => res.data)
+    },
+
+    // ✅ Çağrı Senaryoları: bir atamayı tamamlandı olarak işaretle
+    completeCallScenarioAssignment(assignmentId) {
+      return axios.post(`/admin/call-scenarios/assignments/${assignmentId}/complete`).then(res => res.data)
+    },
+
   },
 })
