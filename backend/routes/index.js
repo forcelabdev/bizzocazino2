@@ -50,9 +50,11 @@ const {
 const pockersGamesRoute = require("./pokerApi");
 const raceApiRoute = require("./raceApi");
 const noticeApiRoute = require("./noticeApi");
+const sportsTournamentApiRoute = require("./sportsTournamentApi");
 router.use("/poker_api", pockersGamesRoute);
 router.use("/api/race", raceApiRoute);
 router.use("/api/notices", noticeApiRoute);
+router.use("/api/sports-tournaments", sportsTournamentApiRoute);
 router.use("/bonus-settings", bonusSettingRoutes);
 router.use("/promo-codes", promoCodeRoutes);
 router.use("/payment/pix", pixRoutes);

@@ -423,6 +423,20 @@ const defaultPermissions = [
 		action: "manage",
 		group: "Spor Bahisleri",
 	},
+	{
+		code: "sports.tournament.read",
+		name: "Spor Turnuvası Görüntüle",
+		resource: "sports.tournament",
+		action: "read",
+		group: "Spor Bahisleri",
+	},
+	{
+		code: "sports.tournament.manage",
+		name: "Spor Turnuvası Yönet",
+		resource: "sports.tournament",
+		action: "manage",
+		group: "Spor Bahisleri",
+	},
 
 	// Providers
 	{
@@ -828,6 +842,7 @@ const defaultRoles = [
 			"games.read",
 			"games.update",
 			"providers.read",
+			"sports.tournament.manage",
 			"platform.read",
 			"shop.read",
 			"shop.manage",
@@ -921,6 +936,8 @@ const defaultRoles = [
 			"providers.update",
 			"sports.read",
 			"sports.update",
+			"sports.tournament.read",
+			"sports.tournament.manage",
 		],
 	},
 	{
@@ -947,6 +964,7 @@ const defaultRoles = [
 			"callScenarios.read",
 			"games.read",
 			"providers.read",
+			"sports.tournament.read",
 			"platform.read",
 			"notice.read",
 			"reports.read",

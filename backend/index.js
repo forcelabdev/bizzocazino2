@@ -145,6 +145,14 @@ cron.schedule("* * * * *", () => {
 	);
 });
 
+// ⚽ Spor Turnuvası (manuel): durum geçişleri + süresi bitenlerin sonuçlandırılması (her dakika)
+const sportsTournamentService = require("./services/sportsTournamentService");
+cron.schedule("* * * * *", () => {
+	sportsTournamentService.advanceTournamentStates().catch((err) =>
+		console.error("❌ Spor Turnuvası durum güncelleme hatası:", err.message)
+	);
+});
+
 // Set app port
 const PORT = process.env.SERVER_PORT || 5000;
 
