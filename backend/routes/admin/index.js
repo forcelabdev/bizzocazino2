@@ -5897,10 +5897,10 @@ router.get(
 							},
 						},
 					},
-				])
-					.maxTimeMS(8000)
-					.catch(err => {
-						console.error("Bugünkü freespin özeti alınamadı:", err.message);
+					])
+						.option({ maxTimeMS: 8000 })
+						.catch(err => {
+							console.error("Bugünkü freespin özeti alınamadı:", err.message);
 						return [];
 					}),
 			]);
