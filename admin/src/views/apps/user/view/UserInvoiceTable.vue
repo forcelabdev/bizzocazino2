@@ -1,6 +1,7 @@
 <script setup>
 import axios from "@axios"
 import { useProviderDisplayNames } from "@/composables/useProviderDisplayNames"
+import { exportToXlsx } from "@/utils/exportXlsx"
 import { computed, ref, watch, watchEffect } from "vue"
 import { useI18n } from "vue-i18n"
 import { useRoute } from "vue-router"
@@ -307,6 +308,65 @@ watch(
 )
 
 watchEffect(fetchGameHistory)
+
+// 📤 Mevcut filtrelere göre üyenin oyun geçmişini xlsx olarak dışa aktar
+const isExporting = ref(false)
+
+const exportGameHistory = async () => {
+	if (!effectiveUserId.value) return
+	if (dateFromError.value || dateToError.value) return
+	if (isExporting.value) return
+
+	isExporting.value = true
+
+	try {
+		const params = {
+			export: true,
+			source: filters.value.source,
+			result: filters.value.result,
+		}
+		if (filters.value.provider) params.provider = filters.value.provider
+		if (filters.value.gameCode) params.gameCode = filters.value.gameCode
+		if (filters.value.search) params.search = filters.value.search
+		if (parsedDateFrom.value) params.dateFrom = parsedDateFrom.value.toISOString()
+		if (parsedDateTo.value) params.dateTo = parsedDateTo.value.toISOString()
+		if (filters.value.source === "provider" && filters.value.merge === false) params.merge = "false"
+
+		const { data } = await axios.get(
+			`/admin/users/${effectiveUserId.value}/history`,
+			{ params },
+		)
+
+		const list = data.data || []
+
+		if (!list.length) return
+
+		const rows = list.map(item => ({
+			[t("gameHistory.userCode")]: item.user_code || "",
+			[t("gameHistory.vendor")]: formatProviderDisplayName(item.provider_code, item.provider) || item.provider || "",
+			[t("gameHistory.game")]: item.game_name || "",
+			[t("gameHistory.roundId")]: item.round_id || "",
+			[t("gameHistory.currency")]: item.currency || userCurrency.value,
+			[t("gameHistory.bet")]: Number(item.bet_money || 0),
+			[t("gameHistory.win")]: Number(item.win_money || 0),
+			[t("gameHistory.profit")]: Number(item.win_money || 0) - Number(item.bet_money || 0),
+			[t("gameHistory.beforeBalance")]: Number(item.balance_before || 0),
+			[t("gameHistory.afterBalance")]: Number(item.balance_after || 0),
+			[t("gameHistory.bettingTime")]: formatDate(item.created_at),
+		}))
+
+		await exportToXlsx({
+			rows,
+			fileName: "oyun-gecmisi",
+			sheetName: "Oyun Geçmişi",
+			columnWidths: [22, 18, 22, 20, 12, 14, 14, 14, 16, 16, 20],
+		})
+	} catch (err) {
+		console.error("❌ Oyun geçmişi dışa aktarılamadı:", err)
+	} finally {
+		isExporting.value = false
+	}
+}
 </script>
 
 <template>
@@ -453,6 +513,15 @@ watchEffect(fetchGameHistory)
 							@click="fetchGameHistory"
 						>
 							{{ t("gameHistory.refresh") }}
+						</VBtn>
+						<VBtn
+							color="success"
+							variant="tonal"
+							prepend-icon="tabler-file-spreadsheet"
+							:loading="isExporting"
+							@click="exportGameHistory"
+						>
+							Excel&apos;e Aktar
 						</VBtn>
 					</VCol>
 				</VRow>

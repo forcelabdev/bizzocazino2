@@ -1016,7 +1016,7 @@ router.patch(
 				targetUser: updatedUser,
 				actorUser: req.adminUser || null,
 				action: "suspension_update",
-				summary: "Kullanıcı askıya alındı",
+				summary: "Kullanıcı askıya alınd��",
 				changes: [
 					{
 						field: "ban.expire",
@@ -1546,11 +1546,13 @@ router.get("/users/:id/history", checkPermission("users.read"), async (req, res)
 		const { id } = req.params;
 
 		// 📦 Pagination & filtreler
+		// Dışa aktarım modunda (export=true) sayfalama üst sınırı kaldırılır ve
+		// güvenli bir tavana (20.000 kayıt) kadar tüm eşleşen kayıtlar döndürülür.
+		const isExport = String(req.query.export) === "true";
 		const page = Math.max(1, parseInt(req.query.page) || 1);
-		const itemsPerPage = Math.min(
-			500,
-			Math.max(1, parseInt(req.query.itemsPerPage) || 10),
-		);
+		const itemsPerPage = isExport
+			? 20000
+			: Math.min(500, Math.max(1, parseInt(req.query.itemsPerPage) || 10));
 		const source = (req.query.source || "provider").toLowerCase(); // provider | internal | all
 		const providerFilter = (req.query.provider || "").trim(); // provider _id veya code
 		const gameCodeFilter = (req.query.gameCode || "").trim();
@@ -9505,7 +9507,7 @@ router.post(
 	},
 );
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ════════════════════════════════════���══════════════════════════════════════
 // 🎮 ORIGINAL GAMES BANNER ENDPOINTS
 // ════════════════════════════════���══════════════════════════════════════════
 
