@@ -1,7 +1,8 @@
 <script setup>
 import axios from "@axios"
 import { formatCoinType } from "@/utils/currency"
-import { ref, watch } from "vue"
+import { autoColumnWidths, exportToXlsx } from "@/utils/exportXlsx"
+import { computed, ref, watch } from "vue"
 import { useI18n } from "vue-i18n"
 import { useRoute } from "vue-router"
 
@@ -23,6 +24,167 @@ const BASE_URL = import.meta.env.VITE_API_BASE_URL
 
 const snackbar = ref(false)
 const snackbarText = ref("")
+
+// 🗓️ Tarih aralığı filtresi (client-side; API tüm kayıtları tek seferde döndürüyor)
+const dateFrom = ref(null)
+const dateTo = ref(null)
+
+const isWithinDateRange = createdAt => {
+  if (!dateFrom.value && !dateTo.value) return true
+  if (!createdAt) return false
+
+  const time = new Date(createdAt).getTime()
+  if (Number.isNaN(time)) return false
+
+  if (dateFrom.value) {
+    const from = new Date(dateFrom.value)
+    from.setHours(0, 0, 0, 0)
+    if (time < from.getTime()) return false
+  }
+
+  if (dateTo.value) {
+    const to = new Date(dateTo.value)
+    to.setHours(23, 59, 59, 999)
+    if (time > to.getTime()) return false
+  }
+
+  return true
+}
+
+const resetDateFilter = () => {
+  dateFrom.value = null
+  dateTo.value = null
+  methodFilter.value = []
+}
+
+// 🎯 Yöntem filtresi (client-side; sekme değiştikçe seçim sıfırlanır)
+// Her sekmede "yöntem" farklı bir alana karşılık gelir: yatırım/çekimde
+// ödeme yöntemi, bonus geçmişinde bonus adı, mağazada ürün adı.
+const methodFilter = ref([])
+
+const getMethodValue = (tab, item) => {
+  if (tab === "deposits" || tab === "withdrawals") return item.methodName || item.method || "-"
+  if (tab === "bonus-history") return item.bonusName || item.category || "-"
+  if (tab === "shop") return item.title || "-"
+
+  return "-"
+}
+
+const rawListForTab = tab => {
+  if (tab === "deposits") return deposits.value
+  if (tab === "withdrawals") return withdrawals.value
+  if (tab === "bonus-history") return manualBonuses.value
+  if (tab === "shop") return shopPurchases.value
+
+  return []
+}
+
+// 🎯 Aktif sekmedeki verilerden benzersiz yöntem listesi (tarih filtresinden
+// bağımsız olarak tüm kayıtlar üzerinden hesaplanır, seçenekler küçülmesin)
+const availableMethods = computed(() => {
+  const values = rawListForTab(activeTab.value).map(item => getMethodValue(activeTab.value, item))
+
+  return [...new Set(values)].filter(Boolean).sort((a, b) => a.localeCompare(b, "tr"))
+})
+
+const methodLabel = computed(() => {
+  if (activeTab.value === "bonus-history") return t("manualAdjustments.bonusName")
+  if (activeTab.value === "shop") return t("title")
+
+  return t("methodOrAddress")
+})
+
+const isMethodMatch = item => {
+  if (!methodFilter.value.length) return true
+
+  return methodFilter.value.includes(getMethodValue(activeTab.value, item))
+}
+
+const resetMethodFilter = () => {
+  methodFilter.value = []
+}
+
+// Sekme değişince yöntem seçenekleri de değiştiği için seçimi sıfırla
+watch(activeTab, resetMethodFilter)
+
+const filteredDeposits = computed(() => deposits.value.filter(item => isWithinDateRange(item.createdAt) && isMethodMatch(item)))
+const filteredWithdrawals = computed(() => withdrawals.value.filter(item => isWithinDateRange(item.createdAt) && isMethodMatch(item)))
+const filteredManualBonuses = computed(() => manualBonuses.value.filter(item => isWithinDateRange(item.createdAt) && isMethodMatch(item)))
+const filteredShopPurchases = computed(() => shopPurchases.value.filter(item => isWithinDateRange(item.createdAt) && isMethodMatch(item)))
+
+// 📤 Aktif alt sekmenin (yatırım/çekim/bonus/mağaza) filtrelenmiş verisini xlsx olarak dışa aktar
+const isExporting = ref(false)
+
+const exportActiveTab = async () => {
+  if (isExporting.value) return
+  isExporting.value = true
+
+  try {
+    let rows = []
+    let fileName = "finans"
+    let sheetName = "Finans"
+
+    if (activeTab.value === "deposits") {
+      fileName = "yatirimlar"
+      sheetName = t("deposits")
+      rows = filteredDeposits.value.map(item => ({
+        [t("amount")]: Number(item.amount || 0),
+        [t("currency")]: item.currency || "-",
+        [t("methodOrAddress")]: item.methodName || item.method || "-",
+        [t("status")]: item.status || item.state || "-",
+        [t("createdAt")]: formatDate(item.createdAt),
+      }))
+    } else if (activeTab.value === "withdrawals") {
+      fileName = "cekimler"
+      sheetName = t("withdrawals")
+      rows = filteredWithdrawals.value.map(item => ({
+        [t("amount")]: Number(item.amount || 0),
+        [t("currency")]: item.currency || "-",
+        [t("method")]: item.methodName || item.method || "-",
+        [t("transaction")]: item.transaction || "-",
+        [t("status")]: item.status || item.state || "-",
+        [t("createdAt")]: formatDate(item.createdAt),
+      }))
+    } else if (activeTab.value === "bonus-history") {
+      fileName = "bonus-gecmisi"
+      sheetName = t("bonusHistory")
+      rows = filteredManualBonuses.value.map(item => ({
+        [t("manualAdjustments.bonusName")]: item.bonusName || item.category || "-",
+        [t("amount")]: Number(item.amount || 0),
+        [t("manualAdjustments.wallet")]: formatWallet(item.wallet),
+        [t("manualAdjustments.actor")]: formatActor(item.actor),
+        [t("manualAdjustments.note")]: item.note || "-",
+        [t("manualAdjustments.balanceBefore")]: Number(item.balanceBefore || 0),
+        [t("manualAdjustments.balanceAfter")]: Number(item.balanceAfter || 0),
+        [t("manualAdjustments.date")]: formatDate(item.createdAt),
+      }))
+    } else if (activeTab.value === "shop") {
+      fileName = "magaza-satin-alimlari"
+      sheetName = t("platform.shop")
+      rows = filteredShopPurchases.value.map(item => ({
+        [t("title")]: item.title || "-",
+        [t("shop.coinCost")]: Number(item.coinCost ?? 0),
+        [t("shop.rewardAmount")]: Number(item.rewardAmount ?? 0),
+        [t("wallets")]: formatWallet(item.wallet),
+        [t("status")]: item.state || "-",
+        [t("createdAt")]: formatDate(item.createdAt),
+      }))
+    }
+
+    if (!rows.length) return
+
+    await exportToXlsx({
+      rows,
+      fileName,
+      sheetName,
+      columnWidths: autoColumnWidths(rows),
+    })
+  } catch (err) {
+    console.error("❌ Finans verisi dışa aktarılamadı:", err)
+  } finally {
+    isExporting.value = false
+  }
+}
 
 const fetchUserDepositWithdrawals = async userId => {
   try {
@@ -152,6 +314,74 @@ watch(
         </VTab>
       </VTabs>
 
+      <!-- 🗓️ Tarih Aralığı Filtresi -->
+      <VRow class="mt-2 align-center">
+        <VCol
+          cols="12"
+          sm="4"
+        >
+          <AppTextField
+            v-model="dateFrom"
+            type="date"
+            :label="t('startDate')"
+            density="comfortable"
+            clearable
+          />
+        </VCol>
+        <VCol
+          cols="12"
+          sm="4"
+        >
+          <AppTextField
+            v-model="dateTo"
+            type="date"
+            :label="t('endDate')"
+            density="comfortable"
+            clearable
+          />
+        </VCol>
+        <VCol
+          cols="12"
+          sm="4"
+        >
+          <!-- 🎯 Yöntem filtresi: aktif sekmedeki kayıtlardan çıkarılan
+               benzersiz değerler arasından çoklu seçim yapılabilir -->
+          <VSelect
+            v-model="methodFilter"
+            :items="availableMethods"
+            :label="methodLabel"
+            multiple
+            chips
+            closable-chips
+            clearable
+            density="comfortable"
+          />
+        </VCol>
+        <VCol
+          cols="12"
+          sm="8"
+          class="d-flex gap-2 flex-wrap align-center"
+        >
+          <VBtn
+            variant="tonal"
+            color="secondary"
+            prepend-icon="tabler-restore"
+            @click="resetDateFilter"
+          >
+            {{ t("gameHistory.reset") }}
+          </VBtn>
+          <VBtn
+            color="success"
+            variant="tonal"
+            prepend-icon="tabler-file-spreadsheet"
+            :loading="isExporting"
+            @click="exportActiveTab"
+          >
+            Excel&apos;e Aktar
+          </VBtn>
+        </VCol>
+      </VRow>
+
       <VDivider class="my-2" />
 
       <VWindow v-model="activeTab">
@@ -170,7 +400,7 @@ watch(
             </thead>
             <tbody>
               <tr
-                v-for="(item, index) in deposits"
+                v-for="(item, index) in filteredDeposits"
                 :key="index"
               >
                 <td>{{ item.amount }}</td>
@@ -250,7 +480,7 @@ watch(
             </thead>
             <tbody>
               <tr
-                v-for="(item, index) in withdrawals"
+                v-for="(item, index) in filteredWithdrawals"
                 :key="index"
               >
                 <td>{{ item.amount }}</td>
@@ -329,7 +559,7 @@ watch(
             </thead>
             <tbody>
               <tr
-                v-for="(item, index) in manualBonuses"
+                v-for="(item, index) in filteredManualBonuses"
                 :key="item._id || index"
               >
                 <td>{{ item.bonusName || item.category || "-" }}</td>
@@ -370,7 +600,7 @@ watch(
                   </div>
                 </td>
               </tr>
-              <tr v-if="!manualBonuses.length">
+              <tr v-if="!filteredManualBonuses.length">
                 <td
                   colspan="8"
                   class="text-center text-disabled py-6"
@@ -397,7 +627,7 @@ watch(
             </thead>
             <tbody>
               <tr
-                v-for="(item, index) in shopPurchases"
+                v-for="(item, index) in filteredShopPurchases"
                 :key="item._id || index"
               >
                 <td>
@@ -446,7 +676,7 @@ watch(
                   </div>
                 </td>
               </tr>
-              <tr v-if="!shopPurchases.length">
+              <tr v-if="!filteredShopPurchases.length">
                 <td
                   colspan="7"
                   class="text-center text-disabled py-6"

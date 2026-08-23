@@ -7,6 +7,11 @@ const LimitedItem = require("../../database/models/LimitedItem");
 const UpgraderGame = require("../../database/models/UpgraderGame");
 const Leaderboard = require("../../database/models/Leaderboard");
 const Rain = require("../../database/models/Rain");
+const { onBetSettled } = require("../../utils/wagerHooks");
+const {
+	evaluateCategoryBetLimit,
+	CATEGORY_BET_LIMIT_EXCEEDED_CODE,
+} = require("../../utils/userBetAccess");
 
 // Load utils
 const { socketRemoveAntiSpam } = require("../../utils/socket");
@@ -88,6 +93,16 @@ const upgraderSendBetSocket = async (io, socket, user, data, callback) => {
 
 		// Get user bet amount
 		const amount = Math.floor(data.amount);
+
+		// 🎯 Bet Limitleme: kategori bazlı tam blokaj / maksimum tutar kontrolü.
+		const limitCheck = evaluateCategoryBetLimit(user, "originals", amount);
+		if (!limitCheck.allowed) {
+			throw new Error(
+				limitCheck.reason === CATEGORY_BET_LIMIT_EXCEEDED_CODE
+					? `Bu kategori için maksimum bahis tutarı ${limitCheck.max} ile sınırlıdır.`
+					: "Bu oyun kategorisine erişiminiz kısıtlanmıştır."
+			);
+		}
 
 		// Get bet multiplier
 		const multiplier = Math.floor(
@@ -253,6 +268,9 @@ const upgraderSendBetSocket = async (io, socket, user, data, callback) => {
 
 		// Execute promise queries in database
 		let dataDatabase = await Promise.all(promises);
+
+		// 🎯 Bilet çevrimi + Race puanı hook'u
+		onBetSettled({ userId: user._id, amount: amount, category: "originals" });
 
 		// Convert game object to javascript object
 		dataDatabase[3] = dataDatabase[3].toObject();

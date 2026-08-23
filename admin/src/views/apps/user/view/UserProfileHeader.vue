@@ -57,6 +57,14 @@ const isUserSuspended = computed(() => {
 const isBetAccessBlocked = computed(() => userData.value?.betAccess?.blocked === true)
 const isEmailVerified = computed(() => userData.value?.local?.emailVerified === true)
 
+// Profildeki "risk" kategorili etiketler için ilk bakışta görünen kırmızı belirteç.
+// (bkz. UserRiskNotesCard.vue — kart içindeki risk uyarısıyla aynı mantık)
+const hasRiskTag = computed(() => {
+  const rawTags = Array.isArray(userData.value?.tags) ? userData.value.tags : []
+
+  return rawTags.some(tag => typeof tag === "object" && tag?.category === "risk")
+})
+
 // Role assignment
 const roles = ref([])
 const selectedRoleId = ref(null)
@@ -239,23 +247,33 @@ const resolveUserRoleVariant = role => {
   <VCard v-if="userData">
     <VCardText class="d-flex flex-wrap justify-space-between align-center gap-6 pa-6">
       <div class="d-flex align-center gap-4">
-        <VAvatar
-          rounded
-          :size="72"
-          :color="!userData.avatar ? 'primary' : undefined"
-          :variant="!userData.avatar ? 'tonal' : undefined"
+        <VBadge
+          :model-value="hasRiskTag"
+          color="error"
+          dot
+          location="top end"
+          offset-x="6"
+          offset-y="6"
+          :title="t('userNotes.riskUser')"
         >
-          <VImg
-            v-if="userData.avatar"
-            :src="userData.avatar"
-          />
-          <span
-            v-else
-            class="text-h4 font-weight-medium"
+          <VAvatar
+            rounded
+            :size="72"
+            :color="!userData.avatar ? 'primary' : undefined"
+            :variant="!userData.avatar ? 'tonal' : undefined"
           >
-            {{ avatarText(userData.name) }}
-          </span>
-        </VAvatar>
+            <VImg
+              v-if="userData.avatar"
+              :src="userData.avatar"
+            />
+            <span
+              v-else
+              class="text-h4 font-weight-medium"
+            >
+              {{ avatarText(userData.name) }}
+            </span>
+          </VAvatar>
+        </VBadge>
 
         <div>
           <div class="d-flex align-center gap-2 flex-wrap">

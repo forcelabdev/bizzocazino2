@@ -48,9 +48,25 @@
 		"ipAddressesSection": "IP Adresleri",
 		"affiliateAndRole": "Affiliate & Rol",
 		"totalDeposit": "Toplam Yatırım",
-		"totalWithdraw": "Toplam Çekim"
-	},
-	"betAccess": {
+			"totalWithdraw": "Toplam Çekim"
+		},
+		"userNotes": {
+			"cardTitle": "Notlar ve Etiketler",
+			"riskUser": "Riskli Kullanıcı",
+			"tagsTitle": "Etiketler",
+			"addTag": "Etiket Ekle",
+			"noTags": "Henüz etiket eklenmemiş.",
+			"notesTitle": "Notlar",
+			"notePlaceholder": "Bu kullanıcı hakkında bir not yazın...",
+			"addNote": "Not Ekle",
+			"noNotes": "Henüz not eklenmemiş.",
+			"deleteNoteConfirm": "Bu notu silmek istediğinizden emin misiniz?",
+			"noteAdded": "Not eklendi.",
+			"noteDeleted": "Not silindi.",
+			"noteAddFailed": "Not eklenemedi.",
+			"noteDeleteFailed": "Not silinemedi."
+		},
+		"betAccess": {
 		"block": "Bet Alımını Kapat",
 		"restore": "Bet Alımını Aç",
 		"reasonPrompt": "Bet erişimini kapatma sebebi",
@@ -422,7 +438,7 @@
 		"totalWon": "Toplam Kazanç",
 		"totalDeposit": "Toplam Yatırım",
 		"totalWithdraw": "Toplam Çekim",
-		"identityNumber": "Kimlik Numarası",
+		"identityNumber": "Kimlik Numaras��",
 		"identityVerified": "Kimlik Doğrulandı",
 		"emailVerified": "E-posta Doğrulandı"
 	},
@@ -618,7 +634,10 @@
 			"reloadBonus": "Reload Bonusu",
 			"callScenarios": "Çağrı Senaryoları",
 			"freeSpinBonus": "Freespin Bonusu",
-			"bankAccounts": "Banka Hesapları"
+			"bankAccounts": "Banka Hesapları",
+			"ticketEvents": "Bilet Etkinliği",
+			"raceTournaments": "Çevrim Turnuvası",
+			"sportsTournaments": "Spor Turnuvası"
 		},
 	"paymentMethods": {
 		"title": "Ödeme Yöntem Yönetimi",
@@ -861,7 +880,7 @@
 		"title": "Oyun Geçmişi",
 		"subtitle": "Kullanıcının tüm bahis ve oyun işlemleri",
 		"userCode": "Kullanıcı Kodu",
-		"vendor": "Sağlayıc��",
+		"vendor": "Sağlayıc����",
 		"game": "Oyun Adı",
 		"roundId": "Round ID",
 		"currency": "Para Birimi",
@@ -1007,7 +1026,15 @@
 		"pending": "Beklemede",
 		"processing": "İşleniyor",
 		"rejected": "Reddedildi",
-		"user": "Kullanıcı"
+		"user": "Kullanıcı",
+		"todaySummary": "Bugünkü Özet (TR Günü)",
+		"depositsToday": "Bugünkü Onaylı Yatırım",
+		"withdrawalsToday": "Bugünkü Onaylı Çekim",
+		"bonusToday": "Bugünkü Bonus Toplamı",
+		"freeSpinsToday": "Bugünkü Freespin",
+		"freeSpinsTodayCount": "adet",
+		"freeSpinsTodayWin": "yaklaşık kazanç",
+		"approxNotice": "Yaklaşık değer"
 	},
 	"siteSettings": "Site Ayarları",
 	"settingsSaved": "Ayarlar başarıyla kaydedildi",
@@ -1053,7 +1080,7 @@
 	"cryptoWithdraw": "Kripto Çekim Aktif",
 	"minDeposit": "Minimum Yatırım",
 	"minWithdraw": "Minimum Çekim",
-	"networkFee": "Ağ Ücreti",
+	"networkFee": "Ağ ��creti",
 	"supportedCoins": "Desteklenen Coinler",
 	"twoFactorEnabled": "İki Faktörlü Kimlik Doğrulama",
 	"loginAlerts": "Giriş Uyarıları",
@@ -1242,6 +1269,7 @@
 		"submitting": "Gönderiliyor...",
 		"resultsTitle": "İşlem Sonuçları",
 		"resultsSummary": "{success} / {total} başarılı",
+		"exportResults": "Excel'e Aktar",
 		"statusSuccess": "Eklendi",
 		"statusNotFound": "Kullanıcı bulunamadı",
 		"statusNoWallet": "Cüzdan bulunamadı",
@@ -1265,8 +1293,19 @@
 		"status": "Durum",
 		"active": "Aktif",
 		"inactive": "Pasif",
-			"deleteConfirm": "Silme Onayı",
-			"deleteMessage": "\"{name}\" bonus adını silmek istediğinizden emin misiniz?"
+		"deleteConfirm": "Silme Onayı",
+		"deleteMessage": "\"{name}\" bonus adını silmek istediğinizden emin misiniz?",
+		"reportTitle": "\"{name}\" Bonus Raporu",
+		"dateFrom": "Başlangıç Tarihi",
+		"dateTo": "Bitiş Tarihi",
+		"exportExcel": "Excel'e Aktar",
+		"reportCount": "{count} kayıt",
+		"reportTotal": "Toplam: {total} ₺",
+		"amount": "Tutar",
+		"note": "Not",
+		"actor": "İşlemi Yapan",
+		"date": "Tarih",
+		"reportEmpty": "Bu tarih aralığında kayıt bulunamadı."
 		},
 		"lossBonusAdmin": {
 			"title": "Kayıp Bonusu",
@@ -1783,15 +1822,24 @@
 				"subtitle": "Bahşiş göndermeyi devre dışı bırak."
 			}
 		},
-		"categories": {
-			"title": "Kategori kısıtlamaları",
-			"subtitle": "Oyuncuyu belirli oyun kategorilerinden engelle.",
-			"slots": "Slotlar",
-			"liveCasino": "Canlı casino",
-			"sportsBook": "Spor bahisleri",
-			"originals": "Özgün oyunlar"
-		},
-		"platform": {
+			"categories": {
+				"title": "Kategori kısıtlamaları",
+				"subtitle": "Oyuncuyu belirli oyun kategorilerinden engelle.",
+				"slots": "Slotlar",
+				"liveCasino": "Canlı casino",
+				"sportsBook": "Spor bahisleri",
+				"originals": "Özgün oyunlar"
+			},
+			"betLimits": {
+				"title": "Bahis limitleri",
+				"subtitle": "Kategori bazlı maksimum bahis tutarı. 0 girilirse limitsiz olur.",
+				"casino": "Casino (Slotlar + Özgün oyunlar)",
+				"liveCasino": "Canlı casino",
+				"sportsBook": "Spor bahisleri",
+				"placeholder": "Limitsiz",
+				"saved": "Bahis limiti güncellendi."
+			},
+			"platform": {
 			"title": "Platform erişimi",
 			"subtitle": "Yönetim / partner panel rolleri ver.",
 			"affiliatePanel": {

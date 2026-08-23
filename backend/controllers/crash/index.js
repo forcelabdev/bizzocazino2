@@ -8,6 +8,11 @@ const Rain = require("../../database/models/Rain");
 const Leaderboard = require("../../database/models/Leaderboard");
 const BalanceTransaction = require("../../database/models/BalanceTransaction");
 const { getActiveWalletIndex } = require("../../utils/wallet");
+const { onBetSettled } = require("../../utils/wagerHooks");
+const {
+	evaluateCategoryBetLimit,
+	CATEGORY_BET_LIMIT_EXCEEDED_CODE,
+} = require("../../utils/userBetAccess");
 const Setting = require("../../database/models/Setting");
 // Load utils
 const { socketRemoveAntiSpam } = require("../../utils/socket");
@@ -74,7 +79,7 @@ const crashSendBetSocket = async (io, socket, user, data, callback) => {
 		// ✅ Güncel kullanıcıyı al
 		const freshUser = await User.findById(user._id)
 			.select(
-				"wallets currency stats rakeback mute ban verifiedAt roblox username avatar rank level limits affiliates createdAt anonymous"
+				"wallets currency stats rakeback mute ban verifiedAt roblox username avatar rank level limits controls affiliates createdAt anonymous"
 			)
 			.lean();
 		if (!freshUser) throw new Error("User not found.");
@@ -91,6 +96,16 @@ const crashSendBetSocket = async (io, socket, user, data, callback) => {
 
 		const walletBalance = freshUser.wallets[walletIndex].balance;
 		if (walletBalance < amount) throw new Error("Yetersiz bakiye");
+
+		// 🎯 Bet Limitleme: kategori bazlı tam blokaj / maksimum tutar kontrolü.
+		const limitCheck = evaluateCategoryBetLimit(freshUser, "originals", amount);
+		if (!limitCheck.allowed) {
+			throw new Error(
+				limitCheck.reason === CATEGORY_BET_LIMIT_EXCEEDED_CODE
+					? `Bu kategori için maksimum bahis tutarı ${limitCheck.max} ile sınırlıdır.`
+					: "Bu oyun kategorisine erişiminiz kısıtlanmıştır."
+			);
+		}
 
 		const walletPath = `wallets.${walletIndex}.balance`;
 
@@ -363,6 +378,9 @@ const crashGameComplete = async (io) => {
 						.lean()
 				);
 
+				// 🎯 Bilet çevrimi + Race puanı hook'u (bahis kaybedildi, tam tutar çevrime sayılır)
+				onBetSettled({ userId: bet.user._id, amount: bet.amount, category: "originals" });
+
 				// Add update bet query to bets promises array
 				promisesBets.push(
 					CrashBet.findByIdAndUpdate(
@@ -544,6 +562,9 @@ const crashBetCashout = async (io, multiplier, bet) => {
 				.select("amount payout actions user updatedAt createdAt")
 				.lean(),
 		]);
+
+		// 🎯 Bilet çevrimi + Race puanı hook'u (cashout ile kazanılan bahis)
+		onBetSettled({ userId: updatedUser._id, amount: amountLimits, category: "originals" });
 
 		// Güncel kullanıcıyı frontend'e gönder
 		io.of("/general")

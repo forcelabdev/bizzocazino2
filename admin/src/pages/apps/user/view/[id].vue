@@ -120,7 +120,10 @@ watch(
         :touch="false"
       >
         <VWindowItem>
-          <UserTabProfile :user-data="userData" />
+          <UserTabProfile
+            :user-data="userData"
+            @updated="userData = { ...userData, ...$event }"
+          />
         </VWindowItem>
         <VWindowItem>
           <UserTabBillingsPlans :selected-user-id="userData._id" />

@@ -1,4 +1,5 @@
 <script setup>
+import ConditionBuilder from '@/components/ConditionBuilder.vue'
 import axios from '@/plugins/axios'
 import { requiredValidator } from '@validators'
 import { computed, nextTick, onMounted, ref } from 'vue'
@@ -16,10 +17,20 @@ const formValid = ref(false)
 const refForm = ref()
 const searchQuery = ref('')
 
+// 🎯 Hedef kitle seçenekleri (bkz. backend/database/models/Notice.js audience alanı)
+const AUDIENCE_TYPE_OPTIONS = [
+  { title: 'Tüm Üyeler', value: 'all' },
+  { title: 'Sadece Online Üyeler', value: 'online' },
+  { title: 'Sadece Offline Üyeler', value: 'offline' },
+  { title: 'Segment (Koşullara Göre)', value: 'segment' },
+]
+
 const noticeToCreate = ref({
   title: '',
   message: '',
   image: null,
+  audienceType: 'all',
+  conditions: [],
 })
 
 const fetchNotices = async () => {
@@ -32,7 +43,7 @@ const fetchNotices = async () => {
 }
 
 const openDrawer = () => {
-  noticeToCreate.value = { title: '', message: '', image: null }
+  noticeToCreate.value = { title: '', message: '', image: null, audienceType: 'all', conditions: [] }
   isDrawerOpen.value = true
 }
 
@@ -44,9 +55,13 @@ const closeDrawer = () => {
   })
 }
 
+const sendError = ref('')
+const matchedCount = ref(null)
+
 const onSubmit = () => {
   refForm.value?.validate().then(async ({ valid }) => {
     if (!valid) return
+    sendError.value = ''
 
     const formData = new FormData()
     formData.append('title', noticeToCreate.value.title)
@@ -55,12 +70,25 @@ const onSubmit = () => {
       formData.append('image', noticeToCreate.value.image)
     }
 
+    // 🎯 Hedef kitle: "all" ise gönderilmez (backend varsayılanı "all" kabul eder).
+    if (noticeToCreate.value.audienceType !== 'all') {
+      formData.append('audience', JSON.stringify({
+        type: noticeToCreate.value.audienceType,
+        conditions: noticeToCreate.value.audienceType === 'segment'
+          ? noticeToCreate.value.conditions.map(({ metric, operator, value, dateFrom, dateTo }) => ({ metric, operator, value: Number(value), dateFrom: dateFrom || null, dateTo: dateTo || null }))
+          : [],
+      }))
+    }
+
     try {
-      await axios.post('/admin/notices', formData)
+      const res = await axios.post('/admin/notices', formData)
+
+      matchedCount.value = res.data?.matchedCount ?? null
       closeDrawer()
       fetchNotices()
     } catch (err) {
       console.error('Kayıt hatası:', err)
+      sendError.value = err?.response?.data?.message || 'Bildirim gönderilemedi.'
     }
   })
 }
@@ -94,6 +122,17 @@ onMounted(fetchNotices)
         </VBtn>
       </VCardTitle>
       <VCardText>
+        <VAlert
+          v-if="matchedCount !== null"
+          type="success"
+          variant="tonal"
+          density="compact"
+          closable
+          class="mb-4"
+          @click:close="matchedCount = null"
+        >
+          Bildirim {{ matchedCount }} kullanıcıya gönderildi.
+        </VAlert>
         <AppTextField
           v-model="searchQuery"
           :label="t('searchTitle')"
@@ -109,6 +148,8 @@ onMounted(fetchNotices)
           { title: t('title'), key: 'title' },
           { title: t('message'), key: 'message' },
           { title: t('image'), key: 'image' },
+          { title: 'Hedef Kitle', key: 'audience' },
+          { title: 'Okundu', key: 'readCount' },
           { title: t('actions'), key: 'actions', sortable: false },
         ]"
       >
@@ -120,6 +161,35 @@ onMounted(fetchNotices)
             max-height="50"
             cover
           />
+        </template>
+
+        <template #item.audience="{ item }">
+          <VChip
+            v-if="item.raw.recipientId"
+            color="secondary"
+            size="small"
+          >
+            Tekil
+          </VChip>
+          <VChip
+            v-else-if="item.raw.audience?.type && item.raw.audience.type !== 'all'"
+            :color="item.raw.audience.type === 'segment' ? 'info' : 'primary'"
+            size="small"
+          >
+            {{ AUDIENCE_TYPE_OPTIONS.find(o => o.value === item.raw.audience.type)?.title }}
+            <template v-if="item.raw.recipientsCount !== null"> ({{ item.raw.recipientsCount }})</template>
+          </VChip>
+          <VChip
+            v-else
+            color="success"
+            size="small"
+          >
+            Tüm Üyeler
+          </VChip>
+        </template>
+
+        <template #item.readCount="{ item }">
+          {{ item.raw.readCount ?? 0 }}
         </template>
 
         <template #item.actions="{ item }">
@@ -168,6 +238,42 @@ onMounted(fetchNotices)
                     @change="e => noticeToCreate.image = e.target.files[0]"
                   />
                 </VCol>
+
+                <VCol cols="12">
+                  <VDivider class="mb-4" />
+                  <VSelect
+                    v-model="noticeToCreate.audienceType"
+                    :items="AUDIENCE_TYPE_OPTIONS"
+                    label="Hedef Kitle"
+                    hint="Bildirim kimlere gönderilsin?"
+                    persistent-hint
+                  />
+                </VCol>
+
+                <VCol
+                  v-if="noticeToCreate.audienceType === 'segment'"
+                  cols="12"
+                >
+                  <VDivider class="my-4" />
+                  <ConditionBuilder
+                    v-model="noticeToCreate.conditions"
+                    title="Segment Koşulları"
+                  />
+                </VCol>
+
+                <VCol
+                  v-if="sendError"
+                  cols="12"
+                >
+                  <VAlert
+                    type="error"
+                    variant="tonal"
+                    density="compact"
+                  >
+                    {{ sendError }}
+                  </VAlert>
+                </VCol>
+
                 <VCol cols="12" class="d-flex justify-end gap-3">
                   <VBtn type="submit">
                     {{ t('send') }}

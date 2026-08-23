@@ -151,6 +151,11 @@ const controls = reactive({
     sportsBook: false,
     originals: false,
   },
+  categoryBetLimits: {
+    liveCasino: 0,
+    casino: 0,
+    sportsBook: 0,
+  },
   platformAccess: {
     affiliatePanel: false,
     partnerAccess: false,
@@ -170,6 +175,10 @@ const syncControlsFromUser = () => {
   controls.categoryRestrictions.liveCasino = Boolean(source.categoryRestrictions?.liveCasino)
   controls.categoryRestrictions.sportsBook = Boolean(source.categoryRestrictions?.sportsBook)
   controls.categoryRestrictions.originals = Boolean(source.categoryRestrictions?.originals)
+  controls.categoryBetLimits.liveCasino = Number(source.categoryBetLimits?.liveCasino || 0)
+  controls.categoryBetLimits.casino = Number(source.categoryBetLimits?.casino || 0)
+  controls.categoryBetLimits.sportsBook = Number(source.categoryBetLimits?.sportsBook || 0)
+  syncBetLimitDrafts()
   controls.platformAccess.affiliatePanel = Boolean(source.platformAccess?.affiliatePanel)
   controls.platformAccess.partnerAccess = Boolean(source.platformAccess?.partnerAccess)
   controls.platformAccess.contentEditor = Boolean(source.platformAccess?.contentEditor)
@@ -211,6 +220,12 @@ const categoryChips = computed(() => [
   { key: "originals", label: t("userControls.categories.originals") },
 ])
 
+const betLimitFields = computed(() => [
+  { key: "casino", label: t("userControls.betLimits.casino") },
+  { key: "liveCasino", label: t("userControls.betLimits.liveCasino") },
+  { key: "sportsBook", label: t("userControls.betLimits.sportsBook") },
+])
+
 const platformSwitches = computed(() => [
   {
     key: "affiliatePanel",
@@ -250,6 +265,7 @@ const persistControls = async () => {
       gameBlocked: controls.gameBlocked,
       tipBlocked: controls.tipBlocked,
       categoryRestrictions: { ...controls.categoryRestrictions },
+      categoryBetLimits: { ...controls.categoryBetLimits },
       platformAccess: { ...controls.platformAccess },
     }
     const res = await userStore.updateUserControls(props.userData._id, payload)
@@ -269,6 +285,26 @@ const toggleBlockSwitch = key => {
 
 const toggleCategory = key => {
   controls.categoryRestrictions[key] = !controls.categoryRestrictions[key]
+  persistControls()
+}
+
+const betLimitDrafts = reactive({
+  liveCasino: 0,
+  casino: 0,
+  sportsBook: 0,
+})
+
+const syncBetLimitDrafts = () => {
+  betLimitDrafts.liveCasino = controls.categoryBetLimits.liveCasino
+  betLimitDrafts.casino = controls.categoryBetLimits.casino
+  betLimitDrafts.sportsBook = controls.categoryBetLimits.sportsBook
+}
+
+const commitBetLimit = key => {
+  const normalized = Math.max(0, Number(betLimitDrafts[key]) || 0)
+  betLimitDrafts[key] = normalized
+  if (controls.categoryBetLimits[key] === normalized) return
+  controls.categoryBetLimits[key] = normalized
   persistControls()
 }
 
@@ -612,6 +648,40 @@ onMounted(() => {
               {{ chip.label }}
             </VChip>
           </div>
+        </VCardText>
+      </VCard>
+    </VCol>
+
+    <!-- Bahis limitleri -->
+    <VCol cols="12">
+      <VCard>
+        <VCardText>
+          <h5 class="text-h5">
+            {{ t("userControls.betLimits.title") }}
+          </h5>
+          <span class="text-body-2 text-disabled">{{ t("userControls.betLimits.subtitle") }}</span>
+
+          <VRow class="mt-4">
+            <VCol
+              v-for="field in betLimitFields"
+              :key="field.key"
+              cols="12"
+              sm="6"
+              md="4"
+            >
+              <AppTextField
+                v-model="betLimitDrafts[field.key]"
+                type="number"
+                min="0"
+                :label="field.label"
+                :placeholder="t('userControls.betLimits.placeholder')"
+                :disabled="savingControls"
+                :prefix="currencyCode"
+                @blur="commitBetLimit(field.key)"
+                @keyup.enter="commitBetLimit(field.key)"
+              />
+            </VCol>
+          </VRow>
         </VCardText>
       </VCard>
     </VCol>

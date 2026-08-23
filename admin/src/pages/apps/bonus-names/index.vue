@@ -22,6 +22,15 @@ const deleteDialogOpen = ref(false)
 const editingCategory = ref(null)
 const selectedCategory = ref(null)
 
+// 🎯 Toplu Bonus Raporu (bkz. backend/controllers/admin/manualBonusCategoryController.js)
+const reportDialogOpen = ref(false)
+const reportLoading = ref(false)
+const reportExporting = ref(false)
+const reportCategory = ref(null)
+const reportData = ref(null)
+const reportDateFrom = ref('')
+const reportDateTo = ref('')
+
 const defaultForm = { name: "", order: 0, active: true }
 const form = ref({ ...defaultForm })
 
@@ -67,6 +76,58 @@ const openDeleteDialog = category => {
   if (!canManage.value) return
   selectedCategory.value = category
   deleteDialogOpen.value = true
+}
+
+const fetchCategoryReport = async () => {
+  if (!reportCategory.value) return
+  reportLoading.value = true
+  try {
+    const params = {}
+    if (reportDateFrom.value) params.dateFrom = reportDateFrom.value
+    if (reportDateTo.value) params.dateTo = reportDateTo.value
+    const res = await axios.get(`/admin/manual-bonus-categories/${encodeURIComponent(reportCategory.value.name)}/report`, { params })
+    reportData.value = res.data.data
+  } catch (err) {
+    console.error('Bonus raporu alınamadı:', err)
+    reportData.value = null
+  } finally {
+    reportLoading.value = false
+  }
+}
+
+const openReportDialog = category => {
+  reportCategory.value = category
+  reportDateFrom.value = ''
+  reportDateTo.value = ''
+  reportData.value = null
+  reportDialogOpen.value = true
+  fetchCategoryReport()
+}
+
+const exportCategoryReport = async () => {
+  if (!reportData.value?.rows?.length) return
+  reportExporting.value = true
+  try {
+    const XLSXModule = await import('xlsx')
+    const XLSX = XLSXModule.default || XLSXModule
+    const rows = reportData.value.rows.map(row => ({
+      [t('fields.username')]: row.username,
+      Ad: row.name,
+      Tutar: row.amount,
+      Not: row.note,
+      'İşlemi Yapan': row.actorUsername,
+      Tarih: row.createdAt ? new Date(row.createdAt).toLocaleString('tr-TR') : '',
+    }))
+    const worksheet = XLSX.utils.json_to_sheet(rows)
+    worksheet['!cols'] = [{ wch: 22 }, { wch: 22 }, { wch: 14 }, { wch: 28 }, { wch: 18 }, { wch: 20 }]
+    const workbook = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Bonus Raporu')
+    XLSX.writeFile(workbook, `bonus-raporu-${reportCategory.value.name}-${new Date().toISOString().slice(0, 10)}.xlsx`, { compression: true })
+  } catch (err) {
+    console.error('Bonus raporu dışa aktarılamadı:', err)
+  } finally {
+    reportExporting.value = false
+  }
 }
 
 const saveCategory = async () => {
@@ -150,28 +211,36 @@ onMounted(fetchCategories)
         </template>
 
         <template #item.actions="{ item }">
-          <div
-            v-if="canManage"
-            class="d-flex gap-1"
-          >
+          <div class="d-flex gap-1">
             <VBtn
               icon
               size="small"
               variant="text"
-              color="primary"
-              @click="openEditDialog(item.raw)"
+              color="info"
+              @click="openReportDialog(item.raw)"
             >
-              <VIcon icon="tabler-edit" />
+              <VIcon icon="tabler-report" />
             </VBtn>
-            <VBtn
-              icon
-              size="small"
-              variant="text"
-              color="error"
-              @click="openDeleteDialog(item.raw)"
-            >
-              <VIcon icon="tabler-trash" />
-            </VBtn>
+            <template v-if="canManage">
+              <VBtn
+                icon
+                size="small"
+                variant="text"
+                color="primary"
+                @click="openEditDialog(item.raw)"
+              >
+                <VIcon icon="tabler-edit" />
+              </VBtn>
+              <VBtn
+                icon
+                size="small"
+                variant="text"
+                color="error"
+                @click="openDeleteDialog(item.raw)"
+              >
+                <VIcon icon="tabler-trash" />
+              </VBtn>
+            </template>
           </div>
         </template>
       </VDataTable>
@@ -263,6 +332,97 @@ onMounted(fetchCategories)
             {{ t("delete") }}
           </VBtn>
         </VCardActions>
+      </VCard>
+    </VDialog>
+
+    <!-- Toplu Bonus Raporu Dialog -->
+    <VDialog
+      v-model="reportDialogOpen"
+      max-width="900"
+    >
+      <VCard>
+        <VCardTitle class="d-flex align-center justify-space-between">
+          <span>{{ t("bonusNames.reportTitle", { name: reportCategory?.name }) }}</span>
+          <VBtn
+            icon
+            size="small"
+            variant="text"
+            @click="reportDialogOpen = false"
+          >
+            <VIcon icon="tabler-x" />
+          </VBtn>
+        </VCardTitle>
+        <VCardText>
+          <VRow class="mb-2" align="center">
+            <VCol cols="12" md="4">
+              <VTextField
+                v-model="reportDateFrom"
+                type="date"
+                :label="t('bonusNames.dateFrom')"
+                density="compact"
+                @change="fetchCategoryReport"
+              />
+            </VCol>
+            <VCol cols="12" md="4">
+              <VTextField
+                v-model="reportDateTo"
+                type="date"
+                :label="t('bonusNames.dateTo')"
+                density="compact"
+                @change="fetchCategoryReport"
+              />
+            </VCol>
+            <VCol cols="12" md="4" class="d-flex justify-end">
+              <VBtn
+                color="success"
+                variant="tonal"
+                prepend-icon="tabler-file-spreadsheet"
+                :loading="reportExporting"
+                :disabled="!reportData?.rows?.length"
+                @click="exportCategoryReport"
+              >
+                {{ t("bonusNames.exportExcel") }}
+              </VBtn>
+            </VCol>
+          </VRow>
+
+          <div v-if="reportLoading" class="d-flex justify-center py-8">
+            <VProgressCircular indeterminate color="primary" />
+          </div>
+
+          <template v-else-if="reportData">
+            <div class="d-flex gap-4 mb-4">
+              <VChip color="primary" label>{{ t("bonusNames.reportCount", { count: reportData.count }) }}</VChip>
+              <VChip color="success" label>{{ t("bonusNames.reportTotal", { total: reportData.totalAmount?.toLocaleString('tr-TR') }) }}</VChip>
+            </div>
+
+            <VTable density="compact" fixed-header height="360">
+              <thead>
+                <tr>
+                  <th>{{ t("fields.username") }}</th>
+                  <th>{{ t("bonusNames.amount") }}</th>
+                  <th>{{ t("bonusNames.note") }}</th>
+                  <th>{{ t("bonusNames.actor") }}</th>
+                  <th>{{ t("bonusNames.date") }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="row in reportData.rows" :key="row._id">
+                  <td>{{ row.username }}</td>
+                  <td>{{ row.amount?.toLocaleString('tr-TR') }}</td>
+                  <td>{{ row.note }}</td>
+                  <td>{{ row.actorUsername }}</td>
+                  <td>{{ new Date(row.createdAt).toLocaleString('tr-TR') }}</td>
+                </tr>
+                <tr v-if="!reportData.rows.length">
+                  <td colspan="5" class="text-center text-medium-emphasis py-6">
+                    {{ t("bonusNames.reportEmpty") }}
+                  </td>
+                </tr>
+              </tbody>
+            </VTable>
+          </template>
+        </VCardText>
       </VCard>
     </VDialog>
   </div>

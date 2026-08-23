@@ -15,6 +15,11 @@ const period = ref("all") // today | week | month | all | custom
 const customStart = ref(null)
 const customEnd = ref(null)
 
+// "Tüm Zamanlar" seçildiğinde, admin/test hesaplarına ait eski verilerin
+// istatistikleri şişirmemesi için gerçek üye verilerinin başladığı
+// 31.07.2026 tarihi baz alınır (Kalan Bonus Bakiyesi'nin başlangıç tarihiyle aynı).
+const ALL_TIME_START_DATE = "2026-07-31T00:00:00"
+
 const summary = ref(null)
 const summaryLoading = ref(false)
 
@@ -70,7 +75,7 @@ const dateRange = computed(() => {
       endDate: customEnd.value ? new Date(customEnd.value).toISOString() : null,
     }
   }
-  return { startDate: null, endDate: null }
+  return { startDate: new Date(ALL_TIME_START_DATE).toISOString(), endDate: null }
 })
 
 const formatMoney = value => {
@@ -381,33 +386,45 @@ onMounted(refreshAll)
       </VCol>
     </VRow>
 
-    <VAlert
-      variant="tonal"
-      color="success"
-      class="mb-3"
-    >
-      <div class="d-flex flex-wrap align-center justify-space-between gap-2">
-        <span class="font-weight-medium">Kalan Agent Bakiyesi</span>
-        <span class="text-h6 text-success">{{ formatMoney(summary?.remainingAgentBalance) }}</span>
-      </div>
-      <p class="text-caption text-medium-emphasis mb-0 mt-1">
-        Başlangıç: {{ formatMoney(summary?.settings?.agentBalanceInitial) }} · {{ formatDate(summary?.settings?.agentBalanceOriginAt) }} tarihinden sonraki Filux + xPayment yatırımları düşülmüştür.
-      </p>
-    </VAlert>
+    <VRow class="mb-6">
+      <VCol
+        cols="12"
+        md="6"
+      >
+        <VAlert
+          variant="tonal"
+          color="success"
+          class="h-100"
+        >
+          <div class="d-flex flex-wrap align-center justify-space-between gap-2">
+            <span class="font-weight-medium">Kalan Agent Bakiyesi</span>
+            <span class="text-h6 text-success">{{ formatMoney(summary?.remainingAgentBalance) }}</span>
+          </div>
+          <p class="text-caption text-medium-emphasis mb-0 mt-1">
+            Başlangıç: {{ formatMoney(summary?.settings?.agentBalanceInitial) }} · {{ formatDate(summary?.settings?.agentBalanceOriginAt) }} tarihinden sonraki Filux + xPayment yatırımları düşülmüştür.
+          </p>
+        </VAlert>
+      </VCol>
 
-    <VAlert
-      variant="tonal"
-      color="warning"
-      class="mb-6"
-    >
-      <div class="d-flex flex-wrap align-center justify-space-between gap-2">
-        <span class="font-weight-medium">Kalan Bonus Bakiyesi</span>
-        <span class="text-h6 text-warning">{{ formatMoney(summary?.remainingBonusBalance) }}</span>
-      </div>
-      <p class="text-caption text-medium-emphasis mb-0 mt-1">
-        Başlangıç: {{ formatMoney(summary?.settings?.bonusBalanceInitial) }} · {{ formatDate(summary?.settings?.bonusBalanceOriginAt) }} tarihinden sonraki eklenen bonuslar düşülmüştür.
-      </p>
-    </VAlert>
+      <VCol
+        cols="12"
+        md="6"
+      >
+        <VAlert
+          variant="tonal"
+          color="warning"
+          class="h-100"
+        >
+          <div class="d-flex flex-wrap align-center justify-space-between gap-2">
+            <span class="font-weight-medium">Kalan Bonus Bakiyesi</span>
+            <span class="text-h6 text-warning">{{ formatMoney(summary?.remainingBonusBalance) }}</span>
+          </div>
+          <p class="text-caption text-medium-emphasis mb-0 mt-1">
+            Başlangıç: {{ formatMoney(summary?.settings?.bonusBalanceInitial) }} · {{ formatDate(summary?.settings?.bonusBalanceOriginAt) }} tarihinden sonraki eklenen bonuslar düşülmüştür.
+          </p>
+        </VAlert>
+      </VCol>
+    </VRow>
 
     <VCard>
       <VCardText>

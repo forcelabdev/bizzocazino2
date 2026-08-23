@@ -9,6 +9,11 @@ const Leaderboard = require("../../database/models/Leaderboard");
 const BalanceTransaction = require("../../database/models/BalanceTransaction");
 const Rain = require("../../database/models/Rain");
 const Setting = require("../../database/models/Setting");
+	const { onBetSettled } = require("../../utils/wagerHooks");
+	const {
+		evaluateCategoryBetLimit,
+		CATEGORY_BET_LIMIT_EXCEEDED_CODE,
+	} = require("../../utils/userBetAccess");
 // Load utils
 const { socketRemoveAntiSpam } = require("../../utils/socket");
 const { settingGet } = require("../../utils/setting");
@@ -170,6 +175,23 @@ const battlesSendCreateSocket = async (io, socket, user, data, callback) => {
 
 		// Validate user
 		battlesCheckSendCreateUser(user, data, amountUser);
+
+		// 🎯 Bet Limitleme: kategori bazlı tam blokaj / maksimum tutar kontrolü.
+		const userControlsDoc = await User.findById(user._id)
+			.select("controls")
+			.lean();
+		const limitCheck = evaluateCategoryBetLimit(
+			userControlsDoc,
+			"originals",
+			amountUser
+		);
+		if (!limitCheck.allowed) {
+			throw new Error(
+				limitCheck.reason === CATEGORY_BET_LIMIT_EXCEEDED_CODE
+					? `Bu kategori için maksimum bahis tutarı ${limitCheck.max} ile sınırlıdır.`
+					: "Bu oyun kategorisine erişiminiz kısıtlanmıştır."
+			);
+		}
 
 		// Get user level
 		const level = generalUserGetLevel(user);
@@ -989,6 +1011,9 @@ const battlesGameComplete = async (io, battlesGame) => {
 						)
 						.lean()
 				);
+
+				// 🎯 Bilet çevrimi + Race puanı hook'u (gerçek kullanıcı bahsi)
+				onBetSettled({ userId: bet.user._id, amount: bet.amount, category: "originals" });
 			}
 
 			promisesBets.push(

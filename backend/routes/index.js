@@ -37,6 +37,7 @@ const wingoRoutes = require("./wingoRoutes");
 const binance = require("./binance");
 const gamehistory = require("./gamehistory/recent");
 const bonusSettingRoutes = require("./bonusSetting");
+const promoCodeRoutes = require("./promoCodes");
 const pixRoutes = require("./payment/pix");
 const forcelabFinanceRoutes = require("./payment/forcelabFinance");
 const meelDevRoutes = require("./payment/meelDev");
@@ -47,8 +48,15 @@ const {
 	DEFAULT_METHOD_FLAGS: GALAXY_PAY_DEFAULT_METHOD_FLAGS,
 } = require("../utils/galaxyPay");
 const pockersGamesRoute = require("./pokerApi");
+const raceApiRoute = require("./raceApi");
+const noticeApiRoute = require("./noticeApi");
+const sportsTournamentApiRoute = require("./sportsTournamentApi");
 router.use("/poker_api", pockersGamesRoute);
+router.use("/api/race", raceApiRoute);
+router.use("/api/notices", noticeApiRoute);
+router.use("/api/sports-tournaments", sportsTournamentApiRoute);
 router.use("/bonus-settings", bonusSettingRoutes);
+router.use("/promo-codes", promoCodeRoutes);
 router.use("/payment/pix", pixRoutes);
 router.use("/payment/forcelab-finance", forcelabFinanceRoutes);
 router.use("/payment/meeldev", meelDevRoutes);

@@ -2,6 +2,7 @@
 import { kFormatter } from "@core/utils/formatters"
 import { formatCoinType } from "@/utils/currency"
 import { useI18n } from "vue-i18n"
+import UserRiskNotesCard from "@/views/apps/user/view/UserRiskNotesCard.vue"
 
 const props = defineProps({
   userData: {
@@ -9,6 +10,8 @@ const props = defineProps({
     required: true,
   },
 })
+
+const emit = defineEmits(["updated"])
 
 const { t } = useI18n()
 
@@ -39,6 +42,14 @@ const copyToClipboard = async (value, messageKey) => {
 
 <template>
   <VRow>
+    <!-- Notlar + Etiketler (risk göstergesi ile) -->
+    <VCol cols="12">
+      <UserRiskNotesCard
+        :user-data="userData"
+        @updated="emit('updated', $event)"
+      />
+    </VCol>
+
     <!-- Personal Information -->
     <VCol cols="12">
       <VCard>

@@ -18,9 +18,12 @@ const { getMaxAccountBalance } = require("../config");
 const {
 	BET_ACCESS_BLOCKED_CODE,
 	BET_ACCESS_BLOCKED_MESSAGE,
+	CATEGORY_BET_LIMIT_EXCEEDED_CODE,
 	getProviderVisibleBalance,
 	isUserBetAccessBlocked,
+	evaluateCategoryBetLimit,
 } = require("../utils/userBetAccess");
+const { onBetSettled } = require("../utils/wagerHooks");
 
 const router = express.Router();
 
@@ -576,6 +579,28 @@ router.post("/", async (req, res) => {
 						});
 					}
 
+					// 🎯 Bet Limitleme: kategori bazlı tam blokaj / maksimum tutar kontrolü.
+					if (["debit", "bet", "debit_credit"].includes(txn_type) && betMoneyNum > 0) {
+						const betCategory =
+							game_type === "SB"
+								? "sportsBook"
+								: game_type === "live" || game_type === "gameshow"
+									? "liveCasino"
+									: "slots";
+						const limitCheck = evaluateCategoryBetLimit(user, betCategory, betMoneyNum);
+						if (!limitCheck.allowed) {
+							return res.status(403).json({
+								status: 0,
+								msg: limitCheck.reason,
+								details:
+									limitCheck.reason === CATEGORY_BET_LIMIT_EXCEEDED_CODE
+										? `Bu kategori için maksimum bahis tutarı ${limitCheck.max} ile sınırlıdır.`
+										: "Bu oyun kategorisine erişiminiz kısıtlanmıştır.",
+								user_balance: 0,
+							});
+						}
+					}
+
 					// A credit for a bet accepted before the block is merged above.
 					// Do not credit an orphan settlement created after a rejected bet.
 					if (
@@ -717,6 +742,19 @@ router.post("/", async (req, res) => {
 					});
 
 					await transaction.save();
+
+					// 🎯 Bilet çevrimi + Race puanı hook'u (debit/debit_credit = bahis konuldu)
+					if (
+						(txn_type === "debit" || txn_type === "bet" || txn_type === "debit_credit") &&
+						betMoneyNum > 0
+					) {
+						onBetSettled({
+							userId: user._id,
+							amount: betMoneyNum,
+							category: game_type === "SB" ? "sportsBook" : "casino",
+							providerCode: provider_code,
+						});
+					}
 
 					emitUserBalance(null, {
 						_id: user._id,

@@ -8,6 +8,11 @@ const Leaderboard = require("../../database/models/Leaderboard");
 const Rain = require("../../database/models/Rain");
 const BalanceTransaction = require("../../database/models/BalanceTransaction");
 const { getActiveWalletIndex } = require("../../utils/wallet");
+	const { onBetSettled } = require("../../utils/wagerHooks");
+	const {
+		evaluateCategoryBetLimit,
+		CATEGORY_BET_LIMIT_EXCEEDED_CODE,
+	} = require("../../utils/userBetAccess");
 const Setting = require("../../database/models/Setting");
 
 // Load utils
@@ -89,7 +94,7 @@ const towersSendBetSocket = async (io, socket, user, data, callback) => {
 		// ✅ Güncel user (wallets ve currency için)
 		const freshUser = await User.findById(user._id)
 			.select(
-				"wallets currency stats rakeback mute ban verifiedAt updatedAt roblox username avatar rank level limits affiliates createdAt anonymous"
+				"wallets currency stats rakeback mute ban verifiedAt updatedAt roblox username avatar rank level limits controls affiliates createdAt anonymous"
 			)
 			.lean();
 
@@ -102,6 +107,16 @@ const towersSendBetSocket = async (io, socket, user, data, callback) => {
 		const walletPath = `wallets.${walletIndex}.balance`;
 
 		if (wallet.balance < amount) throw new Error("Yetersiz bakiye");
+
+		// 🎯 Bet Limitleme: kategori bazlı tam blokaj / maksimum tutar kontrolü.
+		const limitCheck = evaluateCategoryBetLimit(freshUser, "originals", amount);
+		if (!limitCheck.allowed) {
+			throw new Error(
+				limitCheck.reason === CATEGORY_BET_LIMIT_EXCEEDED_CODE
+					? `Bu kategori için maksimum bahis tutarı ${limitCheck.max} ile sınırlıdır.`
+					: "Bu oyun kategorisine erişiminiz kısıtlanmıştır."
+			);
+		}
 
 		const amountRakeback =
 			freshUser.limits.blockSponsor !== true
@@ -372,6 +387,9 @@ const towersSendRevealSocket = async (io, socket, user, data, callback) => {
 				1
 			);
 
+			// 🎯 Bilet çevrimi + Race puanı hook'u (towers turu sonlandı)
+			onBetSettled({ userId: user._id, amount: amountLimits, category: "originals" });
+
 			io.of("/general")
 				.to(user._id.toString())
 				.emit("user", { user: dataDatabase[0] });
@@ -502,6 +520,9 @@ const towersSendCashoutSocket = async (io, socket, user, data, callback) => {
 			),
 			1
 		);
+
+		// 🎯 Bilet çevrimi + Race puanı hook'u (towers cashout)
+		onBetSettled({ userId: user._id, amount: amountLimits, category: "originals" });
 
 		io.of("/general").emit("rain", { rain: dataDatabase[2] });
 		generalAddBetsList(io, {

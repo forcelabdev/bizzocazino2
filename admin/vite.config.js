@@ -14,6 +14,7 @@ import vuetify from "vite-plugin-vuetify";
 import DefineOptions from "unplugin-vue-define-options/vite";
 
 // https://vitejs.dev/config/
+// (dev proxy config reload trigger)
 // Backend route prefixes that are mounted at the API server root (see
 // backend/routes/index.js). The admin dev server proxies these to the local
 // backend so the browser only ever talks to a single origin (no CORS).
@@ -89,6 +90,11 @@ export default defineConfig(async ({ mode }) => {
 		(localBackendUp ? `http://127.0.0.1:${localBackendPort}` : null) ||
 		env.SERVER_BACKEND_URL ||
 		`http://localhost:${localBackendPort}`;
+	// Vercel already provides SERVER_BACKEND_URL. Expose only this public API
+	// origin to the browser when the optional VITE-prefixed alias is absent.
+	const apiBaseUrl = String(
+		env.VITE_API_BASE_URL || env.SERVER_BACKEND_URL || ""
+	).replace(/\/$/, "");
 
 	return {
 	plugins: [

@@ -33,10 +33,19 @@ const Deposit = require("../../database/models/Deposit");
 const Withdrawal = require("../../database/models/Withdrawal");
 const CryptoTransaction = require("../../database/models/CryptoTransaction");
 const Notice = require("../../database/models/Notice"); // Notice modelini import edin
+const { resolveNoticeAudience } = require("../../utils/noticeAudienceResolver");
 const Provider = require("../../database/models/Providers"); // Provider modelini import edin
 const DrakonProvider = require("../../database/models/drakonProvider"); // Provider modelini import edin
 const Game = require("../../database/models/Game"); // Game modelini import edin
 const PromoCode = require("../../database/models/PromoCode"); // Promocode modelini import edin
+const TicketEvent = require("../../database/models/TicketEvent");
+const Ticket = require("../../database/models/Ticket");
+const ticketService = require("../../services/ticketService");
+const RaceTournament = require("../../database/models/RaceTournament");
+const RaceEntry = require("../../database/models/RaceEntry");
+const raceService = require("../../services/raceService");
+const SportsTournament = require("../../database/models/SportsTournament");
+const sportsTournamentService = require("../../services/sportsTournamentService");
 const Leaderboard = require("../../database/models/Leaderboard"); // Leaderboard modelini import edin
 const News = require("../../database/models/News"); // News modelini import edin
 const CustomerService = require("../../database/models/CustomerService"); // CustomerService modelini import edin
@@ -173,6 +182,8 @@ const Reward = require("../../database/models/Reward");
 const Mission = require("../../database/models/Mission");
 const BonusSetting = require("../../database/models/BonusSetting");
 const AdminManualAdjustment = require("../../database/models/AdminManualAdjustment");
+const FreeSpinGrant = require("../../database/models/FreeSpinGrant");
+const UserNote = require("../../database/models/UserNote");
 const AdminUserAuditLog = require("../../database/models/AdminUserAuditLog");
 
 const FuturesBet = require("../../database/models/FuturesBet");
@@ -598,7 +609,8 @@ router.get("/users/:id", checkPermission("users.read"), async (req, res) => {
 	try {
 		const user = await User.findById(req.params.id)
 			.select("-local.password")
-			.populate("adminRole");
+			.populate("adminRole")
+			.populate("tags");
 		if (!user)
 			return res
 				.status(404)
@@ -1010,7 +1022,7 @@ router.patch(
 				targetUser: updatedUser,
 				actorUser: req.adminUser || null,
 				action: "suspension_update",
-				summary: "Kullanıcı askıya alındı",
+				summary: "Kullanıcı askıya alınd��",
 				changes: [
 					{
 						field: "ban.expire",
@@ -1228,6 +1240,8 @@ router.patch(
 				"sportsBook",
 				"originals",
 			];
+			// Bet Limitleme: "casino" = slots + originals ortak limiti.
+			const betLimitFields = ["liveCasino", "casino", "sportsBook"];
 			const platformFields = [
 				"affiliatePanel",
 				"partnerAccess",
@@ -1255,6 +1269,17 @@ router.patch(
 					),
 					originals: Boolean(
 						originalControls.categoryRestrictions?.originals,
+					),
+				},
+				categoryBetLimits: {
+					liveCasino: Number(
+						originalControls.categoryBetLimits?.liveCasino || 0,
+					),
+					casino: Number(
+						originalControls.categoryBetLimits?.casino || 0,
+					),
+					sportsBook: Number(
+						originalControls.categoryBetLimits?.sportsBook || 0,
 					),
 				},
 				platformAccess: {
@@ -1306,6 +1331,24 @@ router.patch(
 						}
 						nextControls.categoryRestrictions[field] = to;
 					}
+				});
+			}
+
+			// 🎯 Bet Limitleme: kategori bazlı maksimum bahis tutarı (0 = limitsiz).
+			if (req.body?.categoryBetLimits) {
+				betLimitFields.forEach((field) => {
+					const rawValue = req.body.categoryBetLimits[field];
+					if (rawValue === undefined) return;
+					const to = Math.max(0, Number(rawValue) || 0);
+					const from = nextControls.categoryBetLimits[field];
+					if (from !== to) {
+						changes.push({
+							field: `controls.categoryBetLimits.${field}`,
+							from,
+							to,
+						});
+					}
+					nextControls.categoryBetLimits[field] = to;
 				});
 			}
 
@@ -1493,7 +1536,7 @@ router.delete(
 
 			res.status(200).json({
 				success: true,
-				message: "Partner bağlantısı kaldırıldı.",
+				message: "Partner bağlantıs�� kaldırıldı.",
 				data: buildAdminUserResponseData(updatedUser),
 			});
 		} catch (error) {
@@ -1503,17 +1546,121 @@ router.delete(
 	},
 );
 
-// Kullanıcının tüm oyun geçmişini döndürme
-router.get("/users/:id/history", checkPermission("users.read"), async (req, res) => {
+// 📝 Üye Profili — Notlar (bkz. UserRiskNotesCard.vue)
+	router.get(
+		"/users/:id/notes",
+		checkPermission("users.read"),
+		async (req, res) => {
+			try {
+				const { id } = req.params;
+				if (!mongoose.Types.ObjectId.isValid(id)) {
+					return res
+						.status(400)
+						.json({ success: false, message: "INVALID_USER_ID" });
+				}
+
+				const notes = await UserNote.find({ targetUser: id })
+					.sort({ createdAt: -1 })
+					.lean();
+
+				res.status(200).json({ success: true, data: notes });
+			} catch (error) {
+				console.error("Kullanıcı notları alınırken hata:", error);
+				res.status(500).json({ success: false, message: "Sunucu hatası" });
+			}
+		},
+	);
+
+	router.post(
+		"/users/:id/notes",
+		checkPermission("users.manage"),
+		async (req, res) => {
+			try {
+				const { id } = req.params;
+				const { text } = req.body || {};
+				const trimmedText = String(text || "").trim();
+
+				if (!mongoose.Types.ObjectId.isValid(id)) {
+					return res
+						.status(400)
+						.json({ success: false, message: "INVALID_USER_ID" });
+				}
+				if (!trimmedText) {
+					return res
+						.status(400)
+						.json({ success: false, message: "MISSING_REQUIRED_FIELDS" });
+				}
+
+				const targetExists = await User.exists({ _id: id });
+				if (!targetExists) {
+					return res
+						.status(404)
+						.json({ success: false, message: "Kullanıcı bulunamadı" });
+				}
+
+				const note = await UserNote.create({
+					targetUser: id,
+					author: req.adminUser?._id || null,
+					authorSnapshot: {
+						username: req.adminUser?.username || "",
+					},
+					text: trimmedText,
+				});
+
+				res.status(201).json({ success: true, data: note });
+			} catch (error) {
+				console.error("Kullanıcı notu eklenirken hata:", error);
+				res.status(500).json({ success: false, message: "Sunucu hatası" });
+			}
+		},
+	);
+
+	router.delete(
+		"/users/:id/notes/:noteId",
+		checkPermission("users.manage"),
+		async (req, res) => {
+			try {
+				const { id, noteId } = req.params;
+				if (
+					!mongoose.Types.ObjectId.isValid(id) ||
+					!mongoose.Types.ObjectId.isValid(noteId)
+				) {
+					return res
+						.status(400)
+						.json({ success: false, message: "INVALID_ID" });
+				}
+
+				const note = await UserNote.findOneAndDelete({
+					_id: noteId,
+					targetUser: id,
+				});
+				if (!note) {
+					return res
+						.status(404)
+						.json({ success: false, message: "NOTE_NOT_FOUND" });
+				}
+
+				res.status(200).json({ success: true, message: "NOTE_DELETED" });
+			} catch (error) {
+				console.error("Kullanıcı notu silinirken hata:", error);
+				res.status(500).json({ success: false, message: "Sunucu hatası" });
+			}
+		},
+	);
+
+	// Kullanıcının tüm oyun geçmişini döndürme
+	router.get("/users/:id/history", checkPermission("users.read"), async (req, res) => {
 	try {
 		const { id } = req.params;
 
 		// 📦 Pagination & filtreler
+		// Dışa aktarım modunda (export=true) sayfalama üst sınırı kaldırılır ve
+		// güvenli bir tavana (20.000 kayıt) kadar tüm eşleşen kayıtlar döndürülür.
+		const isExport = String(req.query.export) === "true";
 		const page = Math.max(1, parseInt(req.query.page) || 1);
-		const itemsPerPage = Math.min(
-			500,
-			Math.max(1, parseInt(req.query.itemsPerPage) || 10),
-		);
+		const itemsPerPage = isExport
+			? 20000
+			: Math.min(500, Math.max(1, parseInt(req.query.itemsPerPage) || 10));
 		const source = (req.query.source || "provider").toLowerCase(); // provider | internal | all
 		const providerFilter = (req.query.provider || "").trim(); // provider _id veya code
 		const gameCodeFilter = (req.query.gameCode || "").trim();
@@ -2188,7 +2335,7 @@ router.get(
 
 // ═══════════════════════════════════════════════════════════════════════════
 // CRM: Oyuncu Segmentleri
-// ═══════════════════════════════════════════════════════════════════════════
+// ══════════════════��════════════════════════════════════════════════════════
 router.get(
 	"/player-segments/summary",
 	checkPermission("users.read"),
@@ -2201,7 +2348,7 @@ router.get(
 	playerSegmentsController.getUsers,
 );
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════���════════════════
 // CRM: Tag Manager
 // ═══════════════════════════════════════════════════════════════════════════
 router.get("/tags", checkPermission("users.read"), tagsController.listTags);
@@ -2252,6 +2399,13 @@ router.delete(
 	"/manual-bonus-categories/:id",
 	checkPermission(["finance.manualAdjustments.manage", "finance.promo.manage"]),
 	manualBonusCategoryController.deleteCategory,
+);
+
+// 🎯 Toplu Bonus Raporu: bir bonus adına (kategoriye) ait tüm eklemeleri listeler.
+router.get(
+	"/manual-bonus-categories/:name/report",
+	checkPermission(["finance.manualAdjustments.manage", "finance.promo.manage"]),
+	manualBonusCategoryController.getCategoryReport,
 );
 
 // Kayıp Bonusu (Loss Bonus)
@@ -4632,37 +4786,103 @@ router.delete("/leaderboards/:id", checkPermission("users.manage"), async (req, 
 });
 
 // 7. PROMOCODE
-router.post("/promocodes", checkPermission("finance.promo.manage"), async (req, res) => {
-	try {
-		const promo = new PromoCode(req.body);
-		await promo.save();
-		res.status(201).json({ success: true, data: promo });
-	} catch (err) {
-		res.status(500).json({
-			success: false,
-			message: "Promocode eklenemedi",
+const PROMO_CONDITION_METRICS = ["deposit", "withdraw", "membershipAgeDays", "depositSinceDate"];
+const PROMO_CONDITION_OPERATORS = ["gte", "lte", "eq", "gt", "lt"];
+
+// 🎯 Segment/koşul motoru: gönderilen koşul satırlarını doğrular ve normalize eder.
+const normalizePromoConditions = (rawConditions) => {
+	if (!Array.isArray(rawConditions)) return [];
+
+	return rawConditions
+		.filter((condition) => condition && condition.metric)
+		.map((condition) => {
+			const metric = String(condition.metric);
+			const operator = String(condition.operator || "gte");
+			const value = Number(condition.value);
+
+			if (!PROMO_CONDITION_METRICS.includes(metric)) throw new Error("INVALID_CONDITION_METRIC");
+			if (!PROMO_CONDITION_OPERATORS.includes(operator)) throw new Error("INVALID_CONDITION_OPERATOR");
+			if (!Number.isFinite(value)) throw new Error("INVALID_CONDITION_VALUE");
+
+			return {
+				metric,
+				operator,
+				value,
+				dateFrom: condition.dateFrom ? new Date(condition.dateFrom) : null,
+				dateTo: condition.dateTo ? new Date(condition.dateTo) : null,
+			};
 		});
+};
+
+const normalizePromoPayload = (body = {}) => {
+	const startsAt = body.startsAt ? new Date(body.startsAt) : null;
+	const expiresAt = body.expiresAt ? new Date(body.expiresAt) : null;
+	const reward = Number(body.reward);
+	if (!String(body.code || "").trim() || !Number.isFinite(reward) || reward <= 0) throw new Error("INVALID_PROMO");
+	if (startsAt && expiresAt && startsAt >= expiresAt) throw new Error("INVALID_DATE_RANGE");
+	const redeemptionsMax = Math.max(0, Number(body.redeemptionsMax) || 0);
+	const perUserLimit = Math.max(1, Number(body.perUserLimit) || 1);
+	if (redeemptionsMax > 0 && perUserLimit > redeemptionsMax) throw new Error("INVALID_USER_LIMIT");
+	const applyWageringLock = Boolean(body.applyWageringLock);
+	const wageringMultiplier = Math.max(0, Number(body.wageringMultiplier) || 0);
+	if (applyWageringLock && wageringMultiplier <= 0) throw new Error("INVALID_WAGERING_MULTIPLIER");
+	const minLastDeposit = Math.max(0, Number(body.minLastDeposit) || 0);
+	const minWithdraw = Math.max(0, Number(body.minWithdraw) || 0);
+	if (minLastDeposit < 0 || minWithdraw < 0 || reward < 0) throw new Error("INVALID_PROMO");
+	const conditions = normalizePromoConditions(body.conditions);
+	return {
+		code: String(body.code).trim().toUpperCase(), reward,
+		levelMin: Math.max(0, Number(body.levelMin) || 0), isActive: body.isActive !== false,
+		startsAt, expiresAt,
+		affiliateCodes: [...new Set((Array.isArray(body.affiliateCodes) ? body.affiliateCodes : []).map(code => String(code).trim()).filter(Boolean))],
+		redeemptionsMax,
+		perUserLimit,
+		minLastDeposit,
+		applyWageringLock,
+		wageringMultiplier,
+		minWithdraw,
+		conditions,
+		updatedAt: new Date(),
+	};
+};
+
+router.get("/promocodes/affiliate-options", checkPermission("finance.promo.read"), async (req, res) => {
+	const users = await User.find({ "affiliates.code": { $exists: true, $nin: [null, ""] } }).select("username affiliates.code").sort({ username: 1 }).lean();
+	res.json({ success: true, data: users.map(user => ({ code: user.affiliates.code, title: `${user.username} (${user.affiliates.code})` })) });
+});
+
+const PROMO_VALIDATION_MESSAGES = {
+	INVALID_PROMO: "Kod ve ödül tutarı zorunludur; ödül tutarı sıfırdan büyük olmalıdır.",
+	INVALID_DATE_RANGE: "Bitiş tarihi başlangıç tarihinden sonra olmalıdır.",
+	INVALID_USER_LIMIT: "Kullanıcı başı limit, toplam kullanım limitinden büyük olamaz.",
+	INVALID_WAGERING_MULTIPLIER: "Çevrim şartı açıkken çevrim katı sıfırdan büyük olmalıdır.",
+	INVALID_CONDITION_METRIC: "Geçersiz koşul metriği seçildi.",
+	INVALID_CONDITION_OPERATOR: "Geçersiz koşul operatörü seçildi.",
+	INVALID_CONDITION_VALUE: "Koşul değeri sayısal ve geçerli olmalıdır.",
+};
+
+const resolvePromoErrorMessage = (err, fallback) => PROMO_VALIDATION_MESSAGES[err?.message] || fallback;
+
+router.post("/promocodes", checkPermission("finance.promo.manage"), async (req, res) => {
+	try { res.status(201).json({ success: true, data: await PromoCode.create(normalizePromoPayload(req.body)) }); }
+	catch (err) {
+		const message = err?.code === 11000 ? "Bu kod zaten mevcut." : resolvePromoErrorMessage(err, "Promosyon kodu eklenemedi.");
+		res.status(err?.code === 11000 ? 409 : 400).json({ success: false, message });
 	}
 });
 
 router.get("/promocodes", checkPermission("finance.promo.read"), async (req, res) => {
-	const codes = await PromoCode.find().sort({ createdAt: -1 });
-	res.json({ success: true, data: codes });
+	res.json({ success: true, data: await PromoCode.find().sort({ createdAt: -1 }).lean() });
 });
 
 router.put("/promocodes/:id", checkPermission("finance.promo.manage"), async (req, res) => {
 	try {
-		const promo = await PromoCode.findByIdAndUpdate(
-			req.params.id,
-			req.body,
-			{ new: true },
-		);
+		const promo = await PromoCode.findByIdAndUpdate(req.params.id, { $set: normalizePromoPayload(req.body) }, { new: true, runValidators: true });
+		if (!promo) return res.status(404).json({ success: false, message: "Promosyon kodu bulunamadı." });
 		res.json({ success: true, data: promo });
 	} catch (err) {
-		res.status(500).json({
-			success: false,
-			message: "Promocode güncellenemedi",
-		});
+		const message = err?.code === 11000 ? "Bu kod zaten mevcut." : resolvePromoErrorMessage(err, "Promosyon kodu güncellenemedi.");
+		res.status(err?.code === 11000 ? 409 : 400).json({ success: false, message });
 	}
 });
 
@@ -4678,15 +4898,361 @@ router.delete("/promocodes/:id", checkPermission("finance.promo.manage"), async 
 	}
 });
 
+// 7.1 BİLET ETKİNLİĞİ (Ticket Events)
+const normalizeTicketEventPayload = (body = {}) => {
+	const startsAt = body.startsAt ? new Date(body.startsAt) : null;
+	const expiresAt = body.expiresAt ? new Date(body.expiresAt) : null;
+	const amountPerTicket = Number(body.amountPerTicket);
+	if (!String(body.name || "").trim() || !Number.isFinite(amountPerTicket) || amountPerTicket <= 0) {
+		throw new Error("INVALID_TICKET_EVENT");
+	}
+	if (startsAt && expiresAt && startsAt >= expiresAt) throw new Error("INVALID_DATE_RANGE");
+	const wageringRequirement = Math.max(0, Number(body.wageringRequirement) || 0);
+	const maxTicketsPerUser = Math.max(0, Number(body.maxTicketsPerUser) || 0);
+	return {
+		name: String(body.name).trim(),
+		isActive: body.isActive !== false,
+		startsAt,
+		expiresAt,
+		amountPerTicket,
+		wageringRequirement,
+		maxTicketsPerUser,
+		eligibleAffiliateCodes: [...new Set((Array.isArray(body.eligibleAffiliateCodes) ? body.eligibleAffiliateCodes : []).map((c) => String(c).trim()).filter(Boolean))],
+		note: String(body.note || "").trim(),
+		updatedAt: new Date(),
+	};
+};
+
+const TICKET_EVENT_VALIDATION_MESSAGES = {
+	INVALID_TICKET_EVENT: "Etkinlik adı ve bilet başına gereken tutar zorunludur; tutar sıfırdan büyük olmalıdır.",
+	INVALID_DATE_RANGE: "Bitiş tarihi başlangıç tarihinden sonra olmalıdır.",
+};
+
+router.get("/ticket-events", checkPermission("finance.tickets.read"), async (req, res) => {
+	const events = await TicketEvent.find().sort({ createdAt: -1 }).lean();
+	const stats = await Promise.all(events.map((event) => ticketService.getEventTicketStats(event._id)));
+	res.json({ success: true, data: events.map((event, i) => ({ ...event, stats: stats[i] })) });
+});
+
+router.post("/ticket-events", checkPermission("finance.tickets.manage"), async (req, res) => {
+	try {
+		const event = await TicketEvent.create(normalizeTicketEventPayload(req.body));
+		res.status(201).json({ success: true, data: event });
+	} catch (err) {
+		res.status(400).json({ success: false, message: TICKET_EVENT_VALIDATION_MESSAGES[err?.message] || "Bilet etkinliği eklenemedi." });
+	}
+});
+
+router.put("/ticket-events/:id", checkPermission("finance.tickets.manage"), async (req, res) => {
+	try {
+		const event = await TicketEvent.findByIdAndUpdate(req.params.id, { $set: normalizeTicketEventPayload(req.body) }, { new: true, runValidators: true });
+		if (!event) return res.status(404).json({ success: false, message: "Bilet etkinliği bulunamadı." });
+		res.json({ success: true, data: event });
+	} catch (err) {
+		res.status(400).json({ success: false, message: TICKET_EVENT_VALIDATION_MESSAGES[err?.message] || "Bilet etkinliği güncellenemedi." });
+	}
+});
+
+router.delete("/ticket-events/:id", checkPermission("finance.tickets.manage"), async (req, res) => {
+	try {
+		await TicketEvent.findByIdAndDelete(req.params.id);
+		await Ticket.deleteMany({ event: req.params.id });
+		res.json({ success: true, message: "Bilet etkinliği silindi." });
+	} catch (err) {
+		res.status(500).json({ success: false, message: "Bilet etkinliği silinemedi." });
+	}
+});
+
+router.get("/ticket-events/:id/tickets", checkPermission("finance.tickets.read"), async (req, res) => {
+	const { status } = req.query;
+	const filter = { event: req.params.id };
+	if (status && ["pending", "approved", "cancelled"].includes(status)) filter.status = status;
+	const tickets = await Ticket.find(filter)
+		.populate("user", "username name email")
+		.sort({ createdAt: -1 })
+		.limit(500)
+		.lean();
+	res.json({ success: true, data: tickets });
+});
+
+router.get("/ticket-events/user-search", checkPermission("finance.tickets.manage"), async (req, res) => {
+	const q = String(req.query.q || "").trim();
+	if (q.length < 2) return res.json({ success: true, data: [] });
+	const users = await User.find({
+		$or: [
+			{ username: { $regex: q, $options: "i" } },
+			{ email: { $regex: q, $options: "i" } },
+		],
+	}).select("username email name").limit(15).lean();
+	res.json({ success: true, data: users });
+});
+
+router.post("/ticket-events/:id/manual-ticket", checkPermission("finance.tickets.manage"), async (req, res) => {
+	try {
+		const { userId, quantity } = req.body;
+		if (!userId) return res.status(400).json({ success: false, message: "Kullanıcı seçimi zorunludur." });
+		const tickets = await ticketService.addManualTicket({
+			adminId: req.adminUser?._id || null,
+			userId,
+			eventId: req.params.id,
+			quantity,
+		});
+		res.status(201).json({ success: true, data: tickets });
+	} catch (err) {
+		res.status(err?.status || 400).json({ success: false, message: err?.message || "Manuel bilet eklenemedi.", code: err?.code });
+	}
+});
+
+// 7.2 ÇEVRİM TURNUVASI (Race Tournaments)
+const RACE_GAME_CATEGORIES = ["all", "slots", "liveCasino", "sportsBook", "originals"];
+
+const normalizeRaceTournamentPayload = (body = {}) => {
+	const startsAt = body.startsAt ? new Date(body.startsAt) : null;
+	const endsAt = body.endsAt ? new Date(body.endsAt) : null;
+	const pointsPerWager = Number(body.pointsPerWager);
+
+	if (!String(body.name || "").trim() || !Number.isFinite(pointsPerWager) || pointsPerWager <= 0) {
+		throw new Error("INVALID_RACE_TOURNAMENT");
+	}
+	if (startsAt && endsAt && startsAt >= endsAt) throw new Error("INVALID_DATE_RANGE");
+
+	const gameCategory = RACE_GAME_CATEGORIES.includes(body.gameCategory) ? body.gameCategory : "all";
+	const providers = [...new Set((Array.isArray(body.providers) ? body.providers : ["all"]).map((p) => String(p).trim()).filter(Boolean))];
+	const prizes = (Array.isArray(body.prizes) ? body.prizes : [])
+		.map((p) => ({ rank: Math.max(1, Math.floor(Number(p.rank) || 0)), amount: Math.max(0, Number(p.amount) || 0) }))
+		.filter((p) => p.rank > 0);
+
+	return {
+		name: String(body.name).trim(),
+		isActive: body.isActive !== false,
+		startsAt,
+		endsAt,
+		providers: providers.length ? providers : ["all"],
+		gameCategory,
+		pointsPerWager,
+		prizes,
+		autoDistribute: body.autoDistribute !== false,
+		note: String(body.note || "").trim(),
+		updatedAt: new Date(),
+	};
+};
+
+const RACE_VALIDATION_MESSAGES = {
+	INVALID_RACE_TOURNAMENT: "Turnuva adı ve 1 TL çevrime karşılık gelen puan zorunludur; puan sıfırdan büyük olmalıdır.",
+	INVALID_DATE_RANGE: "Bitiş tarihi başlangıç tarihinden sonra olmalıdır.",
+};
+
+router.get("/race-tournaments", checkPermission("finance.race.read"), async (req, res) => {
+	const tournaments = await RaceTournament.find().sort({ createdAt: -1 }).lean();
+	const counts = await Promise.all(tournaments.map((t) => RaceEntry.countDocuments({ tournament: t._id })));
+	res.json({ success: true, data: tournaments.map((t, i) => ({ ...t, entryCount: counts[i] })) });
+});
+
+router.post("/race-tournaments", checkPermission("finance.race.manage"), async (req, res) => {
+	try {
+		const tournament = await RaceTournament.create(normalizeRaceTournamentPayload(req.body));
+		res.status(201).json({ success: true, data: tournament });
+	} catch (err) {
+		res.status(400).json({ success: false, message: RACE_VALIDATION_MESSAGES[err?.message] || "Turnuva eklenemedi." });
+	}
+});
+
+router.put("/race-tournaments/:id", checkPermission("finance.race.manage"), async (req, res) => {
+	try {
+		const tournament = await RaceTournament.findByIdAndUpdate(req.params.id, { $set: normalizeRaceTournamentPayload(req.body) }, { new: true, runValidators: true });
+		if (!tournament) return res.status(404).json({ success: false, message: "Turnuva bulunamadı." });
+		res.json({ success: true, data: tournament });
+	} catch (err) {
+		res.status(400).json({ success: false, message: RACE_VALIDATION_MESSAGES[err?.message] || "Turnuva güncellenemedi." });
+	}
+});
+
+router.delete("/race-tournaments/:id", checkPermission("finance.race.manage"), async (req, res) => {
+	try {
+		await RaceTournament.findByIdAndDelete(req.params.id);
+		await RaceEntry.deleteMany({ tournament: req.params.id });
+		res.json({ success: true, message: "Turnuva silindi." });
+	} catch (err) {
+		res.status(500).json({ success: false, message: "Turnuva silinemedi." });
+	}
+});
+
+router.get("/race-tournaments/:id/leaderboard", checkPermission("finance.race.read"), async (req, res) => {
+	try {
+		const leaderboard = await raceService.getLeaderboard(req.params.id, Number(req.query.limit) || 100);
+		res.json({ success: true, data: leaderboard });
+	} catch (err) {
+		res.status(500).json({ success: false, message: "Sıralama alınamadı." });
+	}
+});
+
+router.get("/race-tournaments/user-search", checkPermission("finance.race.manage"), async (req, res) => {
+	const q = String(req.query.q || "").trim();
+	if (q.length < 2) return res.json({ success: true, data: [] });
+	const users = await User.find({
+		$or: [
+			{ username: { $regex: q, $options: "i" } },
+			{ email: { $regex: q, $options: "i" } },
+		],
+	}).select("username email name").limit(15).lean();
+	res.json({ success: true, data: users });
+});
+
+router.post("/race-tournaments/:id/manual-entry", checkPermission("finance.race.manage"), async (req, res) => {
+	try {
+		const { userId, displayName, startingPoints, manualGrowthRate } = req.body;
+		const entry = await raceService.upsertManualEntry({
+			tournamentId: req.params.id,
+			userId: userId || null,
+			displayName,
+			startingPoints,
+			manualGrowthRate,
+		});
+		res.status(201).json({ success: true, data: entry });
+	} catch (err) {
+		res.status(err?.status || 400).json({ success: false, message: err?.message || "Katılımcı eklenemedi.", code: err?.code });
+	}
+});
+
+router.delete("/race-tournaments/:id/entries/:entryId", checkPermission("finance.race.manage"), async (req, res) => {
+	try {
+		await RaceEntry.findOneAndDelete({ _id: req.params.entryId, tournament: req.params.id });
+		res.json({ success: true, message: "Katılımcı silindi." });
+	} catch (err) {
+		res.status(500).json({ success: false, message: "Katılımcı silinemedi." });
+	}
+});
+
+router.post("/race-tournaments/:id/settle", checkPermission("finance.race.manage"), async (req, res) => {
+	try {
+		const result = await raceService.settleTournament(req.params.id);
+		res.json({ success: true, data: result });
+	} catch (err) {
+		res.status(err?.status || 400).json({ success: false, message: err?.message || "Turnuva sonuçlandırılamadı.", code: err?.code });
+	}
+});
+
+// 7.3 SPOR TURNUVASI (Manuel — min oran + min bet tutarı şartlı)
+const normalizeSportsTournamentPayload = (body = {}) => {
+	const startsAt = body.startsAt ? new Date(body.startsAt) : null;
+	const endsAt = body.endsAt ? new Date(body.endsAt) : null;
+	const minOdds = Number(body.minOdds);
+	const minBetAmount = Number(body.minBetAmount);
+
+	if (!String(body.name || "").trim() || !Number.isFinite(minOdds) || minOdds < 1) {
+		throw new Error("INVALID_SPORTS_TOURNAMENT");
+	}
+	if (!Number.isFinite(minBetAmount) || minBetAmount < 0) throw new Error("INVALID_SPORTS_TOURNAMENT");
+	if (startsAt && endsAt && startsAt >= endsAt) throw new Error("INVALID_DATE_RANGE");
+
+	const prizes = (Array.isArray(body.prizes) ? body.prizes : [])
+		.map((p) => ({ rank: Math.max(1, Math.floor(Number(p.rank) || 0)), amount: Math.max(0, Number(p.amount) || 0) }))
+		.filter((p) => p.rank > 0);
+
+	return {
+		name: String(body.name).trim(),
+		description: String(body.description || "").trim(),
+		isActive: body.isActive !== false,
+		startsAt,
+		endsAt,
+		minOdds,
+		minBetAmount,
+		prizes,
+		prizePoolDescription: String(body.prizePoolDescription || "").trim(),
+		autoDistribute: body.autoDistribute !== false,
+		note: String(body.note || "").trim(),
+		updatedAt: new Date(),
+	};
+};
+
+const SPORTS_TOURNAMENT_VALIDATION_MESSAGES = {
+	INVALID_SPORTS_TOURNAMENT: "Turnuva adı zorunludur; minimum oran 1'den büyük/eşit, minimum bet tutarı sıfırdan büyük/eşit olmalıdır.",
+	INVALID_DATE_RANGE: "Bitiş tarihi başlangıç tarihinden sonra olmalıdır.",
+};
+
+router.get("/sports-tournaments", checkPermission("sports.tournament.read"), async (req, res) => {
+	const tournaments = await SportsTournament.find().sort({ createdAt: -1 }).lean();
+	res.json({ success: true, data: tournaments });
+});
+
+router.post("/sports-tournaments", checkPermission("sports.tournament.manage"), async (req, res) => {
+	try {
+		const tournament = await SportsTournament.create(normalizeSportsTournamentPayload(req.body));
+		res.status(201).json({ success: true, data: tournament });
+	} catch (err) {
+		res.status(400).json({ success: false, message: SPORTS_TOURNAMENT_VALIDATION_MESSAGES[err?.message] || "Turnuva eklenemedi." });
+	}
+});
+
+router.put("/sports-tournaments/:id", checkPermission("sports.tournament.manage"), async (req, res) => {
+	try {
+		const tournament = await SportsTournament.findByIdAndUpdate(req.params.id, { $set: normalizeSportsTournamentPayload(req.body) }, { new: true, runValidators: true });
+		if (!tournament) return res.status(404).json({ success: false, message: "Turnuva bulunamadı." });
+		res.json({ success: true, data: tournament });
+	} catch (err) {
+		res.status(400).json({ success: false, message: SPORTS_TOURNAMENT_VALIDATION_MESSAGES[err?.message] || "Turnuva güncellenemedi." });
+	}
+});
+
+router.delete("/sports-tournaments/:id", checkPermission("sports.tournament.manage"), async (req, res) => {
+	try {
+		await SportsTournament.findByIdAndDelete(req.params.id);
+		res.json({ success: true, message: "Turnuva silindi." });
+	} catch (err) {
+		res.status(500).json({ success: false, message: "Turnuva silinemedi." });
+	}
+});
+
+router.get("/sports-tournaments/:id/leaderboard", checkPermission("sports.tournament.read"), async (req, res) => {
+	try {
+		const leaderboard = await sportsTournamentService.getLeaderboard(req.params.id, Number(req.query.limit) || 100);
+		res.json({ success: true, data: leaderboard });
+	} catch (err) {
+		res.status(err?.status || 500).json({ success: false, message: err?.message || "Sıralama alınamadı." });
+	}
+});
+
+router.post("/sports-tournaments/:id/settle", checkPermission("sports.tournament.manage"), async (req, res) => {
+	try {
+		const result = await sportsTournamentService.settleTournament(req.params.id);
+		res.json({ success: true, data: result });
+	} catch (err) {
+		res.status(err?.status || 400).json({ success: false, message: err?.message || "Turnuva sonuçlandırılamadı.", code: err?.code });
+	}
+});
+
 // 8. NOTICE
 router.post("/notices", checkPermission("notice.create"), upload.single("image"), async (req, res) => {
 	try {
 		const noticeData = { ...req.body };
 		if (req.file) noticeData.image = `/uploads/${req.file.filename}`;
-		const notice = new Notice(noticeData);
+
+		// 🎯 multipart/form-data ile geldiği için audience JSON string olabilir.
+		let audience = { type: "all", conditions: [] };
+		if (noticeData.audience) {
+			try {
+				audience = typeof noticeData.audience === "string" ? JSON.parse(noticeData.audience) : noticeData.audience;
+			} catch {
+				audience = { type: "all", conditions: [] };
+			}
+		}
+		delete noticeData.audience;
+
+		let recipients = null;
+		if (!noticeData.recipientId && audience.type !== "all") {
+			const resolved = await resolveNoticeAudience(audience);
+			recipients = resolved.recipients;
+		}
+
+		const notice = new Notice({
+			...noticeData,
+			audience: noticeData.recipientId ? undefined : audience,
+			recipients: recipients || undefined,
+		});
 		await notice.save();
-		res.status(201).json({ success: true, data: notice });
+		res.status(201).json({ success: true, data: notice, matchedCount: recipients ? recipients.length : null });
 	} catch (err) {
+		console.error("Bildirim oluşturma hatası:", err);
 		res.status(500).json({
 			success: false,
 			message: "Bildirim eklenemedi",
@@ -4695,8 +5261,13 @@ router.post("/notices", checkPermission("notice.create"), upload.single("image")
 });
 
 router.get("/notices", checkPermission("notice.read"), async (req, res) => {
-	const notices = await Notice.find().sort({ createdAt: -1 });
-	res.json({ success: true, data: notices });
+	const notices = await Notice.find().sort({ createdAt: -1 }).lean();
+	const data = notices.map((notice) => ({
+		...notice,
+		recipientsCount: Array.isArray(notice.recipients) ? notice.recipients.length : null,
+		readCount: Array.isArray(notice.readBy) ? notice.readBy.length : 0,
+	}));
+	res.json({ success: true, data });
 });
 
 router.get("/notices/user/:userId", checkPermission("notice.read"), async (req, res) => {
@@ -5154,7 +5725,23 @@ router.get(
 			const now = Date.now();
 			const yesterday = new Date(now - 24 * 60 * 60 * 1000);
 
-			// 🔹 Tüm query'leri paralel çalıştır (Promise.all ile)
+			// 🔹 TR (Europe/Istanbul, UTC+3, DST yok) gününün 00:00'ı.
+			// Sunucu saat dilimi ne olursa olsun UTC üzerinden hesaplanır.
+			const TR_OFFSET_MS = 3 * 60 * 60 * 1000;
+			const nowTr = new Date(now + TR_OFFSET_MS);
+			const todayStartTR = new Date(
+				Date.UTC(nowTr.getUTCFullYear(), nowTr.getUTCMonth(), nowTr.getUTCDate()) - TR_OFFSET_MS,
+			);
+
+			// 🔹 Temel (kritik) query'leri paralel çalıştır (Promise.all ile).
+			// 🎯 "Bugünkü Özet" widget'ının bazen tamamen 0 görünmesinin nedeni:
+			// bonus/freespin sorguları (özellikle FreeSpinGrant -> transactions
+			// $lookup'ı) ağır/kırılgan olduğundan tek bir hata/timeout TÜM
+			// Promise.all'u reddediyor ve endpoint 500 dönüyordu; bu da
+			// depositsTodayTry/withdrawalsTodayTry gibi aslında sorunsuz
+			// hesaplanabilecek alanları da frontend'de "|| 0" varsayılanına
+			// düşürüyordu. Bu yüzden kritik olmayan iki sorgu artık ayrı ve
+			// kendi try/catch'i ile izole çalışıyor (bkz. aşağısı).
 			const [
 				setting,
 				totalUsers,
@@ -5206,6 +5793,15 @@ router.get(
 									},
 								},
 							],
+							today: [
+								{ $match: { createdAt: { $gte: todayStartTR } } },
+								{
+									$group: {
+										_id: "$type",
+										total: { $sum: "$amount" },
+									},
+								},
+							],
 						},
 					},
 				]),
@@ -5225,6 +5821,15 @@ router.get(
 							],
 							last24h: [
 								{ $match: { createdAt: { $gte: yesterday } } },
+								{
+									$group: {
+										_id: "$type",
+										total: { $sum: "$amount" },
+									},
+								},
+							],
+							today: [
+								{ $match: { createdAt: { $gte: todayStartTR } } },
 								{
 									$group: {
 										_id: "$type",
@@ -5257,6 +5862,15 @@ router.get(
 									},
 								},
 							],
+							today: [
+								{ $match: { createdAt: { $gte: todayStartTR } } },
+								{
+									$group: {
+										_id: "$type",
+										total: { $sum: "$amount" },
+									},
+								},
+							],
 						},
 					},
 				]),
@@ -5269,6 +5883,10 @@ router.get(
 							],
 							last24h: [
 								{ $match: { createdAt: { $gte: yesterday } } },
+								{ $group: { _id: "$type", total: { $sum: "$amount" } } },
+							],
+							today: [
+								{ $match: { createdAt: { $gte: todayStartTR } } },
 								{ $group: { _id: "$type", total: { $sum: "$amount" } } },
 							],
 						},
@@ -5285,12 +5903,100 @@ router.get(
 								{ $match: { createdAt: { $gte: yesterday } } },
 								{ $group: { _id: "$type", total: { $sum: "$amount" } } },
 							],
+							today: [
+								{ $match: { createdAt: { $gte: todayStartTR } } },
+								{ $group: { _id: "$type", total: { $sum: "$amount" } } },
+							],
 						},
 					},
 				]),
+				]);
+
+			// 🎁 Bugün (TR günü) verilen bonus toplamı (AdminManualAdjustment)
+			// 🎰 Bugün verilen freespin adedi + yaklaşık kazanç
+			// (bkz. "Kapsam Dışı / Varsayımlar": provider'dan freespin bayrağı
+			// gelmediği için grant süresi + oyun eşleşmesiyle yaklaşık hesaplanır)
+			//
+			// 🎯 Bu iki sorgu Promise.all dışında ve kendi try/catch'i ile
+			// çalışır: freespin sorgusu FreeSpinGrant -> transactions arasında
+			// $expr tabanlı bir $lookup içerir (indekslenmiş bir eşitlik değil),
+			// bu da veri arttıkça yavaşlayıp zaman zaman timeout ile
+			// başarısız olabilir. Eskiden bu hata Promise.all'u tamamen
+			// reddedip /admin/analytics'i 500 döndürüyor, bu da depositsToday/
+			// withdrawalsToday gibi aslında sağlıklı hesaplanan alanları da
+			// frontend'de "|| 0" varsayılanına düşürüyordu. Artık bir hata
+			// olursa sadece bonus/freespin kısmı 0 olarak döner, diğer tüm
+			// "Bugünkü Özet" alanları normal şekilde gelir.
+			const [bonusTodayAgg, freeSpinsTodayAgg] = await Promise.all([
+				AdminManualAdjustment.aggregate([
+					{
+						$match: {
+							kind: "bonus",
+							direction: "credit",
+							createdAt: { $gte: todayStartTR },
+						},
+					},
+					{ $group: { _id: null, total: { $sum: "$appliedAmount" } } },
+				]).catch(err => {
+					console.error("Bugünkü bonus toplamı alınamadı:", err.message);
+					return [];
+				}),
+
+				FreeSpinGrant.aggregate([
+					{ $match: { createdAt: { $gte: todayStartTR } } },
+					{
+						$lookup: {
+							from: "transactions",
+							let: {
+								uid: { $toString: "$targetUser" },
+								gcode: "$gameCode",
+								gfrom: "$createdAt",
+								gto: "$expiresAt",
+							},
+							pipeline: [
+								{
+									$match: {
+										$expr: {
+											$and: [
+												{ $eq: ["$user_code", "$$uid"] },
+												{ $eq: ["$game_code", "$$gcode"] },
+												{ $gte: ["$created_at", "$$gfrom"] },
+												{ $lte: ["$created_at", "$$gto"] },
+											],
+										},
+									},
+								},
+								{
+									$group: {
+										_id: null,
+										winSum: { $sum: { $ifNull: ["$win_money", 0] } },
+									},
+								},
+							],
+							as: "playedWin",
+						},
+					},
+					{
+						$group: {
+							_id: null,
+							totalGrants: { $sum: 1 },
+							totalSpinCount: { $sum: { $ifNull: ["$spinCount", 0] } },
+							totalWinEstimate: {
+								$sum: {
+									$ifNull: [{ $arrayElemAt: ["$playedWin.winSum", 0] }, 0],
+								},
+							},
+						},
+					},
+					])
+						.option({ maxTimeMS: 8000 })
+						.catch(err => {
+							console.error("Bugünkü freespin özeti alınamadı:", err.message);
+						return [];
+					}),
 			]);
 
-			// Aggregation sonuçlarını parse et
+				// Aggregation sonuçlarını parse et
 			const rates = setting?.exchangeRates || {};
 
 			// Kullanıcı bahis/kazanç
@@ -5310,22 +6016,27 @@ router.get(
 			};
 
 			// Facet sonuçlarını parse et
-			const cryptoFacet = cryptoAggAll[0] || { all: [], last24h: [] };
-			const bankFacet = bankAggAll[0] || { all: [], last24h: [] };
-			const galaxyPayFacet = galaxyPayAggAll[0] || { all: [], last24h: [] };
-			const fluxKriptoFacet = fluxKriptoAggAll[0] || { all: [], last24h: [] };
-			const xPaymentsFacet = xPaymentsAggAll[0] || { all: [], last24h: [] };
+			const cryptoFacet = cryptoAggAll[0] || { all: [], last24h: [], today: [] };
+			const bankFacet = bankAggAll[0] || { all: [], last24h: [], today: [] };
+			const galaxyPayFacet = galaxyPayAggAll[0] || { all: [], last24h: [], today: [] };
+			const fluxKriptoFacet = fluxKriptoAggAll[0] || { all: [], last24h: [], today: [] };
+			const xPaymentsFacet = xPaymentsAggAll[0] || { all: [], last24h: [], today: [] };
 
 			const cryptoAllTotals = parseAggResult(cryptoFacet.all);
 			const cryptoLast24hTotals = parseAggResult(cryptoFacet.last24h);
+			const cryptoTodayTotals = parseAggResult(cryptoFacet.today);
 			const bankAllTotals = parseAggResult(bankFacet.all);
 			const bankLast24hTotals = parseAggResult(bankFacet.last24h);
+			const bankTodayTotals = parseAggResult(bankFacet.today);
 			const galaxyPayAllTotals = parseAggResult(galaxyPayFacet.all);
 			const galaxyPayLast24hTotals = parseAggResult(galaxyPayFacet.last24h);
+			const galaxyPayTodayTotals = parseAggResult(galaxyPayFacet.today);
 			const fluxKriptoAllTotals = parseAggResult(fluxKriptoFacet.all);
 			const fluxKriptoLast24hTotals = parseAggResult(fluxKriptoFacet.last24h);
+			const fluxKriptoTodayTotals = parseAggResult(fluxKriptoFacet.today);
 			const xPaymentsAllTotals = parseAggResult(xPaymentsFacet.all);
 			const xPaymentsLast24hTotals = parseAggResult(xPaymentsFacet.last24h);
+			const xPaymentsTodayTotals = parseAggResult(xPaymentsFacet.today);
 
 			// Toplam hesaplama (Crypto + Bank + diğer sağlayıcılar)
 			const allTotals = {
@@ -5356,6 +6067,28 @@ router.get(
 					fluxKriptoLast24hTotals.withdrawals +
 					xPaymentsLast24hTotals.withdrawals,
 			};
+			// 🔹 Bugün (TR günü, 00:00'dan şimdiye) toplamları
+			const todayTotals = {
+				deposits:
+					cryptoTodayTotals.deposits +
+					bankTodayTotals.deposits +
+					galaxyPayTodayTotals.deposits +
+					fluxKriptoTodayTotals.deposits +
+					xPaymentsTodayTotals.deposits,
+				withdrawals:
+					cryptoTodayTotals.withdrawals +
+					bankTodayTotals.withdrawals +
+					galaxyPayTodayTotals.withdrawals +
+					fluxKriptoTodayTotals.withdrawals +
+					xPaymentsTodayTotals.withdrawals,
+			};
+
+			const bonusTodayTry = bonusTodayAgg?.[0]?.total || 0;
+			const freeSpinsTodaySummary = freeSpinsTodayAgg?.[0] || {
+				totalGrants: 0,
+				totalSpinCount: 0,
+				totalWinEstimate: 0,
+			};
 
 			// Response data
 			const responseData = {
@@ -5368,6 +6101,16 @@ router.get(
 				totalWithdrawalsTry: allTotals.withdrawals,
 				deposits24hTry: last24hTotals.deposits,
 				withdrawals24hTry: last24hTotals.withdrawals,
+
+				// Bugün (TR günü, 00:00'dan itibaren)
+				depositsTodayTry: todayTotals.deposits,
+				withdrawalsTodayTry: todayTotals.withdrawals,
+				bonusTodayTry,
+				freeSpinsTodayCount: freeSpinsTodaySummary.totalSpinCount,
+				freeSpinsTodayGrantsCount: freeSpinsTodaySummary.totalGrants,
+				// Yaklaşık değer: provider'dan freespin bayrağı gelmediği için
+				// grant süresi + oyun eşleşmesiyle hesaplanır, kesin değildir.
+				freeSpinsTodayWinTry: freeSpinsTodaySummary.totalWinEstimate,
 
 				// Finans detay - Crypto
 				cryptoDepositsTry: cryptoAllTotals.deposits,
@@ -5827,9 +6570,15 @@ const createUnifiedPaymentListHandler = (type) => async (req, res) => {
 			endDate,
 			page = 1,
 			itemsPerPage = 10,
+			export: exportMode,
 		} = req.query;
+		// Dışa aktarım modunda sayfalama devre dışı kalır ve güvenli bir üst
+		// sınıra (50.000 kayıt) kadar tüm eşleşen işlemler döndürülür.
+		const isExport = String(exportMode) === "true" || Number(itemsPerPage) === -1;
 		const pageNumber = Math.max(1, Number(page) || 1);
-		const limitNumber = Math.min(100, Math.max(1, Number(itemsPerPage) || 10));
+		const limitNumber = isExport
+			? 50000
+			: Math.min(100, Math.max(1, Number(itemsPerPage) || 10));
 		const now = new Date();
 		const last24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 		const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -5900,7 +6649,7 @@ const createUnifiedPaymentListHandler = (type) => async (req, res) => {
 				$facet: {
 					transactions: [
 						...statusMatchStage,
-						{ $skip: (pageNumber - 1) * limitNumber },
+						...(isExport ? [] : [{ $skip: (pageNumber - 1) * limitNumber }]),
 						{ $limit: limitNumber },
 						{
 							$project: {
@@ -6295,7 +7044,7 @@ router.get("/futures/history", checkPermission("games.read"), async (req, res) =
 	}
 });
 
-// 📌 Tüm Turbo geçmişleri (admin)
+// 📌 Tüm Turbo ge��mişleri (admin)
 router.get("/turbo/history", checkPermission("games.read"), async (req, res) => {
 	try {
 		const {
@@ -8413,7 +9162,7 @@ router.get("/my-permissions", authenticateAdmin, async (req, res) => {
 	}
 });
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ═══��══���══════════════════════════════════���═════════════════════════════════
 // 🎨 SITE SETTINGS ENDPOINTS
 // ═════════════════════════════════════════════════════════════��═════════════
 
@@ -8940,7 +9689,7 @@ router.put(
 
 // ═══════════���═══════════════════════════════════════════════════════════════
 // 🖼️ AVATAR MANAGEMENT ENDPOINTS
-// ═══════════════════════════════════════════════════════════════════════��═══
+// ═════════════════════════════���═════════════════════════════════════════��═══
 
 // Avatar upload directory
 const avatarUploadDir = path.join(__dirname, "..", "..", "uploads", "avatars");
@@ -9196,7 +9945,7 @@ router.post(
 	},
 );
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ════════════════════════════════════���══════════════════════════════════════
 // 🎮 ORIGINAL GAMES BANNER ENDPOINTS
 // ════════════════════════════════���══════════════════════════════════════════
 
@@ -9523,7 +10272,7 @@ router.post(
 
 			let ext = mimeToExt[contentType] || "";
 			if (!ext) {
-				// URL path'inden uzantıyı al
+				// URL path'inden uzantıy�� al
 				const urlPath = parsedUrl.pathname;
 				const urlExt = path.extname(urlPath).toLowerCase();
 				if (urlExt && urlExt.length <= 6) {
@@ -9719,7 +10468,7 @@ router.post(
 	},
 );
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ════��════════════════════════════════════��═════════════════════════════════
 // Provider Ayarları (SiteSettings içinde)
 // ═════════════════════════════════════════��═════════════════════════════════
 
@@ -9970,7 +10719,7 @@ router.put(
 // E-posta Şablonları (SiteSettings içinde)
 // SMTP credential bilgileri backend/.env üzerinden okunur, sadece şablonlar
 // ve gönderici görünen ad/adres burada yönetilir.
-// ═══════════���════════════════════════════════════════════���══════════════════
+// ═══════════���═══════════════════════════════════���══════��═���══════��═══════════
 
 const buildEmailTemplatesPayload = (siteSettings) => {
 	const tpl = (siteSettings && siteSettings.emailTemplates) || {};
@@ -10205,9 +10954,9 @@ router.post(
 
 
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════���═══════════════════════════════
 // Forcelab Finance Ayarları (SiteSettings içinde)
-// ═══════════════════════════════════════════════════════════════════════════
+// ════���════════════════════════════��═════════════════════════════════════════
 
 router.get(
 	"/forcelab-finance/settings",
@@ -11077,7 +11826,7 @@ router.post(
 	},
 );
 
-// ═══════════════════════════════════════════════════���═══════════════════════
+// ═══════════════════════════════════════════════════���═��═════════════════════
 // MeelDev Admin Endpoints
 // ═══════════════════════════════════════════��═══════════════════════════════
 

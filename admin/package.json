@@ -4,6 +4,7 @@
 	"private": true,
 	"scripts": {
 		"dev": "vite",
+		"prebuild": "pnpm run build:icons",
 		"build": "vite build",
 		"preview": "vite preview --port 5050",
 		"lint": "eslint . -c .eslintrc.js --fix --ext .ts,.js,.vue,.tsx,.jsx",

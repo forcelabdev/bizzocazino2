@@ -9,6 +9,11 @@ const Leaderboard = require("../../database/models/Leaderboard");
 const Rain = require("../../database/models/Rain");
 const BalanceTransaction = require("../../database/models/BalanceTransaction");
 const Setting = require("../../database/models/Setting");
+const { onBetSettled } = require("../../utils/wagerHooks");
+const {
+	evaluateCategoryBetLimit,
+	CATEGORY_BET_LIMIT_EXCEEDED_CODE,
+} = require("../../utils/userBetAccess");
 // Load utils
 const { socketRemoveAntiSpam } = require("../../utils/socket");
 const { settingGet } = require("../../utils/setting");
@@ -81,7 +86,7 @@ const unboxSendBetSocket = async (io, socket, user, data, callback) => {
 
 		// Kullanıcıyı taze çek
 		const freshUser = await User.findById(user._id)
-			.select("wallets currency stats rakeback limits affiliates")
+			.select("wallets currency stats rakeback limits controls affiliates")
 			.lean();
 
 		if (!freshUser) throw new Error("User not found.");
@@ -94,6 +99,16 @@ const unboxSendBetSocket = async (io, socket, user, data, callback) => {
 
 		if (walletBalance < amountBetTotal) {
 			throw new Error("Insufficient balance");
+		}
+
+		// 🎯 Bet Limitleme: kategori bazlı tam blokaj / maksimum tutar kontrolü.
+		const limitCheck = evaluateCategoryBetLimit(freshUser, "originals", amountBetTotal);
+		if (!limitCheck.allowed) {
+			throw new Error(
+				limitCheck.reason === CATEGORY_BET_LIMIT_EXCEEDED_CODE
+					? `Bu kategori için maksimum bahis tutarı ${limitCheck.max} ile sınırlıdır.`
+					: "Bu oyun kategorisine erişiminiz kısıtlanmıştır."
+			);
 		}
 
 		const seedDatabase = await UserSeed.findOne({
@@ -307,6 +322,9 @@ const unboxSendBetSocket = async (io, socket, user, data, callback) => {
 		let gamesDatabase = dataDatabase
 			.slice(3, 3 + unboxCount)
 			.map((game) => game.toObject());
+
+		// 🎯 Bilet çevrimi + Race puanı hook'u (kutu maliyeti = çevrim tutarı)
+		onBetSettled({ userId: user._id, amount: amountBetTotal, category: "originals" });
 
 		io.of("/general").emit("rain", { rain: dataDatabase[2] });
 

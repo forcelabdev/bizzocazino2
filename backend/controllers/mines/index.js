@@ -9,6 +9,11 @@ const BalanceTransaction = require("../../database/models/BalanceTransaction");
 const Rain = require("../../database/models/Rain");
 const Setting = require("../../database/models/Setting");
 const { getActiveWalletIndex } = require("../../utils/wallet");
+const { onBetSettled } = require("../../utils/wagerHooks");
+const {
+	evaluateCategoryBetLimit,
+	CATEGORY_BET_LIMIT_EXCEEDED_CODE,
+} = require("../../utils/userBetAccess");
 
 // Load utils
 const { socketRemoveAntiSpam } = require("../../utils/socket");
@@ -76,23 +81,33 @@ const minesSendBetSocket = async (io, socket, user, data, callback) => {
 		const rakeback = generalUserGetRakeback(user);
 
 		// ✅ Kullanıcıyı yeniden al
-		const freshUser = await User.findById(user._id)
-			.select(
-				"wallets currency stats rakeback mute ban verifiedAt updatedAt username avatar rank level limits affiliates createdAt anonymous"
-			)
-			.lean();
+			const freshUser = await User.findById(user._id)
+				.select(
+					"wallets currency stats rakeback mute ban verifiedAt updatedAt username avatar rank level limits controls affiliates createdAt anonymous"
+				)
+				.lean();
 
-		if (!freshUser) throw new Error("User not found.");
+			if (!freshUser) throw new Error("User not found.");
 
-		const walletIndex = getActiveWalletIndex(freshUser);
-		if (walletIndex === -1) throw new Error("Selected wallet not found.");
+			const walletIndex = getActiveWalletIndex(freshUser);
+			if (walletIndex === -1) throw new Error("Selected wallet not found.");
 
-		const walletPath = `wallets.${walletIndex}.balance`;
-		const walletBalance = freshUser.wallets[walletIndex].balance;
+			const walletPath = `wallets.${walletIndex}.balance`;
+			const walletBalance = freshUser.wallets[walletIndex].balance;
 
-		if (walletBalance < amount) {
-			throw new Error("Yetersiz bakiye");
-		}
+			if (walletBalance < amount) {
+				throw new Error("Yetersiz bakiye");
+			}
+
+			// 🎯 Bet Limitleme: kategori bazlı tam blokaj / maksimum tutar kontrolü.
+			const limitCheck = evaluateCategoryBetLimit(freshUser, "originals", amount);
+			if (!limitCheck.allowed) {
+				throw new Error(
+					limitCheck.reason === CATEGORY_BET_LIMIT_EXCEEDED_CODE
+						? `Bu kategori için maksimum bahis tutarı ${limitCheck.max} ile sınırlıdır.`
+						: "Bu oyun kategorisine erişiminiz kısıtlanmıştır."
+				);
+			}
 
 		const amountRakeback =
 			freshUser.limits.blockSponsor !== true
@@ -379,6 +394,9 @@ const minesSendRevealSocket = async (io, socket, user, data, callback) => {
 				1
 			);
 
+			// 🎯 Bilet çevrimi + Race puanı hook'u (mines bombaya basıldı, tur sonlandı)
+			onBetSettled({ userId: user._id, amount: amountLimits, category: "originals" });
+
 			io.of("/general")
 				.to(user._id.toString())
 				.emit("user", { user: dataDatabase[0] });
@@ -512,6 +530,9 @@ const minesSendCashoutSocket = async (io, socket, user, data, callback) => {
 			),
 			1
 		);
+
+		// 🎯 Bilet çevrimi + Race puanı hook'u (mines cashout)
+		onBetSettled({ userId: user._id, amount: amountLimits, category: "originals" });
 
 		io.of("/general").emit("rain", { rain: dataDatabase[2] });
 		generalAddBetsList(io, {

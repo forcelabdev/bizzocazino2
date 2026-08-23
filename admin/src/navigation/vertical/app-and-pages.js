@@ -180,6 +180,18 @@ export default [
         action: "read",
         subject: "controlGame",
       },
+      {
+        title: "platform.ticketEvents",
+        to: "apps-tickets",
+        action: "read",
+        subject: "finance.tickets",
+      },
+      {
+        title: "platform.raceTournaments",
+        to: "apps-race",
+        action: "read",
+        subject: "finance.race",
+      },
     ],
   },
 
@@ -202,6 +214,13 @@ export default [
         icon: { icon: "tabler-ball-football" },
         action: "read",
         subject: "sports",
+      },
+      {
+        title: "Spor Turnuvası",
+        to: "apps-sports-tournament",
+        icon: { icon: "tabler-trophy" },
+        action: "read",
+        subject: "sports.tournament",
       },
 
       {

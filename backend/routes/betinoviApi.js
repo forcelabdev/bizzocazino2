@@ -16,11 +16,14 @@ const { getMaxAccountBalance } = require("../config");
 const {
 	BET_ACCESS_BLOCKED_CODE,
 	BET_ACCESS_BLOCKED_MESSAGE,
+	CATEGORY_BET_LIMIT_EXCEEDED_CODE,
 	getProviderVisibleBalance,
 	isUserBetAccessBlocked,
+	evaluateCategoryBetLimit,
 } = require("../utils/userBetAccess");
 const { generalUserGetRakeback } = require("../utils/general/user");
 const trialBonusService = require("../services/trialBonusService");
+const { onBetSettled } = require("../utils/wagerHooks");
 
 // Betinovi API Credentials
 const BETINOVI_BASE_URL = process.env.BETINOVI_API_ENDPOINT;
@@ -878,6 +881,26 @@ router.post("/callback", async (req, res) => {
 					});
 				}
 
+				// 🎯 Bet Limitleme: kategori bazlı tam blokaj / maksimum tutar kontrolü.
+				if (normalizedTxnType === 0) {
+					const betCategory =
+						SINGLE_GAME_VENDORS[normalizedVendorCode]?.game_type === "sport"
+							? "sportsBook"
+							: "slots";
+					const limitCheck = evaluateCategoryBetLimit(user, betCategory, normalizedAmount);
+					if (!limitCheck.allowed) {
+						return res.status(200).json({
+							status: 6,
+							msg: limitCheck.reason,
+							details:
+								limitCheck.reason === CATEGORY_BET_LIMIT_EXCEEDED_CODE
+									? `Bu kategori için maksimum bahis tutarı ${limitCheck.max} ile sınırlıdır.`
+									: "Bu oyun kategorisine erişiminiz kısıtlanmıştır.",
+							balance: 0,
+						});
+					}
+				}
+
 				let balanceBefore = activeWallet.balance || 0;
 
 				let rakebackAmount = 0;
@@ -939,6 +962,27 @@ router.post("/callback", async (req, res) => {
 								balance: 0,
 							};
 							return;
+						}
+
+						// 🎯 Bet Limitleme: transaction içinde tekrar doğrula (race condition güvenliği).
+						if (normalizedTxnType === 0) {
+							const betCategory =
+								SINGLE_GAME_VENDORS[normalizedVendorCode]?.game_type === "sport"
+									? "sportsBook"
+									: "slots";
+							const limitCheck = evaluateCategoryBetLimit(currentUser, betCategory, normalizedAmount);
+							if (!limitCheck.allowed) {
+								callbackResponse = {
+									status: 6,
+									msg: limitCheck.reason,
+									details:
+										limitCheck.reason === CATEGORY_BET_LIMIT_EXCEEDED_CODE
+											? `Bu kategori için maksimum bahis tutarı ${limitCheck.max} ile sınırlıdır.`
+											: "Bu oyun kategorisine erişiminiz kısıtlanmıştır.",
+									balance: balanceBefore,
+								};
+								return;
+							}
 						}
 
 						let linkedDebit = null;
@@ -1254,6 +1298,16 @@ router.post("/callback", async (req, res) => {
 						wallets: updatedUser.wallets,
 						currency: updatedUser.currency,
 					});
+
+					// 🎯 Bilet çevrimi + Race puanı hook'u (Betinovi debit = bahis konuldu)
+					if (normalizedTxnType === 0) {
+						onBetSettled({
+							userId: user._id,
+							amount: normalizedAmount,
+							category: "casino",
+							providerCode: normalizedVendorCode,
+						});
+					}
 
 					try {
 						if (normalizedTxnType === 0) {

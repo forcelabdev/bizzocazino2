@@ -187,9 +187,10 @@ const userSchema = new mongoose.Schema(
 			points: { type: Number, default: 0 },
 		},
 
-		limits: {
-			betToWithdraw: { type: Number, default: 0 },
-			betToRain: { type: Number, default: 0 },
+			limits: {
+				betToWithdraw: { type: Number, default: 0 },
+				minWithdraw: { type: Number, default: 0 },
+				betToRain: { type: Number, default: 0 },
 			blockAffiliate: { type: Boolean, default: false },
 			blockRain: { type: Boolean, default: false },
 			blockTip: { type: Boolean, default: false },
@@ -216,6 +217,13 @@ const userSchema = new mongoose.Schema(
 				liveCasino: { type: Boolean, default: false },
 				sportsBook: { type: Boolean, default: false },
 				originals: { type: Boolean, default: false },
+			},
+			// Bet Limitleme: kategori bazlı maksimum bahis tutarı. 0 = limitsiz.
+			// "casino" hem slot hem originals bahislerini kapsayan ortak limittir.
+			categoryBetLimits: {
+				liveCasino: { type: Number, default: 0 },
+				casino: { type: Number, default: 0 },
+				sportsBook: { type: Number, default: 0 },
 			},
 			platformAccess: {
 				affiliatePanel: { type: Boolean, default: false },

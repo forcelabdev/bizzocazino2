@@ -87,7 +87,11 @@ app.use("/", require("./routes")(io));
 app.use("/public", express.static(path.join(__dirname, "public")));
 
 // 🌍 Site genelinde aktif kullanıcı takibi
+// Not: Set kendisi burada tutuluyor (yerel emit sayacı için), ama gerçek
+// User ObjectId'leri de utils/io.js'teki merkezi sete yazılıyor — Notice
+// segmentasyonu (audience: "online"/"offline") bunu okur.
 const onlineUsers = new Set();
+const ioUtils = require("./utils/io");
 
 io.on("connection", (socket) => {
 	// console.log("🌍 Yeni ziyaretçi bağlandı:", socket.id);
@@ -95,12 +99,14 @@ io.on("connection", (socket) => {
 	// Eğer kullanıcı login olmuşsa token'dan userId gönder
 	const userId = socket.handshake.auth?.userId || socket.id;
 	onlineUsers.add(userId);
+	ioUtils.addOnlineUser(userId);
 
 	// herkese gönder
 	io.emit("siteOnline", { online: onlineUsers.size });
 
 	socket.on("disconnect", () => {
 		onlineUsers.delete(userId);
+		ioUtils.removeOnlineUser(userId);
 		io.emit("siteOnline", { online: onlineUsers.size });
 		// console.log("❌ Kullanıcı ayrıldı:", userId);
 	});
@@ -118,6 +124,33 @@ updateExchangeRates();
 // Her gün saat 03:00'te çalıştır
 cron.schedule("0 3 * * *", () => {
 	updateExchangeRates();
+});
+
+// 🎟️ Bilet Etkinliği: onaylanmış yatırımları tarayıp bilet üretir (her dakika)
+const { syncApprovedDeposits } = require("./services/ticketService");
+cron.schedule("* * * * *", () => {
+	syncApprovedDeposits().catch((err) =>
+		console.error("❌ Ticket sync hatası:", err.message)
+	);
+});
+
+// 🏁 Çevrim Turnuvası (Race): durum geçişleri + manuel katılımcı otomatik artışı (her dakika)
+const raceService = require("./services/raceService");
+cron.schedule("* * * * *", () => {
+	raceService.advanceTournamentStates().catch((err) =>
+		console.error("❌ Race durum güncelleme hatası:", err.message)
+	);
+	raceService.tickManualEntries().catch((err) =>
+		console.error("❌ Race manuel katılımcı artış hatası:", err.message)
+	);
+});
+
+// ⚽ Spor Turnuvası (manuel): durum geçişleri + süresi bitenlerin sonuçlandırılması (her dakika)
+const sportsTournamentService = require("./services/sportsTournamentService");
+cron.schedule("* * * * *", () => {
+	sportsTournamentService.advanceTournamentStates().catch((err) =>
+		console.error("❌ Spor Turnuvası durum güncelleme hatası:", err.message)
+	);
 });
 
 // Set app port
