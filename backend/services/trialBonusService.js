@@ -35,6 +35,8 @@ const updateSettings = async (patch = {}, actorUser = null) => {
 		"wageringMultiplier",
 		"durationHours",
 		"blockOtherBonuses",
+		"trialRtpLow",
+		"trialRtpHigh",
 		"note",
 	];
 
@@ -302,6 +304,32 @@ const getApprovedClaimsMap = async (userIds = []) => {
 	return map;
 };
 
+/**
+ * Kullanıcının deneme bonusundan kalan bir çevrim (wagering) şartı aktifse
+ * yükseltilmiş RTP değerlerini döner, yoksa null döner. Oyun her açılışında
+ * (GetGameUrl) canlı olarak çağrılır — çevrim tamamlandığı anda
+ * evaluateBonusLock kilidi otomatik kapatır ve burası null dönmeye başlar,
+ * böylece RTP ek bir job/cron olmadan kendiliğinden normale döner.
+ */
+const getActiveRtp = async (user) => {
+	if (!user) return null;
+
+	const settings = await getSettings();
+	const low = Number(settings.trialRtpLow || 0);
+	const high = Number(settings.trialRtpHigh || 0);
+	if (low <= 0 && high <= 0) return null;
+
+	const lockStatus = await evaluateBonusLock(user);
+	if (!lockStatus.active) return null;
+	if (lockStatus.type !== "wagering") return null;
+	if (lockStatus.source !== SOURCE) return null;
+
+	return {
+		lowRtp: low > 0 ? low : undefined,
+		highRtp: high > 0 ? high : undefined,
+	};
+};
+
 module.exports = {
 	getSettings,
 	updateSettings,
@@ -310,4 +338,5 @@ module.exports = {
 	approveClaim,
 	rejectClaim,
 	getApprovedClaimsMap,
+	getActiveRtp,
 };

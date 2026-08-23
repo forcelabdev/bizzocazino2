@@ -20,6 +20,7 @@ const {
 	isUserBetAccessBlocked,
 } = require("../utils/userBetAccess");
 const { generalUserGetRakeback } = require("../utils/general/user");
+const trialBonusService = require("../services/trialBonusService");
 
 // Betinovi API Credentials
 const BETINOVI_BASE_URL = process.env.BETINOVI_API_ENDPOINT;
@@ -289,6 +290,12 @@ router.post("/", async (req, res) => {
 					});
 				}
 
+				// Deneme bonusundan kalan çevrim şartı aktifse, admin panelinde
+				// belirlenen yükseltilmiş RTP değerleri gönderilir. Çevrim
+				// tamamlandığında (veya hiç yoksa) burası null döner ve
+				// sağlayıcı varsayılan RTP'sine otomatik olarak geri dönülür.
+				const trialRtp = await trialBonusService.getActiveRtp(user);
+
 				const launchPayload = {
 					method: "GetGameUrl",
 					userCode: user._id.toString(),
@@ -299,6 +306,8 @@ router.post("/", async (req, res) => {
 					language: language || "tr",
 					channel: channel || "desktop",
 					...(customData && { customData }),
+					...(trialRtp?.lowRtp !== undefined && { lowRtp: trialRtp.lowRtp }),
+					...(trialRtp?.highRtp !== undefined && { highRtp: trialRtp.highRtp }),
 				};
 
 				const response = await betinoviRequest(launchPayload);

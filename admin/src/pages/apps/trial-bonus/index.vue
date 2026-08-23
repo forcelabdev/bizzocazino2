@@ -21,6 +21,8 @@ const settings = ref({
   wageringMultiplier: 0,
   blockOtherBonuses: false,
   durationHours: 0,
+  trialRtpLowPercent: 0,
+  trialRtpHighPercent: 0,
   note: "",
 })
 
@@ -28,7 +30,14 @@ const fetchSettings = async () => {
   settingsLoading.value = true
   try {
     const res = await axios.get("/admin/trial-bonus/settings")
-    settings.value = { ...settings.value, ...res.data.data }
+    const data = res.data.data || {}
+
+    settings.value = {
+      ...settings.value,
+      ...data,
+      trialRtpLowPercent: Math.round(Number(data.trialRtpLow || 0) * 100),
+      trialRtpHighPercent: Math.round(Number(data.trialRtpHigh || 0) * 100),
+    }
   } catch (error) {
     console.error("Deneme bonusu ayarları alınamadı:", error)
   } finally {
@@ -46,9 +55,18 @@ const saveSettings = async () => {
       wageringMultiplier: Number(settings.value.wageringMultiplier),
       blockOtherBonuses: settings.value.blockOtherBonuses,
       durationHours: Number(settings.value.durationHours),
+      trialRtpLow: Number(settings.value.trialRtpLowPercent || 0) / 100,
+      trialRtpHigh: Number(settings.value.trialRtpHighPercent || 0) / 100,
       note: settings.value.note,
     })
-    settings.value = { ...settings.value, ...res.data.data }
+    const data = res.data.data || {}
+
+    settings.value = {
+      ...settings.value,
+      ...data,
+      trialRtpLowPercent: Math.round(Number(data.trialRtpLow || 0) * 100),
+      trialRtpHighPercent: Math.round(Number(data.trialRtpHigh || 0) * 100),
+    }
     snackbar.value = { show: true, text: t("trialBonusAdmin.saved"), color: "success" }
   } catch (error) {
     console.error("Deneme bonusu ayarları kaydedilemedi:", error)
@@ -273,6 +291,44 @@ onMounted(() => {
                   :label="t('trialBonusAdmin.wageringMultiplier')"
                 />
                 <span class="text-caption text-disabled">{{ t("trialBonusAdmin.wageringMultiplierHint") }}</span>
+              </VCol>
+
+              <VCol cols="12">
+                <VDivider class="mb-2" />
+                <h6 class="text-h6 mb-1">
+                  {{ t("trialBonusAdmin.rtpTitle") }}
+                </h6>
+                <span class="text-caption text-disabled">{{ t("trialBonusAdmin.rtpHint") }}</span>
+              </VCol>
+
+              <VCol
+                cols="12"
+                md="3"
+              >
+                <AppTextField
+                  v-model="settings.trialRtpLowPercent"
+                  type="number"
+                  min="0"
+                  max="100"
+                  suffix="%"
+                  :disabled="!settings.wageringMultiplier || Number(settings.wageringMultiplier) <= 0"
+                  :label="t('trialBonusAdmin.rtpLow')"
+                />
+              </VCol>
+
+              <VCol
+                cols="12"
+                md="3"
+              >
+                <AppTextField
+                  v-model="settings.trialRtpHighPercent"
+                  type="number"
+                  min="0"
+                  max="100"
+                  suffix="%"
+                  :disabled="!settings.wageringMultiplier || Number(settings.wageringMultiplier) <= 0"
+                  :label="t('trialBonusAdmin.rtpHigh')"
+                />
               </VCol>
 
               <VCol cols="12">

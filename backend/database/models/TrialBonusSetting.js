@@ -27,6 +27,14 @@ const trialBonusSettingSchema = new mongoose.Schema(
 
 		blockOtherBonuses: { type: Boolean, default: false },
 
+		// Çevrim şartı aktifken (wageringMultiplier > 0 ve kullanıcının
+		// çevrimi henüz tamamlanmamışken) oyun sağlayıcısına gönderilecek
+		// yükseltilmiş RTP değerleri (0-1 arası, örn. 0.80 = %80). 0/boş
+		// bırakılırsa o RTP hiç gönderilmez ve sağlayıcı varsayılanı kullanılır.
+		// Çevrim tamamlandığında otomatik olarak normal RTP'ye döner.
+		trialRtpLow: { type: Number, default: 0, min: 0, max: 1 },
+		trialRtpHigh: { type: Number, default: 0, min: 0, max: 1 },
+
 		note: { type: String, default: "", trim: true },
 
 		updatedBy: {
