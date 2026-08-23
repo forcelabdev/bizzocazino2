@@ -10,6 +10,7 @@ const manualBonusCategoryController = require("../../controllers/admin/manualBon
 const lossBonusController = require("../../controllers/admin/lossBonusController");
 const depositBonusController = require("../../controllers/admin/depositBonusController");
 const trialBonusController = require("../../controllers/admin/trialBonusController");
+const balanceAnalysisController = require("../../controllers/admin/balanceAnalysisController");
 const reloadBonusController = require("../../controllers/admin/reloadBonusController");
 const callScenarioController = require("../../controllers/admin/callScenarioController");
 const playerSegmentsController = require("../../controllers/admin/playerSegments");
@@ -2481,6 +2482,49 @@ router.get(
 		"users.read",
 	]),
 	trialBonusController.getUserSummary,
+);
+
+// Bakiye Analizi (manuel bonus/bakiye + kampanya + Filux + xPayment)
+router.get(
+	"/balance-analysis/summary",
+	checkPermission([
+		"finance.balanceAnalysis.read",
+		"finance.balanceAnalysis.manage",
+	]),
+	balanceAnalysisController.getSummary,
+);
+
+router.get(
+	"/balance-analysis/members",
+	checkPermission([
+		"finance.balanceAnalysis.read",
+		"finance.balanceAnalysis.manage",
+	]),
+	balanceAnalysisController.getMembers,
+);
+
+router.get(
+	"/balance-analysis/members/:id",
+	checkPermission([
+		"finance.balanceAnalysis.read",
+		"finance.balanceAnalysis.manage",
+	]),
+	balanceAnalysisController.getMemberDetail,
+);
+
+router.get(
+	"/balance-analysis/settings",
+	checkPermission([
+		"finance.balanceAnalysis.read",
+		"finance.balanceAnalysis.manage",
+	]),
+	balanceAnalysisController.getSettings,
+);
+
+router.put(
+	"/balance-analysis/settings",
+	checkPermission("finance.balanceAnalysis.manage"),
+	balanceAnalysisController.updateSettings,
 );
 
 router.get(
@@ -9398,7 +9442,7 @@ router.delete(
 	},
 );
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ═══���═══════════════════════════════════════════════════════════════════════
 // Kategori İkonları Yönetimi
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -9668,7 +9712,7 @@ router.put(
 
 // ═══════════════════════════════════════════════════════════════════════════
 // SMS OTP Ayarları (SiteSettings içinde)
-// ════════════════════════════════════��══════════════════════════════════════
+// ════════════════════════════════════��════════════════════════════════���═════
 
 const normalizePositiveInteger = (value, fallback = 0) => {
 	const parsed = Number.parseInt(value, 10);

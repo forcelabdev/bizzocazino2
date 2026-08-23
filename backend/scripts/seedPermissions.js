@@ -307,6 +307,20 @@ const defaultPermissions = [
 		action: "manage",
 		group: "Finans",
 	},
+	{
+		code: "finance.balanceAnalysis.read",
+		name: "Finans - Bakiye Analizi Görüntüle",
+		resource: "finance.balanceAnalysis",
+		action: "read",
+		group: "Finans",
+	},
+	{
+		code: "finance.balanceAnalysis.manage",
+		name: "Finans - Bakiye Analizi Yönet",
+		resource: "finance.balanceAnalysis",
+		action: "manage",
+		group: "Finans",
+	},
 
 	// Games
 	{
@@ -779,6 +793,7 @@ const defaultRoles = [
 			"finance.depositBonus.manage",
 			"finance.trialBonus.manage",
 			"finance.reloadBonus.manage",
+			"finance.balanceAnalysis.manage",
 			"callScenarios.manage",
 			"games.read",
 			"games.update",
@@ -811,6 +826,7 @@ const defaultRoles = [
 			"finance.depositBonus.manage",
 			"finance.trialBonus.manage",
 			"finance.reloadBonus.manage",
+			"finance.balanceAnalysis.manage",
 			"callScenarios.manage",
 			"users.read",
 		],
@@ -893,6 +909,7 @@ const defaultRoles = [
 			"finance.depositBonus.read",
 			"finance.trialBonus.read",
 			"finance.reloadBonus.read",
+			"finance.balanceAnalysis.read",
 			"callScenarios.read",
 			"games.read",
 			"providers.read",
