@@ -312,6 +312,12 @@ export default [
         action: "read",
         subject: "reports.betinovi",
       },
+      {
+        title: "betinoviReports.balanceAnalysis",
+        to: "apps-reports-balance-analysis",
+        action: "read",
+        subject: "finance.balanceAnalysis",
+      },
     ],
   },
 

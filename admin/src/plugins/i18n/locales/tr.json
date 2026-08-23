@@ -531,7 +531,8 @@
 		"byAgent": "Temsilciye göre",
 		"byVendor": "Vendora göre",
 		"settlement": "Mutabakat",
-		"riskUsers": "Riskli Kullanıcılar"
+		"riskUsers": "Riskli Kullanıcılar",
+		"balanceAnalysis": "Bakiye Analizi"
 	},
 	"controlGame": {
 		"title": "Call Management"

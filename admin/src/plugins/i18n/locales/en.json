@@ -547,7 +547,8 @@
 		"byAgent": "By agent",
 		"byVendor": "By vendor",
 		"settlement": "Settlement",
-		"riskUsers": "Risk Users"
+		"riskUsers": "Risk Users",
+		"balanceAnalysis": "Balance Analysis"
 	},
 	"controlGame": {
 		"title": "Call Management"
