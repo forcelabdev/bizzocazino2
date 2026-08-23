@@ -2511,6 +2511,26 @@ router.get(
 );
 
 router.get(
+	"/crm-report/game-buckets",
+	checkPermission([
+		"finance.balanceAnalysis.read",
+		"finance.balanceAnalysis.manage",
+		"reports.read",
+	]),
+	crmReportController.getGameTypeBuckets,
+);
+
+router.get(
+	"/crm-report/filter-options",
+	checkPermission([
+		"finance.balanceAnalysis.read",
+		"finance.balanceAnalysis.manage",
+		"reports.read",
+	]),
+	crmReportController.getFilterOptions,
+);
+
+router.get(
 	"/crm-report/members",
 	checkPermission([
 		"finance.balanceAnalysis.read",
@@ -8890,7 +8910,7 @@ router.put(
 	},
 );
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ═══════════���═══════════════════════════════════════════════════════════════
 // 🖼️ AVATAR MANAGEMENT ENDPOINTS
 // ═══════════════════════════════════════════════════════════════════════��═══
 
@@ -9150,7 +9170,7 @@ router.post(
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 🎮 ORIGINAL GAMES BANNER ENDPOINTS
-// ═══════════════════════════════════════════════════════════════════════════
+// ════════════════════════════════���══════════════════════════════════════════
 
 // Original game banner upload - sabit path'e yükler
 const originalGamesUpload = multer({

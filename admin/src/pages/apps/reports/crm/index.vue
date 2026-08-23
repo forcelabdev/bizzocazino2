@@ -19,11 +19,30 @@ const bucket = ref(null)
 const depositMin = ref(null)
 const depositMax = ref(null)
 
+const gameType = ref(null) // slot | live | sportsbook | other
+const vipLevel = ref(null)
+const country = ref(null)
+const activityStatus = ref(null)
+const tag = ref(null)
+const partner = ref(null)
+
 const summary = ref(null)
 const summaryLoading = ref(false)
 
 const buckets = ref([])
 const bucketsLoading = ref(false)
+
+const gameBuckets = ref([])
+const gameBucketsLoading = ref(false)
+
+const filterOptions = ref({
+  countries: [],
+  vipLevels: [],
+  tags: [],
+  partners: [],
+  gameTypes: [],
+  activityStatuses: [],
+})
 
 const members = ref([])
 const membersLoading = ref(false)
@@ -47,15 +66,27 @@ const bonusOrigins = [
   { value: "manual", title: "Eklenen Bonus" },
 ]
 
+const activityStatusColors = {
+  active: "success",
+  at_risk: "warning",
+  churned: "error",
+  never_played: "secondary",
+}
+
 const headers = [
   { title: "#", key: "index", sortable: false, width: "56" },
   { title: "Üye", key: "user", sortable: false },
   { title: "Partner", key: "partner", sortable: false },
+  { title: "VIP", key: "vip", sortable: false },
+  { title: "Ülke", key: "country", sortable: false },
   { title: "Yatırım", key: "totalDeposit", sortable: false },
   { title: "Çekim", key: "totalWithdrawal", sortable: false },
   { title: "Alınan Bonus", key: "claimedBonus", sortable: false },
   { title: "Eklenen Bonus", key: "manualBonus", sortable: false },
+  { title: "Net Kazanç/Kayıp", key: "netResult", sortable: false },
   { title: "Bakiye", key: "walletBalance", sortable: false },
+  { title: "Son Aktivite", key: "lastActivity", sortable: false },
+  { title: "Etiketler", key: "tags", sortable: false },
 ]
 
 const dateRange = computed(() => {
@@ -92,6 +123,12 @@ const commonParams = computed(() => {
     bonusOrigin: bonusOrigin.value !== "all" ? bonusOrigin.value : undefined,
     depositMin: depositMin.value || undefined,
     depositMax: depositMax.value || undefined,
+    gameType: gameType.value || undefined,
+    vipLevel: vipLevel.value !== null && vipLevel.value !== undefined ? vipLevel.value : undefined,
+    country: country.value || undefined,
+    activityStatus: activityStatus.value || undefined,
+    tag: tag.value || undefined,
+    partner: partner.value || undefined,
   }
 })
 
@@ -99,6 +136,27 @@ const formatMoney = value => {
   const number = Number(value || 0)
 
   return `₺${number.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+}
+
+const formatDate = value => {
+  if (!value) return "—"
+
+  return new Date(value).toLocaleDateString("tr-TR", { day: "2-digit", month: "2-digit", year: "numeric" })
+}
+
+const daysAgoLabel = value => {
+  if (!value) return null
+  const diffDays = Math.floor((Date.now() - new Date(value).getTime()) / (24 * 60 * 60 * 1000))
+  if (diffDays <= 0) return "Bugün"
+  if (diffDays === 1) return "1 gün önce"
+
+  return `${diffDays} gün önce`
+}
+
+const activityStatusLabel = key => {
+  const found = filterOptions.value.activityStatuses.find(s => s.key === key)
+
+  return found?.label || key
 }
 
 const fetchSummary = async () => {
@@ -127,6 +185,29 @@ const fetchBuckets = async () => {
   }
 }
 
+const fetchGameBuckets = async () => {
+  gameBucketsLoading.value = true
+  try {
+    const res = await axios.get("/admin/crm-report/game-buckets", { params: commonParams.value })
+
+    gameBuckets.value = res.data.data || []
+  } catch (error) {
+    console.error("Oyun türü segmentleri alınamadı:", error)
+  } finally {
+    gameBucketsLoading.value = false
+  }
+}
+
+const fetchFilterOptions = async () => {
+  try {
+    const res = await axios.get("/admin/crm-report/filter-options")
+
+    filterOptions.value = res.data.data || filterOptions.value
+  } catch (error) {
+    console.error("Filtre seçenekleri alınamadı:", error)
+  }
+}
+
 const fetchMembers = async () => {
   membersLoading.value = true
   try {
@@ -152,6 +233,7 @@ const fetchMembers = async () => {
 const refreshAll = () => {
   fetchSummary()
   fetchBuckets()
+  fetchGameBuckets()
   page.value = 1
   fetchMembers()
 }
@@ -159,6 +241,13 @@ const refreshAll = () => {
 const selectBucket = key => {
   bucket.value = bucket.value === key ? null : key
   page.value = 1
+  fetchMembers()
+}
+
+const selectGameBucket = key => {
+  gameType.value = gameType.value === key ? null : key
+  page.value = 1
+  fetchSummary()
   fetchMembers()
 }
 
@@ -181,6 +270,7 @@ watch([depositMin, depositMax], () => {
     fetchMembers()
     fetchSummary()
     fetchBuckets()
+    fetchGameBuckets()
   }, 500)
 })
 
@@ -193,6 +283,8 @@ watch([customStart, customEnd], () => {
 })
 
 watch(bonusOrigin, refreshAll)
+
+watch([vipLevel, country, activityStatus, tag, partner], refreshAll)
 
 watch([page, itemsPerPage], fetchMembers)
 
@@ -216,6 +308,8 @@ const exportMembers = async () => {
       "Kullanıcı Adı": m.username || "",
       "Ad Soyad": m.name || "",
       Partner: m.partnerName || "",
+      "VIP Seviyesi": m.vipLevelName || "",
+      Ülke: m.country?.name || "",
       "Toplam Yatırım": m.totalDeposit || 0,
       "Yatırım Adedi": m.depositCount || 0,
       "Toplam Çekim": m.totalWithdrawal || 0,
@@ -223,14 +317,22 @@ const exportMembers = async () => {
       "Eklenen Bonus": m.manualBonus || 0,
       "Eklenen Bakiye": m.manualBalance || 0,
       Bakiye: m.walletBalance || 0,
+      "Toplam Bahis": m.betTotal || 0,
+      "Toplam Kazanç": m.winTotal || 0,
+      "Net Sonuç": m.netResult || 0,
+      "Ort. Bahis": m.avgBet || 0,
+      "Son Aktivite": m.lastActivityAt ? new Date(m.lastActivityAt).toLocaleDateString("tr-TR") : "",
+      Durum: activityStatusLabel(m.activityStatus),
       "Yatırım Segmenti": m.depositBucket || "",
+      Etiketler: (m.tags || []).map(t => t.name).join(", "),
     }))
 
     const worksheet = XLSX.utils.json_to_sheet(rows)
 
     worksheet["!cols"] = [
-      { wch: 20 }, { wch: 24 }, { wch: 18 }, { wch: 16 }, { wch: 14 },
-      { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 18 },
+      { wch: 20 }, { wch: 24 }, { wch: 18 }, { wch: 14 }, { wch: 14 }, { wch: 16 }, { wch: 14 },
+      { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 },
+      { wch: 14 }, { wch: 14 }, { wch: 16 }, { wch: 14 }, { wch: 18 }, { wch: 24 },
     ]
 
     const workbook = XLSX.utils.book_new()
@@ -246,7 +348,10 @@ const exportMembers = async () => {
   }
 }
 
-onMounted(refreshAll)
+onMounted(() => {
+  fetchFilterOptions()
+  refreshAll()
+})
 </script>
 
 <template>
@@ -257,7 +362,7 @@ onMounted(refreshAll)
           CRM Raporu
         </h4>
         <p class="text-body-1 text-medium-emphasis mb-0">
-          Yatırım aralığına, alınan/eklenen bonusa ve bakiyeye göre üye kırılımı.
+          Yatırım, bonus, oyun aktivitesi ve segment bazlı üye kırılımı.
         </p>
       </div>
       <div class="d-flex gap-2">
@@ -272,7 +377,7 @@ onMounted(refreshAll)
         <VBtn
           variant="tonal"
           prepend-icon="tabler-refresh"
-          :loading="summaryLoading || membersLoading || bucketsLoading"
+          :loading="summaryLoading || membersLoading || bucketsLoading || gameBucketsLoading"
           @click="refreshAll"
         >
           Yenile
@@ -359,6 +464,106 @@ onMounted(refreshAll)
               label="Maks. Yatırım"
               density="compact"
               prefix="₺"
+            />
+          </VCol>
+        </VRow>
+
+        <VDivider class="my-4" />
+
+        <VRow>
+          <VCol
+            cols="12"
+            sm="4"
+            md="2"
+          >
+            <VSelect
+              v-model="gameType"
+              :items="filterOptions.gameTypes"
+              item-title="label"
+              item-value="key"
+              label="Oyun Türü"
+              placeholder="Tümü"
+              clearable
+              density="compact"
+              @update:model-value="() => { page = 1; fetchSummary(); fetchMembers() }"
+            />
+          </VCol>
+          <VCol
+            cols="12"
+            sm="4"
+            md="2"
+          >
+            <VSelect
+              v-model="vipLevel"
+              :items="filterOptions.vipLevels"
+              item-title="name"
+              item-value="level"
+              label="VIP Seviyesi"
+              placeholder="Tümü"
+              clearable
+              density="compact"
+            />
+          </VCol>
+          <VCol
+            cols="12"
+            sm="4"
+            md="2"
+          >
+            <VSelect
+              v-model="country"
+              :items="filterOptions.countries"
+              item-title="name"
+              item-value="code"
+              label="Ülke"
+              placeholder="Tümü"
+              clearable
+              density="compact"
+            />
+          </VCol>
+          <VCol
+            cols="12"
+            sm="4"
+            md="2"
+          >
+            <VSelect
+              v-model="activityStatus"
+              :items="filterOptions.activityStatuses"
+              item-title="label"
+              item-value="key"
+              label="Aktivite Durumu"
+              placeholder="Tümü"
+              clearable
+              density="compact"
+            />
+          </VCol>
+          <VCol
+            cols="12"
+            sm="4"
+            md="2"
+          >
+            <VSelect
+              v-model="tag"
+              :items="filterOptions.tags"
+              item-title="name"
+              item-value="id"
+              label="Etiket"
+              placeholder="Tümü"
+              clearable
+              density="compact"
+            />
+          </VCol>
+          <VCol
+            cols="12"
+            sm="4"
+            md="2"
+          >
+            <VSelect
+              v-model="partner"
+              :items="filterOptions.partners"
+              label="Partner"
+              placeholder="Tümü"
+              clearable
+              density="compact"
             />
           </VCol>
         </VRow>
@@ -508,6 +713,151 @@ onMounted(refreshAll)
       </VCol>
     </VRow>
 
+    <VRow class="mb-6">
+      <VCol
+        cols="12"
+        sm="6"
+        md="3"
+      >
+        <VCard>
+          <VCardText>
+            <p class="text-body-2 text-medium-emphasis mb-1">
+              Toplam Bahis
+            </p>
+            <h5 class="text-h5 mb-1">
+              {{ formatMoney(summary?.totalBetAmount) }}
+            </h5>
+          </VCardText>
+        </VCard>
+      </VCol>
+      <VCol
+        cols="12"
+        sm="6"
+        md="3"
+      >
+        <VCard>
+          <VCardText>
+            <p class="text-body-2 text-medium-emphasis mb-1">
+              Toplam Kazanç (Oyuncu)
+            </p>
+            <h5 class="text-h5 mb-1">
+              {{ formatMoney(summary?.totalWinAmount) }}
+            </h5>
+          </VCardText>
+        </VCard>
+      </VCol>
+      <VCol
+        cols="12"
+        sm="6"
+        md="3"
+      >
+        <VCard>
+          <VCardText>
+            <p class="text-body-2 text-medium-emphasis mb-1">
+              Net Oyun Sonucu (Site)
+            </p>
+            <h5
+              class="text-h5 mb-1"
+              :class="(summary?.netGamingResult || 0) >= 0 ? 'text-success' : 'text-error'"
+            >
+              {{ formatMoney(summary?.netGamingResult) }}
+            </h5>
+            <p class="text-caption text-medium-emphasis mb-0">
+              Pozitif = site kârda
+            </p>
+          </VCardText>
+        </VCard>
+      </VCol>
+      <VCol
+        cols="12"
+        sm="6"
+        md="3"
+      >
+        <VCard>
+          <VCardText>
+            <p class="text-body-2 text-medium-emphasis mb-1">
+              Ortalama Bahis
+            </p>
+            <h5 class="text-h5 mb-1">
+              {{ formatMoney(summary?.avgBetPerMember) }}
+            </h5>
+            <p class="text-caption text-medium-emphasis mb-0">
+              Üye başına
+            </p>
+          </VCardText>
+        </VCard>
+      </VCol>
+    </VRow>
+
+    <VRow class="mb-6">
+      <VCol
+        cols="12"
+        sm="4"
+      >
+        <VCard>
+          <VCardText class="d-flex align-center justify-space-between">
+            <div>
+              <p class="text-body-2 text-medium-emphasis mb-1">
+                Aktif Oyuncu
+              </p>
+              <h5 class="text-h5 text-success mb-0">
+                {{ summary?.activeCount || 0 }}
+              </h5>
+            </div>
+            <VIcon
+              icon="tabler-bolt"
+              color="success"
+              size="32"
+            />
+          </VCardText>
+        </VCard>
+      </VCol>
+      <VCol
+        cols="12"
+        sm="4"
+      >
+        <VCard>
+          <VCardText class="d-flex align-center justify-space-between">
+            <div>
+              <p class="text-body-2 text-medium-emphasis mb-1">
+                Risk Altında
+              </p>
+              <h5 class="text-h5 text-warning mb-0">
+                {{ summary?.atRiskCount || 0 }}
+              </h5>
+            </div>
+            <VIcon
+              icon="tabler-alert-triangle"
+              color="warning"
+              size="32"
+            />
+          </VCardText>
+        </VCard>
+      </VCol>
+      <VCol
+        cols="12"
+        sm="4"
+      >
+        <VCard>
+          <VCardText class="d-flex align-center justify-space-between">
+            <div>
+              <p class="text-body-2 text-medium-emphasis mb-1">
+                Kaybedilmiş
+              </p>
+              <h5 class="text-h5 text-error mb-0">
+                {{ summary?.churnedCount || 0 }}
+              </h5>
+            </div>
+            <VIcon
+              icon="tabler-user-off"
+              color="error"
+              size="32"
+            />
+          </VCardText>
+        </VCard>
+      </VCol>
+    </VRow>
+
     <VCard class="mb-6">
       <VCardText>
         <h6 class="text-h6 mb-4">
@@ -557,6 +907,56 @@ onMounted(refreshAll)
           <a
             href="#"
             @click.prevent="selectBucket(bucket)"
+          >temizle</a>
+        </p>
+      </VCardText>
+    </VCard>
+
+    <VCard class="mb-6">
+      <VCardText>
+        <h6 class="text-h6 mb-4">
+          Oyun Türüne Göre Kırılım
+        </h6>
+        <VTable density="comfortable">
+          <thead>
+            <tr>
+              <th>Oyun Türü</th>
+              <th>Üye Sayısı</th>
+              <th>Toplam Bahis</th>
+              <th>Toplam Kazanç</th>
+              <th>Net (Site)</th>
+              <th>Ort. Bahis</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="row in gameBuckets"
+              :key="row.key"
+              class="cursor-pointer"
+              :class="{ 'bg-primary-lighten-5': gameType === row.key }"
+              @click="selectGameBucket(row.key)"
+            >
+              <td class="font-weight-medium">
+                {{ row.label }}
+              </td>
+              <td>{{ row.memberCount }}</td>
+              <td>{{ formatMoney(row.betTotal) }}</td>
+              <td>{{ formatMoney(row.winTotal) }}</td>
+              <td :class="row.netResult >= 0 ? 'text-success' : 'text-error'">
+                {{ formatMoney(row.netResult) }}
+              </td>
+              <td>{{ formatMoney(row.avgBet) }}</td>
+            </tr>
+          </tbody>
+        </VTable>
+        <p
+          v-if="gameType"
+          class="text-caption text-medium-emphasis mt-2 mb-0"
+        >
+          Filtre uygulandı: {{ gameBuckets.find(b => b.key === gameType)?.label }} —
+          <a
+            href="#"
+            @click.prevent="selectGameBucket(gameType)"
           >temizle</a>
         </p>
       </VCardText>
@@ -625,6 +1025,29 @@ onMounted(refreshAll)
           >—</span>
         </template>
 
+        <template #item.vip="{ item }">
+          <VChip
+            v-if="item.raw.vipLevelName"
+            size="small"
+            variant="tonal"
+            color="primary"
+          >
+            {{ item.raw.vipLevelName }}
+          </VChip>
+          <span
+            v-else
+            class="text-medium-emphasis"
+          >—</span>
+        </template>
+
+        <template #item.country="{ item }">
+          <span v-if="item.raw.country">{{ item.raw.country.name }}</span>
+          <span
+            v-else
+            class="text-medium-emphasis"
+          >—</span>
+        </template>
+
         <template #item.totalDeposit="{ item }">
           <span class="text-error font-weight-medium">{{ formatMoney(item.raw.totalDeposit) }}</span>
           <p class="text-caption text-medium-emphasis mb-0">
@@ -644,8 +1067,64 @@ onMounted(refreshAll)
           <span class="text-info font-weight-medium">{{ formatMoney(item.raw.manualBonus) }}</span>
         </template>
 
+        <template #item.netResult="{ item }">
+          <span
+            class="font-weight-medium"
+            :class="item.raw.netResult >= 0 ? 'text-success' : 'text-error'"
+          >
+            {{ formatMoney(item.raw.netResult) }}
+          </span>
+        </template>
+
         <template #item.walletBalance="{ item }">
           <span class="font-weight-medium">{{ formatMoney(item.raw.walletBalance) }}</span>
+        </template>
+
+        <template #item.lastActivity="{ item }">
+          <div v-if="item.raw.lastActivityAt">
+            <p class="mb-0">
+              {{ formatDate(item.raw.lastActivityAt) }}
+            </p>
+            <p class="text-caption text-medium-emphasis mb-0">
+              {{ daysAgoLabel(item.raw.lastActivityAt) }}
+            </p>
+          </div>
+          <VChip
+            size="small"
+            variant="tonal"
+            class="mt-1"
+            :color="activityStatusColors[item.raw.activityStatus] || 'secondary'"
+          >
+            {{ activityStatusLabel(item.raw.activityStatus) }}
+          </VChip>
+        </template>
+
+        <template #item.tags="{ item }">
+          <div
+            v-if="item.raw.tags?.length"
+            class="d-flex flex-wrap gap-1"
+          >
+            <VChip
+              v-for="t in item.raw.tags.slice(0, 2)"
+              :key="t.id"
+              size="x-small"
+              variant="flat"
+              :style="{ backgroundColor: t.color, color: '#fff' }"
+            >
+              {{ t.name }}
+            </VChip>
+            <VChip
+              v-if="item.raw.tags.length > 2"
+              size="x-small"
+              variant="tonal"
+            >
+              +{{ item.raw.tags.length - 2 }}
+            </VChip>
+          </div>
+          <span
+            v-else
+            class="text-medium-emphasis"
+          >—</span>
         </template>
       </VDataTableServer>
     </VCard>

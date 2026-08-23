@@ -10,6 +10,12 @@ const parseQuery = (req) => ({
 	search: req.query.search,
 	page: req.query.page,
 	limit: req.query.limit,
+	gameType: req.query.gameType,
+	vipLevel: req.query.vipLevel,
+	country: req.query.country,
+	activityStatus: req.query.activityStatus,
+	tag: req.query.tag,
+	partner: req.query.partner,
 });
 
 /**
@@ -41,6 +47,40 @@ exports.getBuckets = async (req, res) => {
 		return res
 			.status(500)
 			.json({ success: false, message: "Segment verileri hesaplanamadı." });
+	}
+};
+
+/**
+ * @desc    Oyun türüne (Slot / Canlı Casino / Spor Bahisi / Diğer) göre
+ *          kırılım tablosu
+ * @route   GET /admin/crm-report/game-buckets
+ */
+exports.getGameTypeBuckets = async (req, res) => {
+	try {
+		const buckets = await crmReportService.getGameTypeBuckets(parseQuery(req));
+		return res.status(200).json({ success: true, data: buckets });
+	} catch (err) {
+		console.error("[crmReport] getGameTypeBuckets error:", err);
+		return res
+			.status(500)
+			.json({ success: false, message: "Oyun türü verileri hesaplanamadı." });
+	}
+};
+
+/**
+ * @desc    Filtre dropdown'ları için seçenek listeleri (ülke, VIP seviyesi,
+ *          etiket, partner, oyun türü, aktivite durumu)
+ * @route   GET /admin/crm-report/filter-options
+ */
+exports.getFilterOptions = async (req, res) => {
+	try {
+		const options = await crmReportService.getFilterOptions();
+		return res.status(200).json({ success: true, data: options });
+	} catch (err) {
+		console.error("[crmReport] getFilterOptions error:", err);
+		return res
+			.status(500)
+			.json({ success: false, message: "Filtre seçenekleri alınamadı." });
 	}
 };
 
