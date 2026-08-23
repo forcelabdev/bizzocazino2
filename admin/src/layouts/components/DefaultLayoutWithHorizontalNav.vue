@@ -5,6 +5,7 @@ import { themeConfig } from "@themeConfig";
 
 // Components
 import Footer from "@/layouts/components/Footer.vue";
+import NavBarClock from "@/layouts/components/NavBarClock.vue";
 import NavBarI18n from "@/layouts/components/NavBarI18n.vue";
 import NavBarNotifications from '@/layouts/components/NavBarNotifications.vue'
 // import NavbarShortcuts from "@/layouts/components/NavbarShortcuts.vue";
@@ -35,6 +36,7 @@ const isDev = import.meta.env.DEV;
 
 			<NavSearchBar trigger-btn-class="ms-lg-n3" />
 
+			<NavBarClock class="me-3" />
 			<NavBarI18n class="me-1" />
 			<NavbarThemeSwitcher class="me-1" />
 			<!-- <NavbarShortcuts class="me-1" /> -->

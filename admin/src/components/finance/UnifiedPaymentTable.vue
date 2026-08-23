@@ -1,6 +1,7 @@
 <script setup>
 import axios from "@axios"
 import ability from "@/plugins/casl/ability"
+import { exportToXlsx } from "@/utils/exportXlsx"
 import { avatarText } from "@core/utils/formatters"
 import { useI18n } from "vue-i18n"
 import { VDataTableServer } from "vuetify/labs/VDataTable"
@@ -416,6 +417,65 @@ const openReject = transaction => {
   showRejectDialog.value = true
 }
 
+// 📤 Mevcut filtrelere göre tüm kayıtları xlsx olarak dışa aktar
+const isExporting = ref(false)
+
+const exportTransactions = async () => {
+  if (isExporting.value) return
+  isExporting.value = true
+
+  try {
+    const { startDate, endDate } = parseDateRange()
+
+    const response = await axios.get(
+      `/admin/payment-transactions/${props.type}`,
+      {
+        params: {
+          q: searchQuery.value || undefined,
+          status: statusFilter.value || undefined,
+          startDate,
+          endDate,
+          page: 1,
+          export: true,
+        },
+      },
+    )
+
+    const list = response?.data?.data?.transactions || []
+
+    if (!list.length) {
+      notify("Dışa aktarılacak kayıt bulunamadı.", "warning")
+
+      return
+    }
+
+    const rows = list.map(item => ({
+      "Payment": item.provider || "",
+      "Kullanıcı": item.user?.username || "",
+      "Kullanıcı ID": item.user?._id || "",
+      "İşlem ID": item.transactionId || "",
+      "Para Birimi": item.currency || "",
+      "Tutar": Number(item.amount) || 0,
+      "Durum": statusLabel(item.status),
+      "Tarih": formatDateTime(item.createdAt),
+    }))
+
+    await exportToXlsx({
+      rows,
+      fileName: props.type === "deposit" ? "yatirim-islemleri" : "cekim-islemleri",
+      sheetName: props.type === "deposit" ? "Yatırımlar" : "Çekimler",
+      columnWidths: [16, 20, 26, 24, 12, 16, 16, 20],
+    })
+
+    notify("İşlemler başarıyla dışa aktarıldı.")
+  } catch (error) {
+    console.error("İşlemler dışa aktarılamadı:", error)
+    notify("Dışa aktarım sırasında bir hata oluştu.", "error")
+  } finally {
+    isExporting.value = false
+  }
+}
+
 const confirmReject = () => {
   if (pendingRejectTransaction.value) {
     runAction(pendingRejectTransaction.value, "reject", rejectReason.value)
@@ -489,8 +549,18 @@ const confirmReject = () => {
     </VRow>
 
     <VCard>
-      <VCardTitle>
-        {{ type === "deposit" ? "Tüm Yatırım İşlemleri" : "Tüm Çekim İşlemleri" }}
+      <VCardTitle class="d-flex align-center justify-space-between flex-wrap gap-2">
+        <span>{{ type === "deposit" ? "Tüm Yatırım İşlemleri" : "Tüm Çekim İşlemleri" }}</span>
+        <VBtn
+          color="success"
+          variant="tonal"
+          size="small"
+          prepend-icon="tabler-file-spreadsheet"
+          :loading="isExporting"
+          @click="exportTransactions"
+        >
+          Excel'e Aktar
+        </VBtn>
       </VCardTitle>
       <VCardText>
         <VAlert

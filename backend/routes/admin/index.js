@@ -6130,9 +6130,15 @@ const createUnifiedPaymentListHandler = (type) => async (req, res) => {
 			endDate,
 			page = 1,
 			itemsPerPage = 10,
+			export: exportMode,
 		} = req.query;
+		// Dışa aktarım modunda sayfalama devre dışı kalır ve güvenli bir üst
+		// sınıra (50.000 kayıt) kadar tüm eşleşen işlemler döndürülür.
+		const isExport = String(exportMode) === "true" || Number(itemsPerPage) === -1;
 		const pageNumber = Math.max(1, Number(page) || 1);
-		const limitNumber = Math.min(100, Math.max(1, Number(itemsPerPage) || 10));
+		const limitNumber = isExport
+			? 50000
+			: Math.min(100, Math.max(1, Number(itemsPerPage) || 10));
 		const now = new Date();
 		const last24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 		const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -6203,7 +6209,7 @@ const createUnifiedPaymentListHandler = (type) => async (req, res) => {
 				$facet: {
 					transactions: [
 						...statusMatchStage,
-						{ $skip: (pageNumber - 1) * limitNumber },
+						...(isExport ? [] : [{ $skip: (pageNumber - 1) * limitNumber }]),
 						{ $limit: limitNumber },
 						{
 							$project: {

@@ -1,12 +1,15 @@
 <script setup>
 import { useUserListStore } from "@/views/apps/user/useUserListStore"
 import { formatCoinType } from "@/utils/currency"
+import { exportToXlsx } from "@/utils/exportXlsx"
+import { useNotify } from "@/composables/useNotify"
 import { avatarText } from "@core/utils/formatters"
 import { computed, ref, watch } from "vue"
 import { useI18n } from "vue-i18n"
 import { VDataTableServer } from "vuetify/labs/VDataTable"
 
 const { t } = useI18n()
+const { success: notifySuccess, error: notifyError } = useNotify()
 const userStore = useUserListStore()
 
 const adjustments = ref([])
@@ -90,11 +93,78 @@ watch(
   fetchAdjustments,
   { immediate: true },
 )
+
+// 📤 Mevcut filtrelere göre manuel işlemleri xlsx olarak dışa aktar
+const isExporting = ref(false)
+
+const exportAdjustments = async () => {
+  if (isExporting.value) return
+  isExporting.value = true
+
+  try {
+    const response = await userStore.fetchManualAdjustments({
+      q: searchQuery.value || undefined,
+      kind: kindFilter.value || undefined,
+      direction: directionFilter.value || undefined,
+      page: 1,
+      itemsPerPage: 50000,
+    })
+
+    const list = response.adjustments || []
+
+    if (!list.length) {
+      notifyError(t("manualAdjustments.title") + ": dışa aktarılacak kayıt yok.")
+
+      return
+    }
+
+    const rows = list.map(item => ({
+      [t("manualAdjustments.actor")]: item.actorSnapshot?.name || item.actorSnapshot?.username || "",
+      [t("manualAdjustments.targetUser")]: item.targetSnapshot?.name || item.targetSnapshot?.username || "",
+      [t("manualAdjustments.kind")]: item.kind || "",
+      [t("manualAdjustments.direction")]: item.direction || "",
+      [t("manualAdjustments.wallet")]: formatWallet(item.wallet),
+      [t("manualAdjustments.category")]: item.category || "",
+      [t("manualAdjustments.requestedAmount")]: Number(item.requestedAmount || 0),
+      [t("manualAdjustments.appliedAmount")]: Number(item.appliedAmount || 0),
+      [t("manualAdjustments.balanceBefore")]: Number(item.balanceBefore || 0),
+      [t("manualAdjustments.balanceAfter")]: Number(item.balanceAfter || 0),
+      [t("manualAdjustments.note")]: item.note || "",
+      [t("manualAdjustments.date")]: item.createdAt ? new Date(item.createdAt).toLocaleString("tr-TR") : "",
+    }))
+
+    await exportToXlsx({
+      rows,
+      fileName: "manuel-islemler",
+      sheetName: "Manuel İşlemler",
+      columnWidths: [22, 22, 12, 12, 24, 18, 18, 18, 18, 18, 30, 20],
+    })
+
+    notifySuccess("Manuel işlemler başarıyla dışa aktarıldı.")
+  } catch (error) {
+    console.error("Manuel işlemler dışa aktarılamadı:", error)
+    notifyError("Dışa aktarım sırasında bir hata oluştu.")
+  } finally {
+    isExporting.value = false
+  }
+}
 </script>
 
 <template>
   <VCard>
-    <VCardTitle>{{ t("manualAdjustments.title") }}</VCardTitle>
+    <VCardTitle class="d-flex align-center justify-space-between flex-wrap gap-2">
+      <span>{{ t("manualAdjustments.title") }}</span>
+      <VBtn
+        color="success"
+        variant="tonal"
+        size="small"
+        prepend-icon="tabler-file-spreadsheet"
+        :loading="isExporting"
+        @click="exportAdjustments"
+      >
+        Excel'e Aktar
+      </VBtn>
+    </VCardTitle>
     <VCardText>
       <VRow class="mb-4">
         <VCol
