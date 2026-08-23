@@ -54,12 +54,23 @@ const trialBonusClaimSchema = new mongoose.Schema(
 );
 
 // Bir kullanıcının reddedilen talebi tekrar denemesine izin vermek için
-// unique index'i sadece "approved" ve "pending" durumlarında zorluyoruz.
+// unique index'i sadece "approved"/"pending" durumlarında zorluyoruz.
+// MongoDB partialFilterExpression $in operatörünü desteklemediği için
+// (sadece $eq, $exists, $gt(e), $lt(e), $type, top-level $and) her durum
+// için ayrı bir partial unique index tanımlıyoruz — birlikte aynı etkiyi
+// (kullanıcı başına yalnızca 1 pending VEYA 1 approved kayıt) sağlarlar.
 trialBonusClaimSchema.index(
 	{ user: 1 },
 	{
 		unique: true,
-		partialFilterExpression: { status: { $in: ["pending", "approved"] } },
+		partialFilterExpression: { status: "pending" },
+	}
+);
+trialBonusClaimSchema.index(
+	{ user: 1 },
+	{
+		unique: true,
+		partialFilterExpression: { status: "approved" },
 	}
 );
 trialBonusClaimSchema.index({ status: 1, createdAt: -1 });
