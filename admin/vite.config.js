@@ -1,3 +1,4 @@
+import http from "node:http";
 import { fileURLToPath } from "node:url";
 import VueI18nPlugin from "@intlify/unplugin-vue-i18n/vite";
 import vue from "@vitejs/plugin-vue";
@@ -55,15 +56,39 @@ const BACKEND_ROUTE_PREFIXES = [
 	"/uploads",
 ];
 
-export default defineConfig(({ mode }) => {
+// Quick check for whether a local backend process is already listening on
+// the given port. Used so the dev proxy always prefers a live local backend
+// (which has the freshest routes/code) over a possibly-stale deployed URL.
+function isLocalBackendUp(port) {
+	return new Promise((resolve) => {
+		const req = http.get(
+			{ host: "127.0.0.1", port, path: "/", timeout: 800 },
+			(res) => {
+				res.resume();
+				resolve(true);
+			}
+		);
+		req.on("error", () => resolve(false));
+		req.on("timeout", () => {
+			req.destroy();
+			resolve(false);
+		});
+	});
+}
+
+export default defineConfig(async ({ mode }) => {
 	const env = loadEnv(mode, process.cwd(), "");
 	const newSiteMode = String(env.NEW_SITE_MODE ?? "true").toLowerCase();
-	// Falls back to the deployed backend URL (SERVER_BACKEND_URL) when no local
-	// backend is running, e.g. in the v0 preview sandbox where only this dev
-	// server is started. On the real server, VITE_BACKEND_PROXY_TARGET or
-	// SERVER_BACKEND_URL should point at the actual backend process.
+	const localBackendPort = 5000;
+	// Prefer an explicit override, then a live local backend (most common in
+	// this sandbox, and always the freshest code), then fall back to the
+	// deployed backend URL (SERVER_BACKEND_URL) if nothing local is running.
+	const localBackendUp = await isLocalBackendUp(localBackendPort);
 	const backendTarget =
-		env.VITE_BACKEND_PROXY_TARGET || env.SERVER_BACKEND_URL || "http://localhost:5000";
+		env.VITE_BACKEND_PROXY_TARGET ||
+		(localBackendUp ? `http://127.0.0.1:${localBackendPort}` : null) ||
+		env.SERVER_BACKEND_URL ||
+		`http://localhost:${localBackendPort}`;
 
 	return {
 	plugins: [
