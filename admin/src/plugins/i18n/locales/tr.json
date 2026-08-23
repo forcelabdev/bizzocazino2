@@ -1785,15 +1785,24 @@
 				"subtitle": "Bahşiş göndermeyi devre dışı bırak."
 			}
 		},
-		"categories": {
-			"title": "Kategori kısıtlamaları",
-			"subtitle": "Oyuncuyu belirli oyun kategorilerinden engelle.",
-			"slots": "Slotlar",
-			"liveCasino": "Canlı casino",
-			"sportsBook": "Spor bahisleri",
-			"originals": "Özgün oyunlar"
-		},
-		"platform": {
+			"categories": {
+				"title": "Kategori kısıtlamaları",
+				"subtitle": "Oyuncuyu belirli oyun kategorilerinden engelle.",
+				"slots": "Slotlar",
+				"liveCasino": "Canlı casino",
+				"sportsBook": "Spor bahisleri",
+				"originals": "Özgün oyunlar"
+			},
+			"betLimits": {
+				"title": "Bahis limitleri",
+				"subtitle": "Kategori bazlı maksimum bahis tutarı. 0 girilirse limitsiz olur.",
+				"casino": "Casino (Slotlar + Özgün oyunlar)",
+				"liveCasino": "Canlı casino",
+				"sportsBook": "Spor bahisleri",
+				"placeholder": "Limitsiz",
+				"saved": "Bahis limiti güncellendi."
+			},
+			"platform": {
 			"title": "Platform erişimi",
 			"subtitle": "Yönetim / partner panel rolleri ver.",
 			"affiliatePanel": {

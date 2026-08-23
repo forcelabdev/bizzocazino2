@@ -8,6 +8,10 @@ const UpgraderGame = require("../../database/models/UpgraderGame");
 const Leaderboard = require("../../database/models/Leaderboard");
 const Rain = require("../../database/models/Rain");
 const { onBetSettled } = require("../../utils/wagerHooks");
+const {
+	evaluateCategoryBetLimit,
+	CATEGORY_BET_LIMIT_EXCEEDED_CODE,
+} = require("../../utils/userBetAccess");
 
 // Load utils
 const { socketRemoveAntiSpam } = require("../../utils/socket");
@@ -89,6 +93,16 @@ const upgraderSendBetSocket = async (io, socket, user, data, callback) => {
 
 		// Get user bet amount
 		const amount = Math.floor(data.amount);
+
+		// 🎯 Bet Limitleme: kategori bazlı tam blokaj / maksimum tutar kontrolü.
+		const limitCheck = evaluateCategoryBetLimit(user, "originals", amount);
+		if (!limitCheck.allowed) {
+			throw new Error(
+				limitCheck.reason === CATEGORY_BET_LIMIT_EXCEEDED_CODE
+					? `Bu kategori için maksimum bahis tutarı ${limitCheck.max} ile sınırlıdır.`
+					: "Bu oyun kategorisine erişiminiz kısıtlanmıştır."
+			);
+		}
 
 		// Get bet multiplier
 		const multiplier = Math.floor(

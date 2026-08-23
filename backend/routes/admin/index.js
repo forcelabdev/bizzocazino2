@@ -1234,6 +1234,8 @@ router.patch(
 				"sportsBook",
 				"originals",
 			];
+			// Bet Limitleme: "casino" = slots + originals ortak limiti.
+			const betLimitFields = ["liveCasino", "casino", "sportsBook"];
 			const platformFields = [
 				"affiliatePanel",
 				"partnerAccess",
@@ -1261,6 +1263,17 @@ router.patch(
 					),
 					originals: Boolean(
 						originalControls.categoryRestrictions?.originals,
+					),
+				},
+				categoryBetLimits: {
+					liveCasino: Number(
+						originalControls.categoryBetLimits?.liveCasino || 0,
+					),
+					casino: Number(
+						originalControls.categoryBetLimits?.casino || 0,
+					),
+					sportsBook: Number(
+						originalControls.categoryBetLimits?.sportsBook || 0,
 					),
 				},
 				platformAccess: {
@@ -1312,6 +1325,24 @@ router.patch(
 						}
 						nextControls.categoryRestrictions[field] = to;
 					}
+				});
+			}
+
+			// 🎯 Bet Limitleme: kategori bazlı maksimum bahis tutarı (0 = limitsiz).
+			if (req.body?.categoryBetLimits) {
+				betLimitFields.forEach((field) => {
+					const rawValue = req.body.categoryBetLimits[field];
+					if (rawValue === undefined) return;
+					const to = Math.max(0, Number(rawValue) || 0);
+					const from = nextControls.categoryBetLimits[field];
+					if (from !== to) {
+						changes.push({
+							field: `controls.categoryBetLimits.${field}`,
+							from,
+							to,
+						});
+					}
+					nextControls.categoryBetLimits[field] = to;
 				});
 			}
 
@@ -2194,7 +2225,7 @@ router.get(
 
 // ═══════════════════════════════════════════════════════════════════════════
 // CRM: Oyuncu Segmentleri
-// ═══════════════════════════════════════════════════════════════════════════
+// ══════════════════��════════════════════════════════════════════════════════
 router.get(
 	"/player-segments/summary",
 	checkPermission("users.read"),
@@ -10242,7 +10273,7 @@ router.put(
 // E-posta Şablonları (SiteSettings içinde)
 // SMTP credential bilgileri backend/.env üzerinden okunur, sadece şablonlar
 // ve gönderici görünen ad/adres burada yönetilir.
-// ═══════════���════════════════════════════════════════════���══════════════════
+// ═══════════���═══════════════════════════════════���════════���══════════════════
 
 const buildEmailTemplatesPayload = (siteSettings) => {
 	const tpl = (siteSettings && siteSettings.emailTemplates) || {};
