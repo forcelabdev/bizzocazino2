@@ -9,7 +9,11 @@ const adminWingoController = require("../../controllers/adminWingoController");
 const manualBonusCategoryController = require("../../controllers/admin/manualBonusCategoryController");
 const lossBonusController = require("../../controllers/admin/lossBonusController");
 const depositBonusController = require("../../controllers/admin/depositBonusController");
+const trialBonusController = require("../../controllers/admin/trialBonusController");
+const balanceAnalysisController = require("../../controllers/admin/balanceAnalysisController");
+const crmReportController = require("../../controllers/admin/crmReportController");
 const reloadBonusController = require("../../controllers/admin/reloadBonusController");
+const callScenarioController = require("../../controllers/admin/callScenarioController");
 const playerSegmentsController = require("../../controllers/admin/playerSegments");
 const tagsController = require("../../controllers/admin/tags");
 const { generalGetChatOnlineCount } = require("../../utils/general/chat");
@@ -209,9 +213,14 @@ const {
 	updateUserBalance,
 	getWallet,
 } = require("../../utils/wallet");
-const {
-	createAdminManualAdjustment,
-} = require("../../services/adminManualAdjustmentService");
+	const {
+		createAdminManualAdjustment,
+	} = require("../../services/adminManualAdjustmentService");
+		const {
+			createBulkManualBonus,
+			listAffiliateCodes,
+			listLastBonusCategories,
+		} = require("../../services/bulkBonusService");
 const {
 	buildUserUpdateChanges,
 	createAdminUserAuditLog,
@@ -2325,6 +2334,67 @@ router.post(
 	reloadBonusController.createAssignment,
 );
 
+// Çağrı Senaryoları (Call Scenarios)
+router.get(
+	"/call-scenarios/templates",
+	checkPermission(["callScenarios.read", "callScenarios.manage"]),
+	callScenarioController.listTemplates,
+);
+
+router.post(
+	"/call-scenarios/templates",
+	checkPermission("callScenarios.manage"),
+	callScenarioController.createTemplate,
+);
+
+router.put(
+	"/call-scenarios/templates/:id",
+	checkPermission("callScenarios.manage"),
+	callScenarioController.updateTemplate,
+);
+
+router.get(
+	"/call-scenarios/check-duplicate",
+	checkPermission(["callScenarios.read", "callScenarios.manage"]),
+	callScenarioController.checkDuplicate,
+);
+
+router.get(
+	"/call-scenarios/assignments",
+	checkPermission(["callScenarios.read", "callScenarios.manage"]),
+	callScenarioController.listAssignments,
+);
+
+router.post(
+	"/call-scenarios/assignments/:id/cancel",
+	checkPermission("callScenarios.manage"),
+	callScenarioController.cancelAssignment,
+);
+
+router.post(
+	"/call-scenarios/assignments/:id/violate",
+	checkPermission("callScenarios.manage"),
+	callScenarioController.markViolated,
+);
+
+router.post(
+	"/call-scenarios/assignments/:id/complete",
+	checkPermission("callScenarios.manage"),
+	callScenarioController.completeAssignment,
+);
+
+router.get(
+	"/users/:id/call-scenarios",
+	checkPermission(["callScenarios.read", "callScenarios.manage", "users.read"]),
+	callScenarioController.getUserSummary,
+);
+
+router.post(
+	"/users/:id/call-scenarios",
+	checkPermission("callScenarios.manage"),
+	callScenarioController.createAssignment,
+);
+
 // Yatırım Bonusu (Deposit Bonus)
 router.get(
 	"/deposit-bonus/settings",
@@ -2364,6 +2434,164 @@ router.get(
 		"users.read",
 	]),
 	depositBonusController.getUserSummary,
+);
+
+// Deneme Bonusu (Trial Bonus)
+router.get(
+	"/trial-bonus/settings",
+	checkPermission(["finance.trialBonus.read", "finance.trialBonus.manage"]),
+	trialBonusController.getSettings,
+);
+
+router.put(
+	"/trial-bonus/settings",
+	checkPermission("finance.trialBonus.manage"),
+	trialBonusController.updateSettings,
+);
+
+router.get(
+	"/trial-bonus/claims",
+	checkPermission(["finance.trialBonus.read", "finance.trialBonus.manage"]),
+	trialBonusController.listClaims,
+);
+
+router.post(
+	"/trial-bonus/claims/:id/approve",
+	checkPermission("finance.trialBonus.manage"),
+	trialBonusController.approveClaim,
+);
+
+router.post(
+	"/trial-bonus/claims/:id/reject",
+	checkPermission("finance.trialBonus.manage"),
+	trialBonusController.rejectClaim,
+);
+
+// Call Management (control-game) ekranında "Deneme Bonusu" rozeti/filtresi
+// için toplu bakış — RTP/oyun sonucu hesaplaması yapmaz, sadece hangi
+// kullanıcıların onaylı deneme bonusu olduğunu ve tutarını döner.
+router.post(
+	"/trial-bonus/lookup",
+	checkPermission([
+		"finance.trialBonus.read",
+		"finance.trialBonus.manage",
+		"controlGame.read",
+	]),
+	trialBonusController.lookup,
+);
+
+router.get(
+	"/users/:id/trial-bonus",
+	checkPermission([
+		"finance.trialBonus.read",
+		"finance.trialBonus.manage",
+		"users.read",
+	]),
+	trialBonusController.getUserSummary,
+);
+
+// CRM Raporu (yatırım aralığı, alınan/eklenen bonus, bakiye kırılımı)
+router.get(
+	"/crm-report/summary",
+	checkPermission([
+		"finance.balanceAnalysis.read",
+		"finance.balanceAnalysis.manage",
+		"reports.read",
+	]),
+	crmReportController.getSummary,
+);
+
+router.get(
+	"/crm-report/buckets",
+	checkPermission([
+		"finance.balanceAnalysis.read",
+		"finance.balanceAnalysis.manage",
+		"reports.read",
+	]),
+	crmReportController.getBuckets,
+);
+
+router.get(
+	"/crm-report/game-buckets",
+	checkPermission([
+		"finance.balanceAnalysis.read",
+		"finance.balanceAnalysis.manage",
+		"reports.read",
+	]),
+	crmReportController.getGameTypeBuckets,
+);
+
+router.get(
+	"/crm-report/filter-options",
+	checkPermission([
+		"finance.balanceAnalysis.read",
+		"finance.balanceAnalysis.manage",
+		"reports.read",
+	]),
+	crmReportController.getFilterOptions,
+);
+
+router.get(
+	"/crm-report/game-options",
+	checkPermission([
+		"finance.balanceAnalysis.read",
+		"finance.balanceAnalysis.manage",
+		"reports.read",
+	]),
+	crmReportController.getGameOptions,
+);
+
+router.get(
+	"/crm-report/members",
+	checkPermission([
+		"finance.balanceAnalysis.read",
+		"finance.balanceAnalysis.manage",
+		"reports.read",
+	]),
+	crmReportController.getMembers,
+);
+
+// Bakiye Analizi (manuel bonus/bakiye + kampanya + Filux + xPayment)
+router.get(
+	"/balance-analysis/summary",
+	checkPermission([
+		"finance.balanceAnalysis.read",
+		"finance.balanceAnalysis.manage",
+	]),
+	balanceAnalysisController.getSummary,
+);
+
+router.get(
+	"/balance-analysis/members",
+	checkPermission([
+		"finance.balanceAnalysis.read",
+		"finance.balanceAnalysis.manage",
+	]),
+	balanceAnalysisController.getMembers,
+);
+
+router.get(
+	"/balance-analysis/members/:id",
+	checkPermission([
+		"finance.balanceAnalysis.read",
+		"finance.balanceAnalysis.manage",
+	]),
+	balanceAnalysisController.getMemberDetail,
+);
+
+router.get(
+	"/balance-analysis/settings",
+	checkPermission([
+		"finance.balanceAnalysis.read",
+		"finance.balanceAnalysis.manage",
+	]),
+	balanceAnalysisController.getSettings,
+);
+
+router.put(
+	"/balance-analysis/settings",
+	checkPermission("finance.balanceAnalysis.manage"),
+	balanceAnalysisController.updateSettings,
 );
 
 router.get(
@@ -2644,6 +2872,91 @@ router.post(
 					success: false,
 					message: error.message,
 				});
+			}
+
+			res.status(500).json({ success: false, message: "Sunucu hatası." });
+		}
+	},
+);
+
+// 🔹 Toplu Bonus Yükle: affiliate kodu filtresi için seçim listesi
+router.get(
+	"/bulk-bonus/affiliate-codes",
+	checkPermission(["finance.manualAdjustments.manage", "users.update"]),
+	async (req, res) => {
+		try {
+			const data = await listAffiliateCodes();
+			res.status(200).json({ success: true, data });
+		} catch (error) {
+			console.error("Affiliate code list error:", error);
+			res.status(500).json({ success: false, message: "Sunucu hatası." });
+		}
+	},
+);
+
+// Toplu Bonus: son işlem sayılabilecek bonus türleri
+router.get(
+	"/bulk-bonus/bonus-categories",
+	checkPermission(["finance.manualAdjustments.manage", "users.update"]),
+	async (req, res) => {
+		try {
+			const data = await listLastBonusCategories();
+			res.status(200).json({ success: true, data });
+		} catch (error) {
+			console.error("Bulk bonus category list error:", error);
+			res.status(500).json({ success: false, message: "Sunucu hatası." });
+		}
+	},
+);
+
+// 🔹 Toplu Bonus Yükle: birden fazla kullanıcıya aynı bonusu tek seferde ekler
+router.post(
+	"/bulk-bonus",
+	checkPermission(["finance.manualAdjustments.manage", "users.update"]),
+	async (req, res) => {
+		try {
+			const category = String(req.body.category || "").trim();
+
+			if (!(await manualBonusCategoryController.isValidCategoryName(category))) {
+				return res.status(400).json({
+					success: false,
+					message: "INVALID_MANUAL_BONUS_CATEGORY",
+					data: await manualBonusCategoryController.getActiveCategoryNamesRaw(),
+				});
+			}
+
+			const result = await createBulkManualBonus({
+				usernames: req.body.usernames,
+				amount: req.body.amount,
+				category,
+				note: req.body.note,
+				wageringMultiplier: req.body.wageringMultiplier,
+				applyWithdrawalLock: req.body.applyWithdrawalLock,
+				minDeposit: req.body.minDeposit,
+				minWithdraw: req.body.minWithdraw,
+				affiliateCode: req.body.affiliateCode,
+				enforceLastBonusRule: req.body.enforceLastBonusRule,
+				lastBonusCategories: req.body.lastBonusCategories,
+				actorUser: req.adminUser || null,
+			});
+
+			res.status(201).json({
+				success: true,
+				message: "Toplu bonus işlemi tamamlandı",
+				data: result,
+			});
+		} catch (error) {
+			console.error("Bulk bonus create error:", error);
+
+			if (
+				[
+					"NO_USERNAMES_PROVIDED",
+					"TOO_MANY_USERNAMES",
+					"INVALID_ADJUSTMENT_AMOUNT",
+					"INVALID_ADJUSTMENT_CATEGORY",
+				].includes(error.message)
+			) {
+				return res.status(400).json({ success: false, message: error.message });
 			}
 
 			res.status(500).json({ success: false, message: "Sunucu hatası." });
@@ -4427,7 +4740,7 @@ router.get("/settings", checkPermission("platform.read"), async (req, res) => {
 	}
 });
 
-// ✅ GET /admin/settings  → mevcut ayarları getir
+// ��� GET /admin/settings  → mevcut ayarları getir
 router.get("/settings", checkPermission("platform.read"), async (req, res) => {
 	try {
 		const settings = await Setting.findOne({});
@@ -8625,7 +8938,7 @@ router.put(
 	},
 );
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ═══════════���═══════════════════════════════════════════════════════════════
 // 🖼️ AVATAR MANAGEMENT ENDPOINTS
 // ═══════════════════════════════════════════════════════════════════════��═══
 
@@ -8885,7 +9198,7 @@ router.post(
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 🎮 ORIGINAL GAMES BANNER ENDPOINTS
-// ═══════════════════════════════════════════════════════════════════════════
+// ════════════════════════════════���══════════════════════════════════════════
 
 // Original game banner upload - sabit path'e yükler
 const originalGamesUpload = multer({
@@ -9281,9 +9594,9 @@ router.delete(
 	},
 );
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ═══���═══════════════════════════════════════════════════════════════════════
 // Kategori İkonları Yönetimi
-// ═══════════════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════��════════
 
 const CATEGORY_ICONS = ["lobby", "originals", "favorites", "hot"];
 
@@ -9551,7 +9864,7 @@ router.put(
 
 // ═══════════════════════════════════════════════════════════════════════════
 // SMS OTP Ayarları (SiteSettings içinde)
-// ════════════════════════════════════��══════════════════════════════════════
+// ════════════════════════════════════��════════════════════════════════���═════
 
 const normalizePositiveInteger = (value, fallback = 0) => {
 	const parsed = Number.parseInt(value, 10);
@@ -9657,7 +9970,7 @@ router.put(
 // E-posta Şablonları (SiteSettings içinde)
 // SMTP credential bilgileri backend/.env üzerinden okunur, sadece şablonlar
 // ve gönderici görünen ad/adres burada yönetilir.
-// ════════════════════════════════════════════════════════���══════════════════
+// ═══════════���════════════════════════════════════════════���══════════════════
 
 const buildEmailTemplatesPayload = (siteSettings) => {
 	const tpl = (siteSettings && siteSettings.emailTemplates) || {};
@@ -10766,7 +11079,7 @@ router.post(
 
 // ═══════════════════════════════════════════════════���═══════════════════════
 // MeelDev Admin Endpoints
-// ═══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════��═══════════════════════════════
 
 const MeelDevTransaction = require("../../database/models/MeelDevTransaction");
 const {
@@ -10852,7 +11165,7 @@ router.put(
 			res.status(200).json({ success: true, message: "MeelDev ayarları güncellendi." });
 		} catch (error) {
 			console.error("MeelDev ayarları kaydedilirken hata:", error);
-			res.status(500).json({ success: false, error: "Ayarlar kaydedilirken bir hata oluştu." });
+			res.status(500).json({ success: false, error: "Ayarlar kaydedilirken bir hata olu��tu." });
 		}
 	},
 );

@@ -9,6 +9,16 @@ const User = require("../../database/models/User");
 const { updateUserBalance } = require("../../utils/wallet");
 const { authenticateAdmin } = require("../../middleware/permission");
 const { authorizeUser } = require("../../middleware/auth");
+const trialBonusService = require("../../services/trialBonusService");
+
+const TRIAL_BONUS_ERROR_MESSAGES = {
+	USER_NOT_FOUND: "Kullanıcı bulunamadı.",
+	TRIAL_BONUS_DISABLED: "Deneme bonusu şu anda aktif değil.",
+	OTHER_BONUS_BLOCKED:
+		"Yakın zamanda alınan bir bonus nedeniyle şu anda başka bonus talep edilemez.",
+	ALREADY_CLAIMED: "Deneme bonusunu daha önce talep ettiniz.",
+	TRIAL_BONUS_AMOUNT_INVALID: "Deneme bonusu tutarı geçersiz.",
+};
 
 // Multer yapılandırması (resim yüklemek için)
 const storage = multer.diskStorage({
@@ -244,6 +254,38 @@ router.post("/claim/freespin", authorizeUser(true), async (req, res) => {
 			message: "Error claiming freespin bonus",
 			error,
 		});
+	}
+});
+
+// Deneme Bonusu potansiyeli (talep edilebilir mi?) - ⚠️ GÜVENLİK: Kullanıcı giriş yapmalı
+router.get("/trial/potential", authorizeUser(true), async (req, res) => {
+	try {
+		const potential = await trialBonusService.getPotential(req.user._id);
+		res.status(200).json({ success: true, data: potential });
+	} catch (error) {
+		const message =
+			TRIAL_BONUS_ERROR_MESSAGES[error.message] || error.message || "Sunucu hatası.";
+		const status = TRIAL_BONUS_ERROR_MESSAGES[error.message] ? 400 : 500;
+		if (status === 500) console.error("Trial bonus potential error:", error);
+		res.status(status).json({ success: false, message });
+	}
+});
+
+// Deneme Bonusu talebi - ⚠️ GÜVENLİK: Kullanıcı giriş yapmalı, userId token'dan alınır
+router.post("/trial/claim", authorizeUser(true), async (req, res) => {
+	try {
+		const result = await trialBonusService.claim(req.user._id);
+		res.status(200).json({
+			success: true,
+			message: "Deneme bonusu talebiniz alındı.",
+			data: { claim: result.claim, newBalance: result.newBalance },
+		});
+	} catch (error) {
+		const message =
+			TRIAL_BONUS_ERROR_MESSAGES[error.message] || error.message || "Sunucu hatası.";
+		const status = TRIAL_BONUS_ERROR_MESSAGES[error.message] ? 400 : 500;
+		if (status === 500) console.error("Trial bonus claim error:", error);
+		res.status(status).json({ success: false, message });
 	}
 });
 

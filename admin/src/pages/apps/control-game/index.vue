@@ -50,6 +50,27 @@ const fetchVendors = async () => {
 	}
 };
 
+// ---- Deneme Bonusu rozeti/filtresi (Call Management) ----
+// Sadece bilgi amaçlı: hangi oyuncunun onaylı Deneme Bonusu olduğunu ve
+// tutar/tarihini gösterir. RTP/oyun sonucu hesaplaması YAPMAZ.
+const trialBonusMap = ref({}); // userCode -> { amount, approvedAt }
+const trialBonusOnlyFilter = ref(false);
+let trialBonusLookupTimer = null;
+
+const fetchTrialBonusBadges = async (userCodes) => {
+	const uniqueIds = [...new Set(userCodes.filter(Boolean))];
+	if (!uniqueIds.length) {
+		trialBonusMap.value = {};
+		return;
+	}
+	try {
+		const { data } = await axios.post("/admin/trial-bonus/lookup", { userIds: uniqueIds });
+		trialBonusMap.value = data.data || {};
+	} catch (error) {
+		console.error("Deneme bonusu rozet bilgisi alınamadı:", error);
+	}
+};
+
 // ---- Realtime: Oyundaki kullanıcılar ----
 const livePlayers = ref([]);
 const livePendingCallCount = ref(0);
@@ -417,29 +438,6 @@ const applySelectedCall = async () => {
 	}
 };
 
-// ---- RTP formu (Call iptali artık Call Result tablosunda satır bazlı yapılıyor) ----
-const rtpForm = ref({
-	scope: "user",
-	userCode: "",
-	vendorCode: "",
-	gameCode: "",
-	currencyCode: "TRY",
-	category: "LowRtp",
-	key: "",
-	value: "",
-});
-
-const settingScopeOptions = [
-	{ title: "Kullanıcı", value: "user" },
-	{ title: "Agent", value: "agent" },
-];
-
-const rtpCategoryOptions = [
-	{ title: "LowRtp", value: "LowRtp" },
-	{ title: "HighRtp", value: "HighRtp" },
-	{ title: "TargetRtp", value: "TargetRtp" },
-];
-
 const submitControlAction = async (type, payload) => {
 	if (!canManageControlGame.value) return;
 
@@ -459,26 +457,6 @@ const submitControlAction = async (type, payload) => {
 	}
 };
 
-const buildRtpPayload = () => ({
-	userCode: rtpForm.value.scope === "user" ? rtpForm.value.userCode : undefined,
-	vendorCode: rtpForm.value.vendorCode,
-	gameCode: rtpForm.value.gameCode,
-	currencyCode: rtpForm.value.currencyCode,
-	category: rtpForm.value.category,
-	key: rtpForm.value.key,
-	value: rtpForm.value.value,
-});
-
-const fetchRtpSetting = async () => {
-	const type = rtpForm.value.scope === "user" ? "user-setting" : "agent-setting";
-	await submitControlAction(type, buildRtpPayload());
-};
-
-const saveRtpSetting = async () => {
-	const type = rtpForm.value.scope === "user" ? "change-user-setting" : "change-agent-setting";
-	await submitControlAction(type, buildRtpPayload());
-};
-
 // Referans tasarımdaki sabit kolonlu oyuncu tablosu (No, Kullanıcı Kodu, Nick Name,
 // Vendor, Oyun, Bakiye, Bahis, Tip, Toplam Bahis, Toplam Kazanım, Gerçek RTP, Kontrol).
 const playersHeaders = [
@@ -493,25 +471,35 @@ const playersHeaders = [
 	{ title: "Toplam Bahis", key: "totalDebit" },
 	{ title: "Toplam Kazanım", key: "totalCredit" },
 	{ title: "Gerçek RTP", key: "realRtp", sortable: false },
+	{ title: "Deneme Bonusu", key: "trialBonus", sortable: false },
 	{ title: "Kontrol", key: "actions", sortable: false, align: "end" },
 ];
 
-const playersTableRows = computed(() =>
+const playersTableRowsAll = computed(() =>
 	livePlayers.value.map((player, index) => ({
-		_rowId: index,
-		_player: player,
-		no: index + 1,
-		userCode: player.userCode,
-		nickName: player.nickName || "-",
-		vendorName: vendorNameByCode.value[player.vendorCode] || player.vendorCode,
-		gameCode: player.gameCode,
-		balance: formatNumber(player.balance),
-		betAmount: formatNumber(player.betAmount),
-		requestType: player.requestType || "-",
-		totalDebit: formatNumber(player.totalDebit),
-		totalCredit: formatNumber(player.totalCredit),
+	_rowId: index,
+	_player: player,
+	no: index + 1,
+	userCode: player.userCode,
+	nickName: player.nickName || "-",
+	vendorName: vendorNameByCode.value[player.vendorCode] || player.vendorCode,
+	gameCode: player.gameCode,
+	balance: formatNumber(player.balance),
+	betAmount: formatNumber(player.betAmount),
+	requestType: player.requestType || "-",
+	totalDebit: formatNumber(player.totalDebit),
+	totalCredit: formatNumber(player.totalCredit),
+	_trialBonus: trialBonusMap.value[player.userCode] || null,
 	})),
-);
+	);
+
+// "Sadece Deneme Bonusu Alanlar" filtresi açıksa listeyi daraltır.
+// Bilgi amaçlıdır — RTP/oyun sonucu hesaplamasına dahil değildir.
+const playersTableRows = computed(() =>
+	trialBonusOnlyFilter.value
+	? playersTableRowsAll.value.filter((row) => row._trialBonus)
+	: playersTableRowsAll.value,
+	);
 
 // Referans tasarımdaki Call Result kolonları: Apply Date, User Code, Nick Name,
 // Vendor Code, Game Code, Bet, Call Type, Call Amount, Call Amount Rate, Status, Control.
@@ -568,6 +556,15 @@ watch(selectedVendor, (vendorCode) => {
 	if (activeTab.value === "call-result") {
 		fetchCallResults();
 	}
+});
+
+// Oyundaki kullanıcılar listesi değiştikçe (realtime/REST) hangilerinin
+// onaylı Deneme Bonusu olduğunu 500ms debounce ile arka planda sorgula.
+watch(livePlayers, (players) => {
+	clearTimeout(trialBonusLookupTimer);
+	trialBonusLookupTimer = setTimeout(() => {
+		fetchTrialBonusBadges(players.map((p) => p.userCode));
+	}, 500);
 });
 
 onMounted(async () => {
@@ -706,57 +703,23 @@ onBeforeUnmount(() => {
 			</VCardText>
 		</VCard>
 
-		<VRow v-if="canManageControlGame" class="mb-4">
-			<VCol cols="12" lg="6">
-				<VCard>
-					<VCardTitle>RTP Ayarı</VCardTitle>
-					<VCardText>
-						<VRow>
-							<VCol cols="12" md="6">
-								<VSelect v-model="rtpForm.scope" :items="settingScopeOptions" label="Kapsam" density="compact" />
-							</VCol>
-							<VCol v-if="rtpForm.scope === 'user'" cols="12" md="6">
-								<VTextField v-model="rtpForm.userCode" label="Kullanıcı Kodu" density="compact" />
-							</VCol>
-							<VCol cols="12" md="6">
-								<VTextField v-model="rtpForm.vendorCode" label="Vendor Kodu" density="compact" />
-							</VCol>
-							<VCol cols="12" md="6">
-								<VTextField v-model="rtpForm.gameCode" label="Oyun Kodu" density="compact" />
-							</VCol>
-							<VCol cols="12" md="6">
-								<VTextField v-model="rtpForm.currencyCode" label="Para Birimi" density="compact" />
-							</VCol>
-							<VCol cols="12" md="6">
-								<VSelect v-model="rtpForm.category" :items="rtpCategoryOptions" label="Kategori" density="compact" />
-							</VCol>
-							<VCol cols="12" md="6">
-								<VTextField v-model="rtpForm.key" label="Key" density="compact" />
-							</VCol>
-							<VCol cols="12" md="6">
-								<VTextField v-model="rtpForm.value" label="Değer" density="compact" />
-							</VCol>
-							<VCol cols="12" class="d-flex flex-wrap gap-2">
-								<VBtn variant="tonal" color="secondary" :loading="['user-setting', 'agent-setting'].includes(actionLoading)" @click="fetchRtpSetting">
-									<VIcon start icon="tabler-search" />
-									Oku
-								</VBtn>
-								<VBtn color="primary" :loading="['change-user-setting', 'change-agent-setting'].includes(actionLoading)" @click="saveRtpSetting">
-									<VIcon start icon="tabler-device-floppy" />
-									Kaydet
-								</VBtn>
-							</VCol>
-						</VRow>
-					</VCardText>
-				</VCard>
-			</VCol>
-		</VRow>
-
 		<!-- Oyundaki Kullanıcılar -->
 		<VCard v-if="activeTab === 'online-users'">
 			<VCardText>
-				<p v-if="!playersTableRows.length" class="text-medium-emphasis mb-0">
+				<div class="d-flex align-center justify-end mb-4">
+					<VSwitch
+						v-model="trialBonusOnlyFilter"
+						label="Sadece Deneme Bonusu Alanlar"
+						color="primary"
+						density="compact"
+						hide-details
+					/>
+				</div>
+				<p v-if="!playersTableRowsAll.length" class="text-medium-emphasis mb-0">
 					Şu anda bu vendor'da aktif oyuncu bulunmuyor.
+				</p>
+				<p v-else-if="!playersTableRows.length" class="text-medium-emphasis mb-0">
+					Deneme Bonusu almış aktif oyuncu bulunmuyor.
 				</p>
 				<VDataTable
 					v-else
@@ -770,6 +733,18 @@ onBeforeUnmount(() => {
 						<VChip size="small" variant="outlined" color="primary">
 							{{ formatRtp((item.raw || item)._player) }}
 						</VChip>
+					</template>
+					<template #item.trialBonus="{ item }">
+						<VTooltip v-if="(item.raw || item)._trialBonus" location="top">
+							<template #activator="{ props: tooltipProps }">
+								<VChip v-bind="tooltipProps" size="small" color="success" variant="tonal">
+									<VIcon start icon="tabler-gift" size="14" />
+									{{ formatNumber((item.raw || item)._trialBonus.amount) }} TL
+								</VChip>
+							</template>
+							<span>{{ new Date((item.raw || item)._trialBonus.claimedAt).toLocaleString('tr-TR') }} tarihinde onaylandı</span>
+						</VTooltip>
+						<span v-else class="text-medium-emphasis">-</span>
 					</template>
 					<template #item.actions="{ item }">
 						<VBtn

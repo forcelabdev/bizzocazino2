@@ -1,0 +1,1260 @@
+
+<route lang="yaml">
+meta:
+  action: read
+  subject: finance.balanceAnalysis
+</route>
+
+<script setup>
+import axios from "@axios"
+import { computed, onMounted, ref, watch } from "vue"
+import { VDataTableServer } from "vuetify/labs/VDataTable"
+
+const period = ref("all") // today | week | month | all | custom
+const customStart = ref(null)
+const customEnd = ref(null)
+
+const bonusOrigin = ref("all") // all | claimed | manual
+const bonusCategory = ref(null)
+const bucket = ref(null)
+const depositMin = ref(null)
+const depositMax = ref(null)
+
+const gameType = ref(null) // slot | live | sportsbook | other
+const providerCode = ref(null)
+const gameCode = ref(null)
+const providerOptions = ref([])
+const gameOptions = ref([])
+const gameOptionsLoading = ref(false)
+const vipLevel = ref(null)
+const country = ref(null)
+const activityStatus = ref(null)
+const tag = ref(null)
+const partner = ref(null)
+
+const summary = ref(null)
+const summaryLoading = ref(false)
+
+const buckets = ref([])
+const bucketsLoading = ref(false)
+
+const gameBuckets = ref([])
+const gameBucketsLoading = ref(false)
+
+const filterOptions = ref({
+  countries: [],
+  vipLevels: [],
+  tags: [],
+  partners: [],
+  gameTypes: [],
+  manualBonusCategories: [],
+  activityStatuses: [],
+})
+
+const members = ref([])
+const membersLoading = ref(false)
+const membersTotal = ref(0)
+const page = ref(1)
+const itemsPerPage = ref(20)
+const search = ref("")
+const isExporting = ref(false)
+const isExportingBuckets = ref(false)
+const isExportingGameBuckets = ref(false)
+
+const periods = [
+  { value: "today", title: "Bugün" },
+  { value: "week", title: "Bu Hafta" },
+  { value: "month", title: "Bu Ay" },
+  { value: "all", title: "Tüm Zamanlar" },
+  { value: "custom", title: "Özel Tarih" },
+]
+
+const bonusOrigins = [
+  { value: "all", title: "Tümü" },
+  { value: "claimed", title: "Alınan Bonus" },
+  { value: "manual", title: "Eklenen Bonus" },
+]
+
+const activityStatusColors = {
+  active: "success",
+  at_risk: "warning",
+  churned: "error",
+  never_played: "secondary",
+}
+
+const headers = [
+  { title: "#", key: "index", sortable: false, width: "56" },
+  { title: "Üye", key: "user", sortable: false },
+  { title: "Partner", key: "partner", sortable: false },
+  { title: "VIP", key: "vip", sortable: false },
+  { title: "Ülke", key: "country", sortable: false },
+  { title: "Yatırım", key: "totalDeposit", sortable: false },
+  { title: "Çekim", key: "totalWithdrawal", sortable: false },
+  { title: "Alınan Bonus", key: "claimedBonus", sortable: false },
+  { title: "Eklenen Bonus", key: "manualBonus", sortable: false },
+  { title: "Net Kazanç/Kayıp", key: "netResult", sortable: false },
+  { title: "Bakiye", key: "walletBalance", sortable: false },
+  { title: "Son Aktivite", key: "lastActivity", sortable: false },
+  { title: "Etiketler", key: "tags", sortable: false },
+]
+
+const dateRange = computed(() => {
+  const now = new Date()
+  if (period.value === "today") {
+    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    return { startDate: start.toISOString(), endDate: null }
+  }
+  if (period.value === "week") {
+    const start = new Date(now)
+    const dayOfWeek = (start.getDay() + 6) % 7 // Pazartesi = 0
+    start.setDate(start.getDate() - dayOfWeek)
+    start.setHours(0, 0, 0, 0)
+    return { startDate: start.toISOString(), endDate: null }
+  }
+  if (period.value === "month") {
+    const start = new Date(now.getFullYear(), now.getMonth(), 1)
+    return { startDate: start.toISOString(), endDate: null }
+  }
+  if (period.value === "custom") {
+    return {
+      startDate: customStart.value ? new Date(customStart.value).toISOString() : null,
+      endDate: customEnd.value ? new Date(customEnd.value).toISOString() : null,
+    }
+  }
+  return { startDate: null, endDate: null }
+})
+
+const commonParams = computed(() => {
+  const { startDate, endDate } = dateRange.value
+  return {
+    startDate: startDate || undefined,
+    endDate: endDate || undefined,
+    bonusOrigin: bonusOrigin.value !== "all" ? bonusOrigin.value : undefined,
+    depositMin: depositMin.value || undefined,
+    depositMax: depositMax.value || undefined,
+    gameType: gameType.value || undefined,
+    vipLevel: vipLevel.value !== null && vipLevel.value !== undefined ? vipLevel.value : undefined,
+    country: country.value || undefined,
+    activityStatus: activityStatus.value || undefined,
+    tag: tag.value || undefined,
+    partner: partner.value || undefined,
+  }
+})
+
+const formatMoney = value => {
+  const number = Number(value || 0)
+
+  return `₺${number.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+}
+
+const formatDate = value => {
+  if (!value) return "—"
+
+  return new Date(value).toLocaleDateString("tr-TR", { day: "2-digit", month: "2-digit", year: "numeric" })
+}
+
+const daysAgoLabel = value => {
+  if (!value) return null
+  const diffDays = Math.floor((Date.now() - new Date(value).getTime()) / (24 * 60 * 60 * 1000))
+  if (diffDays <= 0) return "Bugün"
+  if (diffDays === 1) return "1 gün önce"
+
+  return `${diffDays} gün önce`
+}
+
+const activityStatusLabel = key => {
+  const found = filterOptions.value.activityStatuses.find(s => s.key === key)
+
+  return found?.label || key
+}
+
+const fetchSummary = async () => {
+  summaryLoading.value = true
+  try {
+    const res = await axios.get("/admin/crm-report/summary", { params: commonParams.value })
+
+    summary.value = res.data.data
+  } catch (error) {
+    console.error("CRM raporu özeti alınamadı:", error)
+  } finally {
+    summaryLoading.value = false
+  }
+}
+
+const fetchBuckets = async () => {
+  bucketsLoading.value = true
+  try {
+    const res = await axios.get("/admin/crm-report/buckets", { params: commonParams.value })
+
+    buckets.value = res.data.data || []
+  } catch (error) {
+    console.error("Yatırım segmentleri alınamadı:", error)
+  } finally {
+    bucketsLoading.value = false
+  }
+}
+
+const fetchGameBuckets = async () => {
+  gameBucketsLoading.value = true
+  try {
+    const res = await axios.get("/admin/crm-report/game-buckets", { params: commonParams.value })
+
+    gameBuckets.value = res.data.data || []
+  } catch (error) {
+    console.error("Oyun türü segmentleri alınamadı:", error)
+  } finally {
+    gameBucketsLoading.value = false
+  }
+}
+
+const fetchFilterOptions = async () => {
+  try {
+    const res = await axios.get("/admin/crm-report/filter-options")
+
+    filterOptions.value = res.data.data || filterOptions.value
+  } catch (error) {
+    console.error("Filtre seçenekleri alınamadı:", error)
+  }
+}
+
+const fetchMembers = async () => {
+  membersLoading.value = true
+  try {
+    const res = await axios.get("/admin/crm-report/members", {
+      params: {
+        ...commonParams.value,
+        page: page.value,
+        limit: itemsPerPage.value,
+        search: search.value || undefined,
+        bucket: bucket.value || undefined,
+      },
+    })
+
+    members.value = res.data.data || []
+    membersTotal.value = res.data.total || 0
+  } catch (error) {
+    console.error("CRM raporu üye listesi alınamadı:", error)
+  } finally {
+    membersLoading.value = false
+  }
+}
+
+const refreshAll = () => {
+  fetchSummary()
+  fetchBuckets()
+  fetchGameBuckets()
+  page.value = 1
+  fetchMembers()
+}
+
+const selectBucket = key => {
+  bucket.value = bucket.value === key ? null : key
+  page.value = 1
+  fetchMembers()
+}
+
+const selectGameBucket = key => {
+  gameType.value = gameType.value === key ? null : key
+  page.value = 1
+  fetchSummary()
+  fetchMembers()
+}
+
+let searchTimeout = null
+
+watch(search, () => {
+  clearTimeout(searchTimeout)
+  searchTimeout = setTimeout(() => {
+    page.value = 1
+    fetchMembers()
+  }, 400)
+})
+
+let rangeTimeout = null
+
+watch([depositMin, depositMax], () => {
+  clearTimeout(rangeTimeout)
+  rangeTimeout = setTimeout(() => {
+    page.value = 1
+    fetchMembers()
+    fetchSummary()
+    fetchBuckets()
+    fetchGameBuckets()
+  }, 500)
+})
+
+watch(period, value => {
+  if (value !== "custom") refreshAll()
+})
+
+watch([customStart, customEnd], () => {
+  if (period.value === "custom") refreshAll()
+})
+
+watch(bonusOrigin, refreshAll)
+
+watch([vipLevel, country, activityStatus, tag, partner], refreshAll)
+
+watch([page, itemsPerPage], fetchMembers)
+
+const exportMembers = async () => {
+  if (isExporting.value) return
+  isExporting.value = true
+  try {
+    const XLSXModule = await import("xlsx")
+    const XLSX = XLSXModule.default || XLSXModule
+
+    const res = await axios.get("/admin/crm-report/members", {
+      params: {
+        ...commonParams.value,
+        search: search.value || undefined,
+        bucket: bucket.value || undefined,
+        limit: -1,
+      },
+    })
+
+    const rows = (res.data.data || []).map(m => ({
+      "Kullanıcı Adı": m.username || "",
+      "Ad Soyad": m.name || "",
+      "E-posta": m.email || "",
+      Telefon: m.phone || "",
+      Partner: m.partnerName || "",
+      "VIP Seviyesi": m.vipLevelName || "",
+      Ülke: m.country?.name || "",
+      "Kayıt Tarihi": m.registeredAt ? new Date(m.registeredAt).toLocaleDateString("tr-TR") : "",
+      "Toplam Yatırım": m.totalDeposit || 0,
+      "Yatırım Adedi": m.depositCount || 0,
+      "Toplam Çekim": m.totalWithdrawal || 0,
+      "Alınan Bonus": m.claimedBonus || 0,
+      "Eklenen Bonus": m.manualBonus || 0,
+      "Eklenen Bakiye": m.manualBalance || 0,
+      Bakiye: m.walletBalance || 0,
+      "Toplam Bahis": m.betTotal || 0,
+      "Toplam Kazanç": m.winTotal || 0,
+      "Net Sonuç": m.netResult || 0,
+      "Ort. Bahis": m.avgBet || 0,
+      "Son Aktivite": m.lastActivityAt ? new Date(m.lastActivityAt).toLocaleDateString("tr-TR") : "",
+      Durum: activityStatusLabel(m.activityStatus),
+      "Yatırım Segmenti": m.depositBucket || "",
+      Etiketler: (m.tags || []).map(t => t.name).join(", "),
+    }))
+
+    const worksheet = XLSX.utils.json_to_sheet(rows)
+
+    worksheet["!cols"] = [
+      { wch: 20 },
+      { wch: 24 },
+      { wch: 28 },
+      { wch: 16 },
+      { wch: 18 },
+      { wch: 14 },
+      { wch: 14 },
+      { wch: 14 },
+      { wch: 16 },
+      { wch: 14 },
+      { wch: 16 },
+      { wch: 16 },
+      { wch: 16 },
+      { wch: 16 },
+      { wch: 16 },
+      { wch: 16 },
+      { wch: 16 },
+      { wch: 14 },
+      { wch: 14 },
+      { wch: 16 },
+      { wch: 14 },
+      { wch: 18 },
+      { wch: 24 },
+    ]
+
+    const workbook = XLSX.utils.book_new()
+
+    XLSX.utils.book_append_sheet(workbook, worksheet, "CRM Raporu")
+    XLSX.writeFile(workbook, `crm-raporu-${new Date().toISOString().slice(0, 10)}.xlsx`, {
+      compression: true,
+    })
+  } catch (error) {
+    console.error("CRM raporu dışa aktarılamadı:", error)
+  } finally {
+    isExporting.value = false
+  }
+}
+
+const exportBucketsToExcel = async () => {
+  if (isExportingBuckets.value || !buckets.value.length) return
+  isExportingBuckets.value = true
+  try {
+    const XLSXModule = await import("xlsx")
+    const XLSX = XLSXModule.default || XLSXModule
+
+    const rows = buckets.value.map(row => ({
+      Aralık: row.label,
+      "Üye Sayısı": row.memberCount || 0,
+      "Toplam Yatırım": row.totalDeposit || 0,
+      "Ort. Yatırım": row.avgDeposit || 0,
+      "Alınan Bonus": row.totalClaimedBonus || 0,
+      "Eklenen Bonus": row.totalManualBonus || 0,
+    }))
+
+    const worksheet = XLSX.utils.json_to_sheet(rows)
+
+    worksheet["!cols"] = [
+      { wch: 18 }, { wch: 14 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 },
+    ]
+
+    const workbook = XLSX.utils.book_new()
+
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Yatırım Kırılımı")
+    XLSX.writeFile(workbook, `crm-yatirim-kirilimi-${new Date().toISOString().slice(0, 10)}.xlsx`, {
+      compression: true,
+    })
+  } catch (error) {
+    console.error("Yatırım kırılımı dışa aktarılamadı:", error)
+  } finally {
+    isExportingBuckets.value = false
+  }
+}
+
+const exportGameBucketsToExcel = async () => {
+  if (isExportingGameBuckets.value || !gameBuckets.value.length) return
+  isExportingGameBuckets.value = true
+  try {
+    const XLSXModule = await import("xlsx")
+    const XLSX = XLSXModule.default || XLSXModule
+
+    const rows = gameBuckets.value.map(row => ({
+      "Oyun Türü": row.label,
+      "Üye Sayısı": row.memberCount || 0,
+      "Toplam Bahis": row.betTotal || 0,
+      "Toplam Kazanç": row.winTotal || 0,
+      "Net (Site)": row.netResult || 0,
+      "Ort. Bahis": row.avgBet || 0,
+    }))
+
+    const worksheet = XLSX.utils.json_to_sheet(rows)
+
+    worksheet["!cols"] = [
+      { wch: 18 }, { wch: 14 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 },
+    ]
+
+    const workbook = XLSX.utils.book_new()
+
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Oyun Türü Kırılımı")
+    XLSX.writeFile(workbook, `crm-oyun-turu-kirilimi-${new Date().toISOString().slice(0, 10)}.xlsx`, {
+      compression: true,
+    })
+  } catch (error) {
+    console.error("Oyun türü kırılımı dışa aktarılamadı:", error)
+  } finally {
+    isExportingGameBuckets.value = false
+  }
+}
+
+onMounted(() => {
+  fetchFilterOptions()
+  refreshAll()
+})
+</script>
+
+<template>
+  <div>
+    <div class="d-flex flex-wrap align-center justify-space-between gap-4 mb-6">
+      <div>
+        <h4 class="text-h4 mb-1">
+          CRM Raporu
+        </h4>
+        <p class="text-body-1 text-medium-emphasis mb-0">
+          Yatırım, bonus, oyun aktivitesi ve segment bazlı üye kırılımı.
+        </p>
+      </div>
+      <div class="d-flex gap-2">
+        <VBtn
+          variant="tonal"
+          prepend-icon="tabler-file-export"
+          :loading="isExporting"
+          @click="exportMembers"
+        >
+          Excel&apos;e Aktar
+        </VBtn>
+        <VBtn
+          variant="tonal"
+          prepend-icon="tabler-refresh"
+          :loading="summaryLoading || membersLoading || bucketsLoading || gameBucketsLoading"
+          @click="refreshAll"
+        >
+          Yenile
+        </VBtn>
+      </div>
+    </div>
+
+    <VCard class="mb-6">
+      <VCardText>
+        <div class="d-flex flex-wrap align-center gap-2 mb-4">
+          <span class="text-body-2 text-medium-emphasis mr-2">Periyot:</span>
+          <VBtn
+            v-for="item in periods"
+            :key="item.value"
+            :variant="period === item.value ? 'flat' : 'outlined'"
+            :color="period === item.value ? 'primary' : 'default'"
+            size="small"
+            @click="period = item.value"
+          >
+            {{ item.title }}
+          </VBtn>
+        </div>
+
+        <VRow
+          v-if="period === 'custom'"
+          class="mb-2"
+        >
+          <VCol
+            cols="12"
+            sm="4"
+          >
+            <AppDateTimePicker
+              v-model="customStart"
+              label="Başlangıç"
+              placeholder="Başlangıç tarihi seçin"
+            />
+          </VCol>
+          <VCol
+            cols="12"
+            sm="4"
+          >
+            <AppDateTimePicker
+              v-model="customEnd"
+              label="Bitiş"
+              placeholder="Bitiş tarihi seçin"
+            />
+          </VCol>
+        </VRow>
+
+        <div class="d-flex flex-wrap align-center gap-2 mb-4">
+          <span class="text-body-2 text-medium-emphasis mr-2">Bonus Kaynağı:</span>
+          <VBtn
+            v-for="item in bonusOrigins"
+            :key="item.value"
+            :variant="bonusOrigin === item.value ? 'flat' : 'outlined'"
+            :color="bonusOrigin === item.value ? 'primary' : 'default'"
+            size="small"
+            @click="bonusOrigin = item.value"
+          >
+            {{ item.title }}
+          </VBtn>
+        </div>
+
+        <VRow>
+          <VCol
+            cols="12"
+            sm="4"
+          >
+            <VTextField
+              v-model="depositMin"
+              type="number"
+              label="Min. Yatırım"
+              density="compact"
+              prefix="₺"
+            />
+          </VCol>
+          <VCol
+            cols="12"
+            sm="4"
+          >
+            <VTextField
+              v-model="depositMax"
+              type="number"
+              label="Maks. Yatırım"
+              density="compact"
+              prefix="₺"
+            />
+          </VCol>
+        </VRow>
+
+        <VDivider class="my-4" />
+
+        <VRow>
+          <VCol
+            cols="12"
+            sm="4"
+            md="2"
+          >
+            <VSelect
+              v-model="gameType"
+              :items="filterOptions.gameTypes"
+              item-title="label"
+              item-value="key"
+              label="Oyun Türü"
+              placeholder="Tümü"
+              clearable
+              density="compact"
+              @update:model-value="() => { page = 1; fetchSummary(); fetchMembers() }"
+            />
+          </VCol>
+          <VCol
+            cols="12"
+            sm="4"
+            md="2"
+          >
+            <VSelect
+              v-model="vipLevel"
+              :items="filterOptions.vipLevels"
+              item-title="name"
+              item-value="level"
+              label="VIP Seviyesi"
+              placeholder="Tümü"
+              clearable
+              density="compact"
+            />
+          </VCol>
+          <VCol
+            cols="12"
+            sm="4"
+            md="2"
+          >
+            <VSelect
+              v-model="country"
+              :items="filterOptions.countries"
+              item-title="name"
+              item-value="code"
+              label="Ülke"
+              placeholder="Tümü"
+              clearable
+              density="compact"
+            />
+          </VCol>
+          <VCol
+            cols="12"
+            sm="4"
+            md="2"
+          >
+            <VSelect
+              v-model="activityStatus"
+              :items="filterOptions.activityStatuses"
+              item-title="label"
+              item-value="key"
+              label="Aktivite Durumu"
+              placeholder="Tümü"
+              clearable
+              density="compact"
+            />
+          </VCol>
+          <VCol
+            cols="12"
+            sm="4"
+            md="2"
+          >
+            <VSelect
+              v-model="tag"
+              :items="filterOptions.tags"
+              item-title="name"
+              item-value="id"
+              label="Etiket"
+              placeholder="Tümü"
+              clearable
+              density="compact"
+            />
+          </VCol>
+          <VCol
+            cols="12"
+            sm="4"
+            md="2"
+          >
+            <VSelect
+              v-model="partner"
+              :items="filterOptions.partners"
+              label="Partner"
+              placeholder="Tümü"
+              clearable
+              density="compact"
+            />
+          </VCol>
+        </VRow>
+      </VCardText>
+    </VCard>
+
+    <VRow class="mb-6">
+      <VCol
+        cols="12"
+        sm="6"
+        md="3"
+      >
+        <VCard>
+          <VCardText>
+            <p class="text-body-2 text-medium-emphasis mb-1">
+              Toplam Üye
+            </p>
+            <h5 class="text-h5 mb-1">
+              {{ summary?.totalMembers || 0 }}
+            </h5>
+            <p class="text-caption text-medium-emphasis mb-0">
+              Ort. Yatırım: {{ formatMoney(summary?.avgDeposit) }}
+            </p>
+          </VCardText>
+        </VCard>
+      </VCol>
+      <VCol
+        cols="12"
+        sm="6"
+        md="3"
+      >
+        <VCard>
+          <VCardText>
+            <p class="text-body-2 text-medium-emphasis mb-1">
+              Toplam Yatırım
+            </p>
+            <h5 class="text-h5 text-error mb-1">
+              {{ formatMoney(summary?.totalDeposit) }}
+            </h5>
+            <p class="text-caption text-medium-emphasis mb-0">
+              {{ summary?.depositCount || 0 }} işlem
+            </p>
+          </VCardText>
+        </VCard>
+      </VCol>
+      <VCol
+        cols="12"
+        sm="6"
+        md="3"
+      >
+        <VCard>
+          <VCardText>
+            <p class="text-body-2 text-medium-emphasis mb-1">
+              Alınan Bonus
+            </p>
+            <h5 class="text-h5 text-warning mb-1">
+              {{ formatMoney(summary?.totalClaimedBonus) }}
+            </h5>
+            <p class="text-caption text-medium-emphasis mb-0">
+              Sistem onaylı bonuslar
+            </p>
+          </VCardText>
+        </VCard>
+      </VCol>
+      <VCol
+        cols="12"
+        sm="6"
+        md="3"
+      >
+        <VCard>
+          <VCardText>
+            <p class="text-body-2 text-medium-emphasis mb-1">
+              Eklenen Bonus
+            </p>
+            <h5 class="text-h5 text-info mb-1">
+              {{ formatMoney(summary?.totalManualBonus) }}
+            </h5>
+            <p class="text-caption text-medium-emphasis mb-0">
+              Admin tarafından elle eklendi
+            </p>
+          </VCardText>
+        </VCard>
+      </VCol>
+      <VCol
+        cols="12"
+        sm="6"
+        md="3"
+      >
+        <VCard>
+          <VCardText>
+            <p class="text-body-2 text-medium-emphasis mb-1">
+              Toplam Çekim
+            </p>
+            <h5 class="text-h5 mb-1">
+              {{ formatMoney(summary?.totalWithdrawal) }}
+            </h5>
+          </VCardText>
+        </VCard>
+      </VCol>
+      <VCol
+        cols="12"
+        sm="6"
+        md="3"
+      >
+        <VCard>
+          <VCardText>
+            <p class="text-body-2 text-medium-emphasis mb-1">
+              Eklenen Bakiye
+            </p>
+            <h5 class="text-h5 mb-1">
+              {{ formatMoney(summary?.totalManualBalance) }}
+            </h5>
+          </VCardText>
+        </VCard>
+      </VCol>
+      <VCol
+        cols="12"
+        sm="6"
+        md="3"
+      >
+        <VCard>
+          <VCardText>
+            <p class="text-body-2 text-medium-emphasis mb-1">
+              Toplam Bonus
+            </p>
+            <h5 class="text-h5 text-success mb-1">
+              {{ formatMoney(summary?.totalBonus) }}
+            </h5>
+          </VCardText>
+        </VCard>
+      </VCol>
+      <VCol
+        cols="12"
+        sm="6"
+        md="3"
+      >
+        <VCard>
+          <VCardText>
+            <p class="text-body-2 text-medium-emphasis mb-1">
+              Güncel Toplam Bakiye
+            </p>
+            <h5 class="text-h5 mb-1" style="color: rgb(var(--v-theme-secondary));">
+              {{ formatMoney(summary?.totalWalletBalance) }}
+            </h5>
+          </VCardText>
+        </VCard>
+      </VCol>
+    </VRow>
+
+    <VRow class="mb-6">
+      <VCol
+        cols="12"
+        sm="6"
+        md="3"
+      >
+        <VCard>
+          <VCardText>
+            <p class="text-body-2 text-medium-emphasis mb-1">
+              Toplam Bahis
+            </p>
+            <h5 class="text-h5 mb-1">
+              {{ formatMoney(summary?.totalBetAmount) }}
+            </h5>
+          </VCardText>
+        </VCard>
+      </VCol>
+      <VCol
+        cols="12"
+        sm="6"
+        md="3"
+      >
+        <VCard>
+          <VCardText>
+            <p class="text-body-2 text-medium-emphasis mb-1">
+              Toplam Kazanç (Oyuncu)
+            </p>
+            <h5 class="text-h5 mb-1">
+              {{ formatMoney(summary?.totalWinAmount) }}
+            </h5>
+          </VCardText>
+        </VCard>
+      </VCol>
+      <VCol
+        cols="12"
+        sm="6"
+        md="3"
+      >
+        <VCard>
+          <VCardText>
+            <p class="text-body-2 text-medium-emphasis mb-1">
+              Net Oyun Sonucu (Site)
+            </p>
+            <h5
+              class="text-h5 mb-1"
+              :class="(summary?.netGamingResult || 0) >= 0 ? 'text-success' : 'text-error'"
+            >
+              {{ formatMoney(summary?.netGamingResult) }}
+            </h5>
+            <p class="text-caption text-medium-emphasis mb-0">
+              Pozitif = site kârda
+            </p>
+          </VCardText>
+        </VCard>
+      </VCol>
+      <VCol
+        cols="12"
+        sm="6"
+        md="3"
+      >
+        <VCard>
+          <VCardText>
+            <p class="text-body-2 text-medium-emphasis mb-1">
+              Ortalama Bahis
+            </p>
+            <h5 class="text-h5 mb-1">
+              {{ formatMoney(summary?.avgBetPerMember) }}
+            </h5>
+            <p class="text-caption text-medium-emphasis mb-0">
+              Üye başına
+            </p>
+          </VCardText>
+        </VCard>
+      </VCol>
+    </VRow>
+
+    <VRow class="mb-6">
+      <VCol
+        cols="12"
+        sm="4"
+      >
+        <VCard>
+          <VCardText class="d-flex align-center justify-space-between">
+            <div>
+              <p class="text-body-2 text-medium-emphasis mb-1">
+                Aktif Oyuncu
+              </p>
+              <h5 class="text-h5 text-success mb-0">
+                {{ summary?.activeCount || 0 }}
+              </h5>
+            </div>
+            <VIcon
+              icon="tabler-bolt"
+              color="success"
+              size="32"
+            />
+          </VCardText>
+        </VCard>
+      </VCol>
+      <VCol
+        cols="12"
+        sm="4"
+      >
+        <VCard>
+          <VCardText class="d-flex align-center justify-space-between">
+            <div>
+              <p class="text-body-2 text-medium-emphasis mb-1">
+                Risk Altında
+              </p>
+              <h5 class="text-h5 text-warning mb-0">
+                {{ summary?.atRiskCount || 0 }}
+              </h5>
+            </div>
+            <VIcon
+              icon="tabler-alert-triangle"
+              color="warning"
+              size="32"
+            />
+          </VCardText>
+        </VCard>
+      </VCol>
+      <VCol
+        cols="12"
+        sm="4"
+      >
+        <VCard>
+          <VCardText class="d-flex align-center justify-space-between">
+            <div>
+              <p class="text-body-2 text-medium-emphasis mb-1">
+                Kaybedilmiş
+              </p>
+              <h5 class="text-h5 text-error mb-0">
+                {{ summary?.churnedCount || 0 }}
+              </h5>
+            </div>
+            <VIcon
+              icon="tabler-user-off"
+              color="error"
+              size="32"
+            />
+          </VCardText>
+        </VCard>
+      </VCol>
+    </VRow>
+
+    <VCard class="mb-6">
+      <VCardText>
+        <div class="d-flex flex-wrap align-center justify-space-between gap-2 mb-4">
+          <h6 class="text-h6 mb-0">
+            Yatırım Aralığına Göre Kırılım
+          </h6>
+          <VBtn
+            variant="tonal"
+            color="secondary"
+            size="small"
+            prepend-icon="tabler-file-spreadsheet"
+            :loading="isExportingBuckets"
+            :disabled="!buckets.length"
+            @click="exportBucketsToExcel"
+          >
+            Excel&apos;e Aktar
+          </VBtn>
+        </div>
+        <VTable density="comfortable">
+          <thead>
+            <tr>
+              <th>Aralık</th>
+              <th>Üye Sayısı</th>
+              <th>Toplam Yatırım</th>
+              <th>Ort. Yatırım</th>
+              <th>Alınan Bonus</th>
+              <th>Eklenen Bonus</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="row in buckets"
+              :key="row.key"
+              class="cursor-pointer"
+              :class="{ 'bg-primary-lighten-5': bucket === row.key }"
+              @click="selectBucket(row.key)"
+            >
+              <td class="font-weight-medium">
+                {{ row.label }}
+              </td>
+              <td>{{ row.memberCount }}</td>
+              <td class="text-error">
+                {{ formatMoney(row.totalDeposit) }}
+              </td>
+              <td>{{ formatMoney(row.avgDeposit) }}</td>
+              <td class="text-warning">
+                {{ formatMoney(row.totalClaimedBonus) }}
+              </td>
+              <td class="text-info">
+                {{ formatMoney(row.totalManualBonus) }}
+              </td>
+            </tr>
+          </tbody>
+        </VTable>
+        <p
+          v-if="bucket"
+          class="text-caption text-medium-emphasis mt-2 mb-0"
+        >
+          Filtre uygulandı: {{ buckets.find(b => b.key === bucket)?.label }} —
+          <a
+            href="#"
+            @click.prevent="selectBucket(bucket)"
+          >temizle</a>
+        </p>
+      </VCardText>
+    </VCard>
+
+    <VCard class="mb-6">
+      <VCardText>
+        <div class="d-flex flex-wrap align-center justify-space-between gap-2 mb-4">
+          <h6 class="text-h6 mb-0">
+            Oyun Türüne Göre Kırılım
+          </h6>
+          <VBtn
+            variant="tonal"
+            color="secondary"
+            size="small"
+            prepend-icon="tabler-file-spreadsheet"
+            :loading="isExportingGameBuckets"
+            :disabled="!gameBuckets.length"
+            @click="exportGameBucketsToExcel"
+          >
+            Excel&apos;e Aktar
+          </VBtn>
+        </div>
+        <VTable density="comfortable">
+          <thead>
+            <tr>
+              <th>Oyun Türü</th>
+              <th>Üye Sayısı</th>
+              <th>Toplam Bahis</th>
+              <th>Toplam Kazanç</th>
+              <th>Net (Site)</th>
+              <th>Ort. Bahis</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="row in gameBuckets"
+              :key="row.key"
+              class="cursor-pointer"
+              :class="{ 'bg-primary-lighten-5': gameType === row.key }"
+              @click="selectGameBucket(row.key)"
+            >
+              <td class="font-weight-medium">
+                {{ row.label }}
+              </td>
+              <td>{{ row.memberCount }}</td>
+              <td>{{ formatMoney(row.betTotal) }}</td>
+              <td>{{ formatMoney(row.winTotal) }}</td>
+              <td :class="row.netResult >= 0 ? 'text-success' : 'text-error'">
+                {{ formatMoney(row.netResult) }}
+              </td>
+              <td>{{ formatMoney(row.avgBet) }}</td>
+            </tr>
+          </tbody>
+        </VTable>
+        <p
+          v-if="gameType"
+          class="text-caption text-medium-emphasis mt-2 mb-0"
+        >
+          Filtre uygulandı: {{ gameBuckets.find(b => b.key === gameType)?.label }} —
+          <a
+            href="#"
+            @click.prevent="selectGameBucket(gameType)"
+          >temizle</a>
+        </p>
+      </VCardText>
+    </VCard>
+
+    <VCard>
+      <VCardText>
+        <VTextField
+          v-model="search"
+          placeholder="Kullanıcı adı, ad veya partner ile ara..."
+          prepend-inner-icon="tabler-search"
+          density="compact"
+          class="mb-4"
+          style="max-width: 420px;"
+        />
+      </VCardText>
+
+      <VDataTableServer
+        v-model:page="page"
+        v-model:items-per-page="itemsPerPage"
+        :headers="headers"
+        :items="members"
+        :items-length="membersTotal"
+        :loading="membersLoading"
+        class="text-no-wrap"
+      >
+        <template #item.index="{ index }">
+          {{ (page - 1) * itemsPerPage + index + 1 }}
+        </template>
+
+        <template #item.user="{ item }">
+          <div class="d-flex align-center gap-x-3">
+            <VAvatar
+              size="34"
+              color="primary"
+              variant="tonal"
+            >
+              {{ (item.raw.username || "?").charAt(0).toUpperCase() }}
+            </VAvatar>
+            <div>
+              <p class="font-weight-medium mb-0">
+                {{ item.raw.username }}
+              </p>
+              <p
+                v-if="item.raw.name"
+                class="text-caption text-medium-emphasis mb-0"
+              >
+                {{ item.raw.name }}
+              </p>
+            </div>
+          </div>
+        </template>
+
+        <template #item.partner="{ item }">
+          <VChip
+            v-if="item.raw.partnerName"
+            size="small"
+            variant="tonal"
+            color="warning"
+          >
+            {{ item.raw.partnerName }}
+          </VChip>
+          <span
+            v-else
+            class="text-medium-emphasis"
+          >—</span>
+        </template>
+
+        <template #item.vip="{ item }">
+          <VChip
+            v-if="item.raw.vipLevelName"
+            size="small"
+            variant="tonal"
+            color="primary"
+          >
+            {{ item.raw.vipLevelName }}
+          </VChip>
+          <span
+            v-else
+            class="text-medium-emphasis"
+          >—</span>
+        </template>
+
+        <template #item.country="{ item }">
+          <span v-if="item.raw.country">{{ item.raw.country.name }}</span>
+          <span
+            v-else
+            class="text-medium-emphasis"
+          >—</span>
+        </template>
+
+        <template #item.totalDeposit="{ item }">
+          <span class="text-error font-weight-medium">{{ formatMoney(item.raw.totalDeposit) }}</span>
+          <p class="text-caption text-medium-emphasis mb-0">
+            {{ item.raw.depositCount }} işlem
+          </p>
+        </template>
+
+        <template #item.totalWithdrawal="{ item }">
+          {{ formatMoney(item.raw.totalWithdrawal) }}
+        </template>
+
+        <template #item.claimedBonus="{ item }">
+          <span class="text-warning font-weight-medium">{{ formatMoney(item.raw.claimedBonus) }}</span>
+        </template>
+
+        <template #item.manualBonus="{ item }">
+          <span class="text-info font-weight-medium">{{ formatMoney(item.raw.manualBonus) }}</span>
+        </template>
+
+        <template #item.netResult="{ item }">
+          <span
+            class="font-weight-medium"
+            :class="item.raw.netResult >= 0 ? 'text-success' : 'text-error'"
+          >
+            {{ formatMoney(item.raw.netResult) }}
+          </span>
+        </template>
+
+        <template #item.walletBalance="{ item }">
+          <span class="font-weight-medium">{{ formatMoney(item.raw.walletBalance) }}</span>
+        </template>
+
+        <template #item.lastActivity="{ item }">
+          <div v-if="item.raw.lastActivityAt">
+            <p class="mb-0">
+              {{ formatDate(item.raw.lastActivityAt) }}
+            </p>
+            <p class="text-caption text-medium-emphasis mb-0">
+              {{ daysAgoLabel(item.raw.lastActivityAt) }}
+            </p>
+          </div>
+          <VChip
+            size="small"
+            variant="tonal"
+            class="mt-1"
+            :color="activityStatusColors[item.raw.activityStatus] || 'secondary'"
+          >
+            {{ activityStatusLabel(item.raw.activityStatus) }}
+          </VChip>
+        </template>
+
+        <template #item.tags="{ item }">
+          <div
+            v-if="item.raw.tags?.length"
+            class="d-flex flex-wrap gap-1"
+          >
+            <VChip
+              v-for="t in item.raw.tags.slice(0, 2)"
+              :key="t.id"
+              size="x-small"
+              variant="flat"
+              :style="{ backgroundColor: t.color, color: '#fff' }"
+            >
+              {{ t.name }}
+            </VChip>
+            <VChip
+              v-if="item.raw.tags.length > 2"
+              size="x-small"
+              variant="tonal"
+            >
+              +{{ item.raw.tags.length - 2 }}
+            </VChip>
+          </div>
+          <span
+            v-else
+            class="text-medium-emphasis"
+          >—</span>
+        </template>
+      </VDataTableServer>
+    </VCard>
+  </div>
+</template>

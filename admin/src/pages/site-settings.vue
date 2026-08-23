@@ -128,10 +128,6 @@ const settings = ref({
 					callHistory: "GetCallHistory",
 					applyCall: "CallApply",
 					cancelCall: "CallCancel",
-					getUserSetting: "GetUserSetting",
-					changeUserSetting: "ChangeUserSetting",
-					getAgentSetting: "GetAgentSetting",
-					changeAgentSetting: "ChangeAgentSetting",
 					freeRoundList: "GetFreeRoundList",
 					applyFreeRound: "ApplyFreeRound",
 					cancelFreeRound: "CancelFreeRound",
@@ -2779,20 +2775,8 @@ console.log('Custom JS loaded');"
 								<VCol cols="12" md="4">
 									<VTextField v-model="settings.apiSettings.controlGame.methods.cancelCall" label="Call iptal" />
 								</VCol>
-								<VCol cols="12" md="4">
-									<VTextField v-model="settings.apiSettings.controlGame.methods.getUserSetting" label="Kullanıcı RTP oku" />
-								</VCol>
-								<VCol cols="12" md="4">
-									<VTextField v-model="settings.apiSettings.controlGame.methods.changeUserSetting" label="Kullanıcı RTP değiştir" />
-								</VCol>
-								<VCol cols="12" md="4">
-									<VTextField v-model="settings.apiSettings.controlGame.methods.getAgentSetting" label="Agent RTP oku" />
-								</VCol>
-								<VCol cols="12" md="4">
-									<VTextField v-model="settings.apiSettings.controlGame.methods.changeAgentSetting" label="Agent RTP değiştir" />
-								</VCol>
-								<VCol cols="12" md="4">
-									<VTextField v-model="settings.apiSettings.controlGame.methods.freeRoundList" label="Freeround listesi" />
+				<VCol cols="12" md="4">
+					<VTextField v-model="settings.apiSettings.controlGame.methods.freeRoundList" label="Freeround listesi" />
 								</VCol>
 								<VCol cols="12" md="4">
 									<VTextField v-model="settings.apiSettings.controlGame.methods.applyFreeRound" label="Freeround uygula" />

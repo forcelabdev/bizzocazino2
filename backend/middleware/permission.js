@@ -124,14 +124,13 @@ const authenticateAdmin = async (req, res, next) => {
 		}
 
 		// Kullanıcı bilgilerini request'e ekle
+		// adminRole atanmamış (legacy) adminler tüm yetkilere sahip kabul edilir.
 		req.adminUser = user;
-		req.isSuperAdmin = user.adminRole?.isSuperAdmin || false;
-		req.userPermissions = extractPermissions(user);
-
-		// SuperAdmin kontrolü:
-		// const hasAdminRole = user.adminRole && user.adminRole._id;
-		// req.isSuperAdmin = hasAdminRole ? (user.adminRole.isSuperAdmin || false) : true; // Legacy admins treated as superadmin
-		// req.userPermissions = extractPermissions(user, !hasAdminRole);
+		const hasAdminRole = Boolean(user.adminRole && user.adminRole._id);
+		req.isSuperAdmin = hasAdminRole
+			? user.adminRole.isSuperAdmin || false
+			: true; // Legacy admins treated as superadmin
+		req.userPermissions = extractPermissions(user, !hasAdminRole);
 
 		next();
 	} catch (err) {

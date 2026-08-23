@@ -111,6 +111,52 @@ const openSegment = segment => {
   fetchSegmentUsers()
 }
 
+const exportingSegment = ref(false)
+
+const exportSegmentUsers = async () => {
+  if (!activeSegment.value || exportingSegment.value) return
+  exportingSegment.value = true
+  try {
+    const XLSXModule = await import('xlsx')
+    const XLSX = XLSXModule.default || XLSXModule
+
+    const res = await axios.get(`/admin/player-segments/${activeSegment.value.key}/users`, {
+      params: {
+        search: drawerSearch.value || undefined,
+        limit: -1,
+      },
+    })
+    const users = res.data?.data?.users || []
+
+    const rows = users.map(u => ({
+      'Kullanıcı Adı': u.username || '',
+      'E-posta': u.email || '',
+      'VIP Seviyesi': u.vipLevel || 'VIP 0',
+      'Toplam Yatırım': u.totalDeposit || 0,
+      'Toplam Çekim': u.totalWithdrawal || 0,
+      'Net Değer': u.netValue || 0,
+    }))
+
+    const worksheet = XLSX.utils.json_to_sheet(rows)
+
+    worksheet['!cols'] = [
+      { wch: 22 }, { wch: 28 }, { wch: 14 }, { wch: 16 }, { wch: 16 }, { wch: 16 },
+    ]
+
+    const workbook = XLSX.utils.book_new()
+    const sheetName = t(`crm.segments.${activeSegment.value.key}.title`).slice(0, 31)
+
+    XLSX.utils.book_append_sheet(workbook, worksheet, sheetName || 'Segment')
+    XLSX.writeFile(workbook, `segment-${activeSegment.value.key}-${new Date().toISOString().slice(0, 10)}.xlsx`, {
+      compression: true,
+    })
+  } catch (err) {
+    console.error('Segment oyuncuları dışa aktarılamadı:', err)
+  } finally {
+    exportingSegment.value = false
+  }
+}
+
 watch(drawerPage, fetchSegmentUsers)
 
 let searchTimeout = null
@@ -225,14 +271,25 @@ onMounted(fetchSummary)
           </IconBtn>
         </div>
 
-        <div class="pa-4">
+        <div class="d-flex align-center gap-3 pa-4">
           <AppTextField
             v-model="drawerSearch"
             :placeholder="t('crm.searchPlaceholder')"
             prepend-inner-icon="tabler-search"
             density="compact"
             clearable
+            class="flex-grow-1"
           />
+          <VBtn
+            variant="tonal"
+            size="small"
+            prepend-icon="tabler-file-export"
+            :loading="exportingSegment"
+            :disabled="!drawerTotal"
+            @click="exportSegmentUsers"
+          >
+            Excel
+          </VBtn>
         </div>
 
         <VDivider />

@@ -310,6 +310,11 @@ router.post("/", async (req, res) => {
 					slot,
 					live,
 					SB,
+					// ÖNEMLİ: Nexus, spor bahisi maç/market detaylarını ("betslips")
+					// "SB" objesinin İÇİNDE değil, request body'nin KÖK seviyesinde
+					// "info" adlı ayrı bir alanda (JSON string olarak) gönderiyor.
+					// Örn: { "SB": {...}, "info": "{\"couponCode\":...,\"betslips\":[...]}" }
+					info,
 				} = req.body;
 
 				// ============================================================
@@ -704,9 +709,10 @@ router.post("/", async (req, res) => {
 						affiliate: affiliateAmount,
 						// SB (sportsbook) kuponlarının maç/market detaylarını (info) daha
 						// sonra referans/debug için Transaction kaydında da saklıyoruz.
+						// NOT: "info" request body'nin kök seviyesinden geliyor (SB'nin içinden değil).
 						extra:
-							game_type === "SB" && gameDetails?.info
-								? { info: gameDetails.info }
+							game_type === "SB" && info
+								? { info }
 								: undefined,
 					});
 
@@ -721,14 +727,43 @@ router.post("/", async (req, res) => {
 					// ============================================================
 					// 10) Handle nexus sportsbook bet tracking
 					// ============================================================
-					if (game_type === "SB" && gameDetails.info) {
+					if (game_type === "SB" && info) {
 						try {
-							const betInfo = typeof gameDetails.info === "string"
-								? JSON.parse(gameDetails.info)
-								: gameDetails.info;
+							const betInfo = typeof info === "string"
+								? JSON.parse(info)
+								: info;
 
 							const couponCode = betInfo.couponCode || txn_id;
 							const betStatus = betInfo.status || "pending";
+
+							// Nexus'tan gelen maç/market seçim (betslip) durumunu bizim
+							// SportsBetEvent.status enum'una çeviriyoruz.
+							const mapSlipStatus = (rawStatus) => {
+								const map = {
+									won: "won",
+									win: "won",
+									lost: "lost",
+									lose: "lost",
+									void: "void",
+									cancelled: "cancelled",
+									canceled: "cancelled",
+									push: "void",
+									postponed: "postponed",
+									pending: "pending",
+								};
+								return map[String(rawStatus || "").toLowerCase()] || "pending";
+							};
+
+							// "0:1" veya "2-1" gibi skorları homeScore/awayScore'a ayırır.
+							const parseScore = (scoreStr) => {
+								if (!scoreStr || typeof scoreStr !== "string") return null;
+								const match = scoreStr.match(/^(\d+)\s*[:\-]\s*(\d+)$/);
+								if (!match) return null;
+								return {
+									homeScore: parseInt(match[1], 10),
+									awayScore: parseInt(match[2], 10),
+								};
+							};
 
 							if (txn_type === "debit" || txn_type === "bet") {
 								const existingBet = await SportsBet.findOne({
@@ -740,6 +775,7 @@ router.post("/", async (req, res) => {
 									const betslips = betInfo.betslips || [];
 									const eventCount = betslips.length || 1;
 									const betType = eventCount === 1 ? "single" : "multiple";
+									const hasLiveSlip = betslips.some((slip) => slip.type === "live");
 
 									const sportsBet = await SportsBet.create({
 										user: user._id,
@@ -757,30 +793,46 @@ router.post("/", async (req, res) => {
 										affiliateCommission: affiliateAmount,
 										betType,
 										eventCount,
-										isLive: false,
+										isLive: hasLiveSlip,
 										ipAddress: getClientIp(req),
 										extra: { betInfo },
 									});
 
 									if (betslips.length > 0) {
-										const eventDocs = betslips.map((slip) => ({
-											bet: sportsBet._id,
-											user: user._id,
-											externalEventId: (slip.id || slip.oddPoint || "").toString(),
-											matchTitle: slip.matchName || "",
-											homeTeam: slip.homeTeam || "",
-											awayTeam: slip.awayTeam || "",
-											sportType: slip.sportName || "",
-											leagueName: slip.leagueName || "",
-											countryCode: slip.countryName || "",
-											marketType: slip.marketName || "",
-											marketName: slip.marketName || "",
-											pick: slip.oddName || "",
-											displayText: slip.oddName || "",
-											odds: parseFloat(slip.oddRate) || 1,
-											status: "pending",
-											extra: slip,
-										}));
+										const eventDocs = betslips.map((slip) => {
+											const startTimestamp = slip.startsAt
+												? new Date(slip.startsAt).getTime()
+												: undefined;
+											const liveScore = parseScore(slip.betScore);
+
+											return {
+												bet: sportsBet._id,
+												user: user._id,
+												externalEventId: (slip.id || slip.oddPoint || "").toString(),
+												externalGameId: (slip.matchId || "").toString(),
+												matchTitle: slip.matchName || "",
+												homeTeam: slip.homeTeam || "",
+												awayTeam: slip.awayTeam || "",
+												sportType: slip.sportName || "",
+												leagueName: slip.leagueName || "",
+												countryCode: slip.countryName || slip.countryId || "",
+												marketType: slip.marketName || "",
+												marketName: slip.marketName || "",
+												pick: slip.oddName || "",
+												// "1x2 - 1" gibi daha açıklayıcı etiket varsa onu kullan,
+												// yoksa ham seçim adına (oddName) düş.
+												displayText: slip.labelName || slip.oddName || "",
+												odds: parseFloat(slip.oddRate) || 1,
+												status: mapSlipStatus(slip.status),
+												startTimestamp,
+												startDate: startTimestamp ? new Date(startTimestamp) : undefined,
+												isLive: slip.type === "live",
+												homeScore: liveScore?.homeScore,
+												awayScore: liveScore?.awayScore,
+												finalScore: slip.resultScore || slip.betScore || undefined,
+												extra: slip,
+											};
+										});
 										await SportsBetEvent.insertMany(eventDocs);
 									}
 
@@ -854,10 +906,47 @@ router.post("/", async (req, res) => {
 									sportsBet.settledAt = new Date();
 									await sportsBet.save();
 
-									await SportsBetEvent.updateMany(
-										{ bet: sportsBet._id },
-										{ $set: { status: mappedStatus } }
-									);
+									// Kuponun içindeki her bir maçı (betslip) kendi sonucuna göre
+									// (kazandı/kaybetti/vs.) ayrı ayrı güncelliyoruz, hepsine kupon
+									// genel durumunu basmıyoruz — böylece çoklu kuponlarda hangi
+									// maçın kazanılıp hangisinin kaybedildiği görülebiliyor.
+									const settledSlips = betInfo.betslips || [];
+									if (settledSlips.length > 0) {
+										const events = await SportsBetEvent.find({
+											bet: sportsBet._id,
+										});
+
+										for (const slip of settledSlips) {
+											const slipEventId = (
+												slip.id || slip.oddPoint || ""
+											).toString();
+											const event = events.find(
+												(ev) => ev.externalEventId === slipEventId
+											);
+											if (!event) continue;
+
+											const liveScore = parseScore(
+												slip.resultScore || slip.betScore
+											);
+
+											event.status = mapSlipStatus(slip.status);
+											event.finalScore =
+												slip.resultScore || slip.betScore || event.finalScore;
+											if (liveScore) {
+												event.homeScore = liveScore.homeScore;
+												event.awayScore = liveScore.awayScore;
+											}
+											event.extra = slip;
+											await event.save();
+										}
+									} else {
+										// Betslip detayı yoksa (eski format vs.) en azından kupon
+										// genel durumunu maçlara da yansıtalım.
+										await SportsBetEvent.updateMany(
+											{ bet: sportsBet._id },
+											{ $set: { status: mappedStatus } }
+										);
+									}
 
 									if (mappedStatus === "won") {
 										await logEvent("win", {
