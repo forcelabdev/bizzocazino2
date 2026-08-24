@@ -76,15 +76,19 @@ const normalizeCallbackAmount = (value, txnType) => {
 	const amount = Number(value);
 	if (!Number.isFinite(amount)) return null;
 
+	// Betinovi sends debit (bet) amounts as negative numbers (e.g. -20 for a
+	// 20 TL bet), so take the absolute value before validating sign.
+	const absAmount = Math.abs(amount);
+
 	// Debit (bet) transactions must move a strictly positive amount.
 	if (txnType === 0) {
-		return amount > 0 ? Math.abs(amount) : null;
+		return absAmount > 0 ? absAmount : null;
 	}
 
 	// Credit (win) and refund transactions may legitimately settle with a
 	// zero amount (e.g. a round finished with no win, or a zero-value
-	// refund). Only reject negative or non-numeric values here.
-	return amount >= 0 ? Math.abs(amount) : null;
+	// refund). Only reject non-numeric values here (already handled above).
+	return absAmount;
 };
 
 const normalizeCallbackTxnType = (value) => {
