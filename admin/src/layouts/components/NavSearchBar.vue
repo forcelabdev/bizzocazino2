@@ -3,9 +3,16 @@ import Shepherd from "shepherd.js";
 import { can } from "@layouts/plugins/casl";
 import { useThemeConfig } from "@core/composable/useThemeConfig";
 import navigationItems from "@/navigation/vertical";
+import { useUserListStore } from "@/views/apps/user/useUserListStore";
+import { usePermissionStore } from "@/stores/permissionStore";
+import { formatCoinType } from "@/utils/currency";
+import { avatarText } from "@core/utils/formatters";
 
 const { appContentLayoutNav } = useThemeConfig();
 const { t } = useI18n();
+const router = useRouter();
+const userListStore = useUserListStore();
+const permissionStore = usePermissionStore();
 
 defineOptions({ inheritAttrs: false });
 
@@ -77,7 +84,6 @@ const noDataSuggestions = computed(() =>
 );
 
 const searchQuery = ref("");
-const router = useRouter();
 
 const normalize = (value) => (value || "").toLocaleLowerCase("tr-TR");
 
@@ -108,6 +114,88 @@ const searchResult = computed(() => {
 
 const redirectToSuggestedOrSearchedPage = (selected) => {
 	router.push(selected.url);
+	isAppSearchBarVisible.value = false;
+	searchQuery.value = "";
+};
+
+// 👉 Canlı kullanıcı arama (kart görünümü)
+// Kullanıcılar sayfasını görüntüleme yetkisi yoksa hiç sorgu atmıyoruz —
+// aynı yetki, sol menüdeki "Kullanıcı Listesi" öğesini de kontrol ediyor.
+const canSearchUsers = computed(() => can("read", "users"));
+// Detay yetkisi yoksa (bkz. Kullanıcı Listesi sayfası) e-posta/telefon gizlenir.
+const canViewUserDetails = computed(() =>
+	permissionStore.can("users.listDetails.read")
+);
+
+const userResults = ref([]);
+const userResultsLoading = ref(false);
+let userSearchRequestId = 0;
+
+const resolveUserRankColor = (rank) => {
+	switch (rank) {
+	case "admin":
+		return "secondary";
+	case "partner":
+		return "warning";
+	case "user":
+		return "primary";
+	default:
+		return "default";
+	}
+};
+
+const formatUserForSearch = (user) => ({
+	_id: user._id,
+	username: user.username,
+	initials: avatarText(user.username),
+	avatar: user.avatar || null,
+	numericId: user.numericId ?? null,
+	email: canViewUserDetails.value ? user.local?.email || null : null,
+	phone: canViewUserDetails.value ? user.phone || null : null,
+	rank: user.rank,
+	rankColor: resolveUserRankColor(user.rank),
+	balanceLabel: `${formatCoinType(user.activeWallet?.coinType)}: ${
+		user.activeWallet?.balance ?? 0
+	}`,
+});
+
+const runUserSearch = useDebounceFn(async (query) => {
+	const requestId = ++userSearchRequestId;
+
+	userResultsLoading.value = true;
+	try {
+		const res = await userListStore.fetchUsers({
+			search: query,
+			page: 1,
+			limit: 5,
+			searchMode: "smart",
+		});
+
+		if (requestId !== userSearchRequestId) return;
+		userResults.value = (res?.users || []).map(formatUserForSearch);
+	} catch (error) {
+		if (requestId !== userSearchRequestId) return;
+		console.error("[v0] Arama çubuğu kullanıcı sonuçları alınamadı:", error);
+		userResults.value = [];
+	} finally {
+		if (requestId === userSearchRequestId) userResultsLoading.value = false;
+	}
+}, 300);
+
+watch(searchQuery, (query) => {
+	if (!canSearchUsers.value || !query) {
+		userSearchRequestId++;
+		userResults.value = [];
+		userResultsLoading.value = false;
+
+		return;
+	}
+
+	runUserSearch(query);
+});
+
+const goToUserFromSearch = (user) => {
+	router.push({ name: "apps-user-view-id", params: { id: user._id } });
 	isAppSearchBarVisible.value = false;
 	searchQuery.value = "";
 };
@@ -147,7 +235,10 @@ const LazyAppBarSearch = defineAsyncComponent(() =>
 		:search-results="searchResult"
 		:suggestions="suggestionGroups"
 		:no-data-suggestion="noDataSuggestions"
+		:user-results="userResults"
+		:user-results-loading="userResultsLoading"
 		@item-selected="redirectToSuggestedOrSearchedPage"
+		@user-selected="goToUserFromSearch"
 	>
 		<!--
       <template #suggestions>
