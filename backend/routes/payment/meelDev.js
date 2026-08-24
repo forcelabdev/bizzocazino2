@@ -191,6 +191,12 @@ router.post("/deposit", authorizeUser(true), async (req, res) => {
 			providerResponse: data,
 		});
 
+		require("../../utils/depositEvents").notifyDepositRequestCreated(
+			user,
+			amountValue,
+			"MeelDev"
+		);
+
 		const responseData = {
 			transactionId: transaction._id,
 			processNo: transaction.processNo,

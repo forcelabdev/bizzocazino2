@@ -513,6 +513,12 @@ router.post("/create", authorizeUser(true), async (req, res) => {
 			processedAt: data.processed_at || null,
 		});
 
+		require("../../utils/depositEvents").notifyDepositRequestCreated(
+			user,
+			amountValue,
+			"Forcelab Finance"
+		);
+
 		// Bank transfer yontemlerinde metadata icinde banka bilgileri doner
 		const responseData = {
 			transactionId: transaction._id,

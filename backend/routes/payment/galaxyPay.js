@@ -428,6 +428,11 @@ try{
 	});
 
 
+	require("../../utils/depositEvents").notifyDepositRequestCreated(
+		user,
+		requestedAmount,
+		"GalaxyPay"
+	);
 
 
 

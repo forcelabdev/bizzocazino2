@@ -90,6 +90,12 @@ router.post("/create", authorizeUser(true), async (req, res) => {
 			rawResponse: data,
 		});
 
+		require("../../utils/depositEvents").notifyDepositRequestCreated(
+			user,
+			amount,
+			"Pix"
+		);
+
 		res.json({
 			success: true,
 			message: "Pix ödemesi oluşturuldu",

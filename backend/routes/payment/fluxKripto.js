@@ -449,6 +449,12 @@ router.post("/deposit", authorizeUser(true), async (req, res) => {
 			);
 		}
 
+		require("../../utils/depositEvents").notifyDepositRequestCreated(
+			user,
+			amount,
+			"FluxKripto",
+		);
+
 		res.json({
 			success: true,
 			data: serializeTransaction(transaction),
