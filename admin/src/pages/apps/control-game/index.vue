@@ -513,10 +513,19 @@ const playersTableRowsAll = computed(() =>
 	);
 
 // "Sadece Deneme Bonusu Alanlar" filtresi açıksa listeyi daraltır.
-// Bilgi amaçlıdır — RTP/oyun sonucu hesaplamasına dahil değildir.
+// ÖNEMLİ: tablodaki "Deneme Bonusu (bizzodeneme)" rozeti `agentSource === "trial"`
+// alanına bakarak gösteriliyor (kullanıcının ŞU AN aktif/sonlanmamış deneme
+// bonusu kilidiyle bizzodeneme agent'ında olup olmadığı). `_trialBonus`
+// (trialBonusMap) ise TAMAMEN AYRI ve bağımsız bir veri kaynağı — geçmişte
+// onaylanmış claim kayıtlarını gösterir, aktif/güncel durumla senkron
+// değildir. Filtre eskiden `_trialBonus`'a bakıyordu, bu yüzden rozette
+// "Deneme Bonusu (bizzodeneme)" görünen ama _trialBonus'ta karşılığı
+// olmayan (veya tersi) satırlar filtrelenmiyordu. Artık rozetle AYNI alana
+// (`agentSource`) bakıyor, böylece filtre açıkken "Normal" rozetli satırlar
+// asla görünmüyor.
 const playersTableRows = computed(() =>
 	trialBonusOnlyFilter.value
-	? playersTableRowsAll.value.filter((row) => row._trialBonus)
+	? playersTableRowsAll.value.filter((row) => row.agentSource === "trial")
 	: playersTableRowsAll.value,
 	);
 
