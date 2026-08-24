@@ -1,5 +1,6 @@
 const ticketService = require("../services/ticketService");
 const raceService = require("../services/raceService");
+const trialBonusService = require("../services/trialBonusService");
 
 /**
  * 🎯 Merkezi "bahis sonuçlandı" hook'u.
@@ -30,6 +31,12 @@ const onBetSettled = ({ userId, amount, category = "originals", providerCode = n
 		.recordWagerForRaces({ userId, wagerAmount, providerCode, gameCategory: category })
 		.catch((err) => {
 			console.error("❌ onBetSettled → recordWagerForRaces hatası:", err.message);
+		});
+
+	trialBonusService
+		.checkTrialBonusWageringCompletion(userId)
+		.catch((err) => {
+			console.error("❌ onBetSettled → trial bonus çevrim kontrolü hatası:", err.message);
 		});
 };
 

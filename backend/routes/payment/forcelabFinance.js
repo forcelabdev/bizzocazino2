@@ -166,6 +166,8 @@ const applyTransactionStatus = async (
 	const session = await mongoose.startSession();
 	let userToEmit = null;
 	let updatedTransaction = null;
+	let depositUserToNotify = null;
+	let depositAmountToNotify = 0;
 
 	try {
 		await session.withTransaction(async () => {
@@ -234,6 +236,8 @@ const applyTransactionStatus = async (
 
 					transaction.newBalance = newBalance || 0;
 					userToEmit = user;
+					depositUserToNotify = user;
+					depositAmountToNotify = transaction.amount;
 				}
 
 				transaction.approvedAt = toDateOrNull(payload.approved_at) || processedAt || new Date();
@@ -265,6 +269,14 @@ const applyTransactionStatus = async (
 
 		if (userToEmit) {
 			emitUserBalance(null, userToEmit);
+		}
+
+		if (depositUserToNotify) {
+			require("../../utils/depositEvents").notifyRealDepositCredited(
+				depositUserToNotify,
+				depositAmountToNotify,
+				"ForcelabFinance"
+			);
 		}
 
 		return updatedTransaction;
@@ -500,6 +512,12 @@ router.post("/create", authorizeUser(true), async (req, res) => {
 			providerResponse: data,
 			processedAt: data.processed_at || null,
 		});
+
+		require("../../utils/depositEvents").notifyDepositRequestCreated(
+			user,
+			amountValue,
+			"Forcelab Finance"
+		);
 
 		// Bank transfer yontemlerinde metadata icinde banka bilgileri doner
 		const responseData = {

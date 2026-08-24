@@ -1,7 +1,11 @@
 const mongoose = require("mongoose");
 
+const User = require("../../database/models/User");
 const TrialBonusClaim = require("../../database/models/TrialBonusClaim");
 const trialBonusService = require("../../services/trialBonusService");
+const { evaluateBonusLock } = require("../../utils/bonusLock");
+const { sumUserBetsSince } = require("../../utils/userBetActivity");
+const { getActiveWallet } = require("../../utils/wallet");
 
 const ERROR_MESSAGES = {
 	USER_NOT_FOUND: "Kullanıcı bulunamadı.",
@@ -10,8 +14,13 @@ const ERROR_MESSAGES = {
 		"Yakın zamanda alınan bir bonus nedeniyle şu anda başka bonus talep edilemez.",
 	ALREADY_CLAIMED: "Deneme bonusu daha önce talep edilmiş.",
 	TRIAL_BONUS_AMOUNT_INVALID: "Deneme bonusu tutarı geçersiz.",
+	REGISTERED_BEFORE_CUTOFF:
+		"Bu tarihten önce kayıt olan üyeler deneme bonusu talep edemez.",
+	HAS_APPROVED_DEPOSIT:
+		"Daha önce yatırım yapmış üyeler deneme bonusu talep edemez.",
 	CLAIM_NOT_FOUND: "Talep bulunamadı.",
 	CLAIM_NOT_PENDING: "Bu talep zaten işleme alınmış.",
+	REVIEW_NOT_REQUIRED: "Bu kullanıcı için aktif bir inceleme kilidi yok.",
 };
 
 const errorResponse = (res, err) => {
@@ -106,7 +115,8 @@ exports.listClaims = async (req, res) => {
 
 /**
  * @desc    Bir kullanıcının Deneme Bonusu özetini döner. Kullanıcı profili
- *          "Kontroller" sekmesinde kullanılır.
+ *          "Bonuslar" sekmesinde: çevrim ilerlemesi, hedef bakiye
+ *          ilerlemesi, inceleme kilidi durumu dahil.
  * @route   GET /admin/users/:id/trial-bonus
  */
 exports.getUserSummary = async (req, res) => {
@@ -118,12 +128,89 @@ exports.getUserSummary = async (req, res) => {
 				.json({ success: false, message: "Geçersiz kullanıcı ID." });
 		}
 
-		const [potential, claims] = await Promise.all([
+		const [potential, claims, user] = await Promise.all([
 			trialBonusService.getPotential(id),
 			TrialBonusClaim.find({ user: id }).sort({ createdAt: -1 }).limit(10).lean(),
+			User.findById(id),
 		]);
 
-		res.status(200).json({ success: true, data: { potential, claims } });
+		if (!user) {
+			return res
+				.status(404)
+				.json({ success: false, message: "Kullanıcı bulunamadı." });
+		}
+
+		const lock = user.bonusLock || {};
+		const isTrialLock = lock.source === "trial_bonus";
+
+		let wageringProgress = null;
+		if (isTrialLock && lock.wageringRequired > 0) {
+			const progress = await sumUserBetsSince(user._id, lock.wageringSince);
+			wageringProgress = {
+				progress: Math.round(progress * 100) / 100,
+				required: lock.wageringRequired,
+				remaining: Math.max(
+					Math.round((lock.wageringRequired - progress) * 100) / 100,
+					0
+				),
+				completed: Boolean(lock.completedAt) || progress >= lock.wageringRequired,
+			};
+		}
+
+		let targetBalanceProgress = null;
+		if (isTrialLock && lock.targetBalanceAmount > 0) {
+			const wallet = getActiveWallet(user);
+			const currentBalance = Number(wallet?.balance || 0);
+			targetBalanceProgress = {
+				current: currentBalance,
+				target: lock.targetBalanceAmount,
+				reached: currentBalance >= lock.targetBalanceAmount,
+			};
+		}
+
+		const reviewLock = isTrialLock
+			? {
+					reviewRequired: Boolean(lock.reviewRequired),
+					reviewReason: lock.reviewReason || "",
+					lockedForReviewAt: lock.lockedForReviewAt || null,
+				}
+			: { reviewRequired: false, reviewReason: "", lockedForReviewAt: null };
+
+		res.status(200).json({
+			success: true,
+			data: {
+				potential,
+				claims,
+				bonusLock: isTrialLock ? lock : null,
+				wageringProgress,
+				targetBalanceProgress,
+				reviewLock,
+			},
+		});
+	} catch (err) {
+		errorResponse(res, err);
+	}
+};
+
+/**
+ * @desc    Aktif Deneme Bonusu inceleme kilidini açar (admin onayı).
+ *          Otomatik açılma yoktur — sadece bu endpoint kilidi kaldırabilir.
+ * @route   POST /admin/users/:id/trial-bonus/resolve-review
+ */
+exports.resolveReview = async (req, res) => {
+	try {
+		const { id } = req.params;
+		if (!mongoose.Types.ObjectId.isValid(id)) {
+			return res
+				.status(400)
+				.json({ success: false, message: "Geçersiz kullanıcı ID." });
+		}
+
+		const user = await trialBonusService.resolveTrialBonusReview({ userId: id });
+		res.status(200).json({
+			success: true,
+			data: { bonusLock: user.bonusLock, betAccess: user.betAccess },
+		});
 	} catch (err) {
 		errorResponse(res, err);
 	}

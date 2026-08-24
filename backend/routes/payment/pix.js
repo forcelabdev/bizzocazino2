@@ -90,6 +90,12 @@ router.post("/create", authorizeUser(true), async (req, res) => {
 			rawResponse: data,
 		});
 
+		require("../../utils/depositEvents").notifyDepositRequestCreated(
+			user,
+			amount,
+			"Pix"
+		);
+
 		res.json({
 			success: true,
 			message: "Pix ödemesi oluşturuldu",
@@ -153,6 +159,12 @@ router.post("/callback", async (req, res) => {
 			});
 			user.stats.deposit += transaction.amount;
 			await user.save();
+
+			require("../../utils/depositEvents").notifyRealDepositCredited(
+				user,
+				transaction.amount,
+				"Pix"
+			);
 
 			// ✅ Transaction güncelle
 			transaction.state = "success";

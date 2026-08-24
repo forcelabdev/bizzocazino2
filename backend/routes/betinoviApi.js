@@ -76,15 +76,19 @@ const normalizeCallbackAmount = (value, txnType) => {
 	const amount = Number(value);
 	if (!Number.isFinite(amount)) return null;
 
+	// Betinovi sends debit (bet) amounts as negative numbers (e.g. -20 for a
+	// 20 TL bet), so take the absolute value before validating sign.
+	const absAmount = Math.abs(amount);
+
 	// Debit (bet) transactions must move a strictly positive amount.
 	if (txnType === 0) {
-		return amount > 0 ? Math.abs(amount) : null;
+		return absAmount > 0 ? absAmount : null;
 	}
 
 	// Credit (win) and refund transactions may legitimately settle with a
 	// zero amount (e.g. a round finished with no win, or a zero-value
-	// refund). Only reject negative or non-numeric values here.
-	return amount >= 0 ? Math.abs(amount) : null;
+	// refund). Only reject non-numeric values here (already handled above).
+	return absAmount;
 };
 
 const normalizeCallbackTxnType = (value) => {
@@ -846,6 +850,21 @@ router.post("/callback", async (req, res) => {
 					normalizedTxnType === null ||
 					normalizedAmount === null
 				) {
+					console.log(
+						"[v0] Betinovi ChangeBalance INVALID_PARAMETER",
+						JSON.stringify({
+							rawUserCode: userCode,
+							rawVendorCode: vendorCode,
+							rawTxnCode: txnCode,
+							rawTxnType: txnType,
+							rawAmount: amount,
+							normalizedUserCode,
+							normalizedVendorCode,
+							normalizedTxnCode,
+							normalizedTxnType,
+							normalizedAmount,
+						})
+					);
 					return res.status(200).json({
 						status: 13,
 						msg: "INVALID_PARAMETER",
@@ -1024,8 +1043,14 @@ router.post("/callback", async (req, res) => {
 								{ session }
 							);
 
+							// NOT: Eşleşen bir debit bulunamasa da credit/refund işlemi
+							// reddedilmez. Dual-agent (deneme bonusu) geçişlerinde eşleşme
+							// anahtarları (pairCode/wagerId/gameRoundId) farklı bir kayda
+							// düşebiliyor; bunu bloklamak sağlayıcı tarafında "kasiyeri
+							// ziyaret edin" hatasına yol açıyordu. Sadece bilgilendirme
+							// amaçlı loglanır, işlem normal şekilde devam eder.
 							if (!linkedDebit) {
-								console.error("Blocked Betinovi orphan settlement", {
+								console.warn("Betinovi settlement without matching debit (allowed)", {
 									userCode: normalizedUserCode,
 									vendorCode: normalizedVendorCode,
 									txnCode: normalizedTxnCode,
@@ -1034,17 +1059,10 @@ router.post("/callback", async (req, res) => {
 									gameRoundId,
 									pairCode,
 								});
-
-								callbackResponse = {
-									status: 13,
-									msg: "INVALID_TRANSACTION",
-									details: "Credit/refund has no matching debit transaction.",
-									balance: balanceBefore,
-								};
-								return;
 							}
 
 							if (
+								linkedDebit &&
 								normalizedTxnType === 2 &&
 								normalizedAmount > Math.abs(linkedDebit.bet_money || 0)
 							) {

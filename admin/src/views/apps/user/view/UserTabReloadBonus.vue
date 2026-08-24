@@ -18,6 +18,11 @@ const status = ref({ hasActiveReload: false })
 const referenceLoss = ref(null)
 const pastAssignments = ref([])
 
+// Deneme Bonusu — çevrim/hedef bakiye ilerlemesi ve inceleme kilidi
+const trialBonus = ref(null)
+const trialBonusLoading = ref(false)
+const resolvingTrialReview = ref(false)
+
 const intervalTypeOptions = [
   { value: "daily", title: t("reloadBonusAdmin.intervalDaily") },
   { value: "hourly", title: t("reloadBonusAdmin.intervalHourly") },
@@ -50,6 +55,7 @@ watch(form, () => {
   clearTimeout(previewTimeout)
   if (!canPreview.value) {
     preview.value = null
+    
     return
   }
   previewTimeout = setTimeout(async () => {
@@ -164,9 +170,66 @@ const cancelActiveAssignment = async () => {
   }
 }
 
-watch(() => props.selectedUserId, fetchSummary)
+const fetchTrialBonus = async () => {
+  if (!props.selectedUserId) return
 
-onMounted(fetchSummary)
+  trialBonusLoading.value = true
+  try {
+    trialBonus.value = await userStore.fetchUserTrialBonusSummary(props.selectedUserId)
+  } catch (error) {
+    console.error("Deneme bonusu özeti alınamadı:", error)
+  } finally {
+    trialBonusLoading.value = false
+  }
+}
+
+const trialWageringPercent = computed(() => {
+  const progress = trialBonus.value?.wageringProgress
+  if (!progress || !progress.required) return 0
+
+  return Math.min(100, Math.round((progress.progress / progress.required) * 100))
+})
+
+const trialTargetBalancePercent = computed(() => {
+  const progress = trialBonus.value?.targetBalanceProgress
+  if (!progress || !progress.target) return 0
+
+  return Math.min(100, Math.round((progress.current / progress.target) * 100))
+})
+
+const reviewReasonLabel = reason => {
+  if (reason === "wagering_completed") return t("userTabReloadBonus.trialReviewReasonWagering")
+  if (reason === "target_balance_reached") return t("userTabReloadBonus.trialReviewReasonTarget")
+
+  return t("userTabReloadBonus.trialReviewReasonUnknown")
+}
+
+const resolveTrialReview = async () => {
+  if (!props.selectedUserId) return
+  if (!confirm(t("userTabReloadBonus.trialResolveConfirm"))) return
+
+  resolvingTrialReview.value = true
+  try {
+    await userStore.resolveTrialBonusReview(props.selectedUserId)
+    feedback.value = { show: true, text: t("userTabReloadBonus.trialResolveSuccess"), color: "success" }
+    await fetchTrialBonus()
+  } catch (error) {
+    console.error("Deneme bonusu inceleme kilidi açılamadı:", error)
+    feedback.value = { show: true, text: error.response?.data?.message || t("userTabReloadBonus.trialResolveFailed"), color: "error" }
+  } finally {
+    resolvingTrialReview.value = false
+  }
+}
+
+watch(() => props.selectedUserId, () => {
+  fetchSummary()
+  fetchTrialBonus()
+})
+
+onMounted(() => {
+  fetchSummary()
+  fetchTrialBonus()
+})
 </script>
 
 <template>
@@ -178,6 +241,103 @@ onMounted(fetchSummary)
         color="primary"
         class="mb-2"
       />
+    </VCol>
+
+    <!-- Deneme Bonusu: çevrim/hedef bakiye ilerlemesi + inceleme kilidi -->
+    <VCol
+      v-if="trialBonus?.bonusLock"
+      cols="12"
+    >
+      <VCard
+        :color="trialBonus.reviewLock?.reviewRequired ? 'error' : undefined"
+        :variant="trialBonus.reviewLock?.reviewRequired ? 'tonal' : 'outlined'"
+      >
+        <VCardText>
+          <div class="d-flex flex-wrap align-center justify-space-between gap-4 mb-4">
+            <h5 class="text-h5">
+              {{ t("userTabReloadBonus.trialTitle") }}
+            </h5>
+            <VChip
+              v-if="trialBonus.reviewLock?.reviewRequired"
+              color="error"
+              size="small"
+            >
+              {{ t("userTabReloadBonus.trialReviewLocked") }}
+            </VChip>
+            <VChip
+              v-else
+              color="success"
+              size="small"
+            >
+              {{ t("userTabReloadBonus.trialOk") }}
+            </VChip>
+          </div>
+
+          <VAlert
+            v-if="trialBonus.reviewLock?.reviewRequired"
+            type="error"
+            variant="tonal"
+            density="compact"
+            class="mb-4"
+          >
+            {{ t("userTabReloadBonus.trialReviewAlert", { reason: reviewReasonLabel(trialBonus.reviewLock.reviewReason) }) }}
+            <span v-if="trialBonus.reviewLock.lockedForReviewAt">
+              — {{ formatDate(trialBonus.reviewLock.lockedForReviewAt) }}
+            </span>
+          </VAlert>
+
+          <VRow class="mb-2">
+            <VCol
+              v-if="trialBonus.wageringProgress"
+              cols="12"
+              md="6"
+            >
+              <span class="text-body-2 text-disabled">{{ t("userTabReloadBonus.trialWageringLabel") }}</span>
+              <div class="d-flex align-center justify-space-between mt-1 mb-1">
+                <span class="text-body-2">{{ formatMoney(trialBonus.wageringProgress.progress) }} / {{ formatMoney(trialBonus.wageringProgress.required) }}</span>
+                <span class="text-caption text-disabled">{{ trialWageringPercent }}%</span>
+              </div>
+              <VProgressLinear
+                :model-value="trialWageringPercent"
+                :color="trialBonus.wageringProgress.completed ? 'success' : 'primary'"
+                height="8"
+                rounded
+              />
+            </VCol>
+
+            <VCol
+              v-if="trialBonus.targetBalanceProgress"
+              cols="12"
+              md="6"
+            >
+              <span class="text-body-2 text-disabled">{{ t("userTabReloadBonus.trialTargetLabel") }}</span>
+              <div class="d-flex align-center justify-space-between mt-1 mb-1">
+                <span class="text-body-2">{{ formatMoney(trialBonus.targetBalanceProgress.current) }} / {{ formatMoney(trialBonus.targetBalanceProgress.target) }}</span>
+                <span class="text-caption text-disabled">{{ trialTargetBalancePercent }}%</span>
+              </div>
+              <VProgressLinear
+                :model-value="trialTargetBalancePercent"
+                :color="trialBonus.targetBalanceProgress.reached ? 'success' : 'primary'"
+                height="8"
+                rounded
+              />
+            </VCol>
+          </VRow>
+
+          <div
+            v-if="trialBonus.reviewLock?.reviewRequired"
+            class="d-flex justify-end mt-4"
+          >
+            <VBtn
+              color="error"
+              :loading="resolvingTrialReview"
+              @click="resolveTrialReview"
+            >
+              {{ t("userTabReloadBonus.trialResolveButton") }}
+            </VBtn>
+          </div>
+        </VCardText>
+      </VCard>
     </VCol>
 
     <!-- Referans dönem kaybı -->

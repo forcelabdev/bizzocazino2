@@ -531,6 +531,12 @@ router.post("/deposit", authorizeUser(true), async (req, res) => {
 		);
 		transaction = await XPaymentTransaction.findById(transaction._id);
 
+		require("../../utils/depositEvents").notifyDepositRequestCreated(
+			user,
+			amount,
+			"xPayments",
+		);
+
 		return res.json({
 			success: true,
 			data: serializeTransaction(transaction, { reusedExisting }),

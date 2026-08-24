@@ -2644,6 +2644,14 @@ router.get(
 	trialBonusController.getUserSummary,
 );
 
+// Deneme Bonusu — İnceleme Kilidi: çevrim/hedef bakiye tamamlandığında
+// otomatik tetiklenir, SADECE bu endpoint ile (admin onayı) kapatılabilir.
+router.post(
+	"/users/:id/trial-bonus/resolve-review",
+	checkPermission("finance.trialBonus.manage"),
+	trialBonusController.resolveReview,
+);
+
 // CRM Raporu (yatırım aralığı, alınan/eklenen bonus, bakiye kırılımı)
 router.get(
 	"/crm-report/summary",
@@ -2754,9 +2762,13 @@ router.get(
 	async (req, res) => {
 		try {
 			const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
-			const limit = Math.max(
-				parseInt(req.query.itemsPerPage || req.query.limit, 10) || 20,
-				1,
+			const limit = Math.min(
+				Math.max(
+					parseInt(req.query.itemsPerPage || req.query.limit, 10) ||
+						20,
+					1,
+				),
+				5000,
 			);
 			const { q = "", kind, direction, actorId, userId } = req.query;
 
@@ -4040,7 +4052,7 @@ router.put(
 			}
 		}
 
-		// Number alanlarını string'den Number'a çevir
+		// Number alanlarını string'den Number'a ��evir
 		const numberFields = [
 			"provider_id", "has_lobby", "is_mobile", "has_freespins",
 			"has_tables", "only_demo", "status", "lobby_id", "rtp",
@@ -7895,7 +7907,7 @@ router.get(
 			const pageNum = Math.max(parseInt(page, 10) || 1, 1);
 			const limitNum = Math.min(
 				Math.max(parseInt(limit, 10) || 20, 1),
-				100,
+				5000,
 			);
 
 			const query = { type: "deposit" };
@@ -8017,7 +8029,7 @@ router.get(
 			const pageNum = Math.max(parseInt(page, 10) || 1, 1);
 			const limitNum = Math.min(
 				Math.max(parseInt(limit, 10) || 20, 1),
-				100,
+				5000,
 			);
 
 			const query = { type: "withdraw" };
@@ -10613,7 +10625,7 @@ router.put(
 
 // ═══════════════════════════════════════════════════════════════════════════
 // SMS OTP Ayarları (SiteSettings içinde)
-// ════════════════════════════════════��════════════════════════════════���═════
+// ════════════════════════════════════��═��══════════════════════════════���═════
 
 const normalizePositiveInteger = (value, fallback = 0) => {
 	const parsed = Number.parseInt(value, 10);

@@ -7,7 +7,7 @@ const MAX_NOTIFICATIONS = 200;
  * Yeni bir admin bildirimi oluşturur, veritabanına kaydeder ve
  * panelde oturum açmış tüm adminlere Socket.IO ile anlık olarak yayınlar.
  *
- * @param {"withdraw"|"new_user"|"sanction"} type
+ * @param {"withdraw"|"deposit"|"new_user"|"sanction"} type
  * @param {string} title
  * @param {string} message
  * @param {string} [link]

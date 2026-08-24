@@ -239,6 +239,12 @@ module.exports = (io) => {
         }
 
         await Promise.all(promises);
+
+        require("../../utils/depositEvents").notifyRealDepositCredited(
+          { _id: userId, username: user.username },
+          totalAmount,
+          "Oxapay (Kripto)"
+        );
       } else {
         console.error("İşlem zaten işlenmiş veya geçersiz ödeme durumu.");
       }

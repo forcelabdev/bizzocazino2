@@ -18,6 +18,59 @@ görür. Bu doküman dış/partner site entegrasyonlarını (API-key korumalı,
 kullanıcı adı maskelenmiş endpoint'ler) KAPSAMAZ — onlar zaten `betcolabs`,
 `betinovi` gibi harici sağlayıcılar için ayrı bir mekanizmadır.
 
+## 0.1 Sunucunuza Taşımanız Gereken Dosyalar (bağımlılık zinciri)
+
+`trialBonusService.js` gibi servis dosyaları başka model/util dosyalarına
+`require` ile bağımlıdır. Sunucunuzda **"Cannot find module"** hatası
+almamak için, bu chat'te değişen/eklenen dosyalarla birlikte **altlarında
+listelenen tüm bağımlılıkları da** taşıyın (zaten sunucunuzda aynı isimle
+varsa üzerine yazmanız yeterli, YOKSA eksik demektir, eklemelisiniz):
+
+**Route dosyaları (bu chat'te değişen/yeni):**
+- `routes/index.js` (değişti — yeni route mount edildi)
+- `routes/sportsTournamentUserApi.js` (**yeni dosya**)
+- `routes/sportsTournamentApi.js`
+- `routes/raceApi.js`
+- `routes/promoCodes.js`
+- `routes/bonus/index.js`
+
+**Servis dosyaları:**
+- `services/sportsTournamentService.js` (değişti — `getUserRank` eklendi)
+- `services/trialBonusService.js`
+- `services/depositBonusService.js`
+- `services/lossBonusService.js`
+- `services/reloadBonusService.js`
+- `services/promoCodeService.js`
+- `services/raceService.js`
+- `services/adminManualAdjustmentService.js`
+
+**Model dosyaları (`database/models/`):**
+- `User.js`, `TrialBonusSetting.js`, `TrialBonusClaim.js`
+- `DepositBonusSetting.js`, `DepositBonusClaim.js`
+- `LossBonusSetting.js`, `LossBonusClaim.js`
+- `ReloadBonusSetting.js`, `ReloadBonusAssignment.js`, `ReloadBonusClaim.js`
+- `PromoCode.js`, `PromoCodeClaim.js`
+- `ForcelabFinanceTransaction.js`, `BalanceTransaction.js`
+- `RaceTournament.js`, `RaceEntry.js`
+- `SportsTournament.js`, `SportsBet.js`
+- `Bonus.js`, `BonusHistory.js`, `CryptoTransaction.js`
+
+**Utils dosyaları (`utils/`):**
+- `rivoWallet.js`, `bonusLock.js` (değişti — İnceleme Kilidi eklendi)
+- `trialBonusReviewKick.js` (**yeni dosya** — `bonusLock.js`'in bağımlısı)
+- `userFinanceTotals.js`, `userBetActivity.js`
+- `promoConditionEngine.js`
+- `wallet.js`
+
+**Middleware dosyaları (`middleware/`):**
+- `auth.js`, `permission.js`
+
+Bu listedeki her dosya için: sunucunuzda **aynı yol ve isimle** yoksa hata
+almaya devam edersiniz. En hızlı yol: bu proje ile sunucunuzdaki `backend/`
+klasörünü karşılaştırıp eksik olan dosyaları tek tek yüklemek (tüm `backend/`
+klasörünü topluca üzerine yazmayın — sunucunuzda olup burada olmayan başka
+özel değişiklikleriniz olabilir).
+
 ## 0. Genel Bilgiler
 
 ### Base URL
@@ -71,17 +124,18 @@ Deneme, Yatırım ve Kayıp bonusları **aynı kilidi** (`bonusLock`) paylaşır
 aktifken diğerleri talep edilemez. Reload Bonusu ise tamamen **bağımsız**
 kendi kilidine (`reloadLock`) sahiptir — Reload aktifken diğer bonuslar
 etkilenmez, diğer bonuslar aktifken Reload etkilenmez. Çekim (withdraw) ise
-HER İKİ kilit türünden biri "çevrim bazlı" ve aktifse engellenir.
+HER İKİ kilit türünden biri "çevrim bazlı" (`"wagering"`) VEYA "inceleme"
+(`"review"`, bkz. aşağı) tipinde ve aktifse engellenir.
 
 Kilit durumunu tek seferde öğrenmek için:
 
 ### GET /users/wagering-status
 
 - Auth: Zorunlu
-- Amaç: Aktif bir Yatırım/Kayıp Bonusu çevrimi (`bonusLock`) ve/veya bağımsız
-  bir Reload Bonusu çevrimi (`reloadLock`) olup olmadığını, ilerlemeyi ve
-  çekimin engellenip engellenmediğini döner. Bonus Merkezi ana sayfasında
-  "aktif bonus / kalan çevrim" kartı için kullanılır.
+- Amaç: Aktif bir Yatırım/Kayıp/Deneme Bonusu kilidi (`bonusLock`) ve/veya
+  bağımsız bir Reload Bonusu çevrimi (`reloadLock`) olup olmadığını,
+  ilerlemeyi ve çekimin engellenip engellenmediğini döner. Bonus Merkezi ana
+  sayfasında "aktif bonus / kalan çevrim" kartı için kullanılır.
 
 ```json
 {
@@ -107,9 +161,75 @@ Kilit durumunu tek seferde öğrenmek için:
 `bonus_lock.type` değerleri:
 - `"wagering"`: Çevrim bazlı kilit, hem yeni bonus talebini hem çekimi
   engeller. `wageringRemaining` sıfıra ininceye kadar aktiftir.
+- `"review"`: **Deneme Bonusu — İnceleme Kilidi** (yeni). Deneme bonusu
+  çevrim şartı tamamlandığında VEYA hedef bakiyeye ulaşıldığında otomatik
+  devreye girer. Hem yeni bonus talebini hem çekimi engeller; **ayrıca
+  kullanıcı bahis/oyun açamaz** (bkz. aşağıdaki "Deneme Bonusu İnceleme
+  Kilidi" notu) ve aktif oturumu soket üzerinden anında kesilir. `wagering`
+  tipinden farklı olarak süre/tutar ilerlemesi göstermez, **sadece admin**
+  "İncelemeyi Tamamla" dediğinde kapanır — frontend'de geri sayım/ilerleme
+  çubuğu YERİNE sabit bir "hesabınız incelemede, canlı destek ile iletişime
+  geçin" mesajı gösterilmelidir. Ek alanlar: `source` (örn. `"trial_bonus"`),
+  `reviewReason` (`"wagering_completed"` veya `"target_balance_reached"`),
+  `lockedForReviewAt`.
 - `"time"`: Sadece zaman bazlı (eski/basit davranış), yalnızca yeni bonus
   talebini engeller — çekimi ENGELLEMEZ. `blockedUntil` alanı bulunur.
 - `bonus_lock.active === false` ise kilit yok, ikisi de serbest.
+
+> ⚠️ **Frontend düzeltmesi (bu güncellemede yapıldı):** `withdrawal_blocked`
+> alanı önceden yalnızca `type === "wagering"` için `true` dönüyordu; `type
+> === "review"` durumunda `false` görünüyordu ki bu **yanlıştı** (backend
+> çekim talebini `assertWithdrawalNotBlocked` içinde `review` için de
+> reddediyor). Artık `withdrawal_blocked`, `"wagering"` VEYA `"review"`
+> tipinde `true` döner — frontend tarafında bu alana güvenerek çekim
+> butonunu gizleyen/deaktif eden bir mantık varsa ek bir kontrole gerek yok,
+> otomatik doğru davranacaktır.
+
+### Deneme Bonusu — İnceleme Kilidi (Trial Bonus Review Lock) — YENİ
+
+Bu, sadece Deneme Bonusu'na özel, diğer bonus kilitlerinden **daha katı** bir
+durumdur. Kullanıcı deneme bonusunu aldıktan sonra:
+- Çevrim şartını tamamlarsa (`reviewReason: "wagering_completed"`), **veya**
+- (Ayarda açıksa) hedef bakiyeye ulaşırsa (`reviewReason:
+  "target_balance_reached"`),
+
+otomatik olarak bu kilide girer. Bu andan itibaren:
+
+1. `GET /users/wagering-status` → `bonus_lock.type === "review"` döner.
+2. Kullanıcı **bahis yapamaz / oyun açamaz** — oyun açma isteği backend'de
+   `betAccess.blocked = true, reason: "trial_bonus_review"` nedeniyle
+   reddedilir. Bu, genel "hesap askıya alındı" akışından **farklı** bir
+   sebep koduyla gelir; frontend oyun açma hata mesajını buna göre
+   özelleştirebilir (`reason === "trial_bonus_review"` ise "deneme bonusu
+   incelemesi" mesajı, diğer durumlarda genel askıya alma mesajı).
+3. Kullanıcının aktif oturumu **anında** socket üzerinden kesilir. Frontend
+   şu event'i dinlemelidir:
+
+   ```js
+   socket.on("trial_bonus:review_required", (payload) => {
+     // payload: {
+     //   success: false,
+     //   code: "TRIAL_BONUS_REVIEW",
+     //   message: "Deneme bonusu çevrim/hedef şartı tamamlandı. Hesabınız
+     //             incelemeye alındı, canlı destek ile iletişime geçin.",
+     //   error: { type: "trial_bonus_review", code: "TRIAL_BONUS_REVIEW", message: "..." }
+     // }
+     // Bağlantı bu event'in hemen ardından backend tarafından kesilir.
+     // Frontend: kullanıcıya modal/banner göster, oyun ekranını kapat,
+     // "canlı destek" yönlendirmesi sun.
+   });
+   ```
+
+4. Çekim talebi `400`/uygun hata koduyla reddedilir
+   (`code: "TRIAL_BONUS_REVIEW_REQUIRED"`), mesaj: *"Hesabınız deneme
+   bonusu incelemesi nedeniyle geçici olarak kilitlendi. Canlı destek ile
+   iletişime geçin."*
+
+**Kilit otomatik açılmaz.** Süre dolması, sayfa yenileme, yeniden login gibi
+hiçbir istemci taraflı işlem kilidi kaldırmaz — sadece admin panelinden
+"İncelemeyi Tamamla ve Kilidi Aç" aksiyonu kilidi kapatır. Bonus Merkezi
+arayüzünde bu durumdaki kullanıcıya geri sayım/ilerleme göstermek yerine
+sabit bir "incelemede" durumu ve destek yönlendirmesi gösterilmelidir.
 
 ---
 
@@ -117,6 +237,22 @@ Kilit durumunu tek seferde öğrenmek için:
 
 Kullanıcı hesap başına **bir kez** talep edebilir (partial unique index ile
 veritabanı seviyesinde de garanti edilir).
+
+> **Yeni talep uygunluk kuralları:** Admin ayarlarında iki yeni kısıtlama
+> eklendi, `potential` ve `claim` endpoint'lerinin ikisi de bunları kontrol
+> eder ve uygun değilse `eligible: false` + açıklayıcı `message` döner:
+> - **Kayıt tarihi sınırı** (`registrationCutoffEnabled` + `registeredAfter`):
+>   Belirtilen tarihten ÖNCE kayıt olan kullanıcılar talep edemez. Mesaj:
+>   *"Bu tarihten önce kayıt olan üyeler deneme bonusu talep edemez."*
+> - **Önceden onaylı yatırımı olma durumu** (`blockIfDeposited`): Açıksa,
+>   daha önce en az bir onaylı yatırımı olan kullanıcılar talep edemez.
+>   Mesaj: *"Daha önce yatırım yapmış üyeler deneme bonusu talep edemez."*
+>
+> Ayrıca artık `blockedByOtherBonus` durumunda (bkz. "Ortak bonus kilidi"),
+> kilit tipi `"review"` ise `potential.message` özel olarak *"Hesabınız
+> deneme bonusu incelemesi nedeniyle kilitli. Canlı destek ile iletişime
+> geçin."* döner — bu durumda kullanıcıya "bonus talep et" butonu yerine
+> inceleme durumu gösterilmelidir.
 
 ### GET /bonus/trial/potential
 
@@ -163,9 +299,13 @@ Türkçe, ek çeviri gerekmez):
 
 Olası mesajlar: `Kullanıcı bulunamadı.`, `Deneme bonusu şu anda aktif değil.`,
 `Yakın zamanda alınan bir bonus nedeniyle şu anda başka bonus talep
-edemezsiniz.` (bir bonus_lock aktifken), `Deneme bonusunu daha önce talep
-ettiniz.`, `Deneme bonusu tutarı geçersiz.` — 400; tanımsız hatalar 500 ile
-`Sunucu hatası.` döner.
+edemezsiniz.` (bir bonus_lock aktifken), `Hesabınız deneme bonusu
+incelemesi nedeniyle kilitli. Canlı destek ile iletişime geçin.`
+(`bonus_lock.type === "review"` iken), `Bu tarihten önce kayıt olan üyeler
+deneme bonusu talep edemez.` (kayıt tarihi sınırı), `Daha önce yatırım
+yapmış üyeler deneme bonusu talep edemez.` (`blockIfDeposited`), `Deneme
+bonusunu daha önce talep ettiniz.`, `Deneme bonusu tutarı geçersiz.` — 400;
+tanımsız hatalar 500 ile `Sunucu hatası.` döner.
 
 ---
 
@@ -576,10 +716,32 @@ endpoint'lerin JWT tabanlı olarak yazılmasını talep etmeniz gerekiyor:
 | Spor turnuvası listesi | GET | `/api/user/sports-tournaments` | JWT |
 | Spor turnuvası detay | GET | `/api/user/sports-tournaments/:id` | JWT |
 | Spor turnuvası sıralama + kendi sıram | GET | `/api/user/sports-tournaments/:id/leaderboard` | JWT |
-| Çevrim turnuvası sıralama (dış, maskeli) | GET | `/api/race/:tournamentId/leaderboard` | API-key |
-| Bilet etkinlikleri | — | *(yok — bkz. bölüm 8)* | — |
+  | Çevrim turnuvası sıralama (dış, maskeli) | GET | `/api/race/:tournamentId/leaderboard` | API-key |
+  | Bilet etkinlikleri | — | *(yok — bkz. bölüm 8)* | — |
+  | Deneme bonusu inceleme kilidi bildirimi (socket) | — | `trial_bonus:review_required` | Socket (JWT ile bağlanan aktif oturum) |
+  
+  **Not:** Bu doküman yazılırken, Spor Bahisleri Turnuvası için Bonus
+  Merkezi'ne özel yeni JWT endpoint'leri (`/api/user/sports-tournaments*`) de
+  backend'e eklendi. Çevrim Turnuvası ve Bilet Etkinlikleri için aynısını
+  isterseniz ayrıca belirtmeniz yeterli.
 
-**Not:** Bu doküman yazılırken, Spor Bahisleri Turnuvası için Bonus
-Merkezi'ne özel yeni JWT endpoint'leri (`/api/user/sports-tournaments*`) de
-backend'e eklendi. Çevrim Turnuvası ve Bilet Etkinlikleri için aynısını
-isterseniz ayrıca belirtmeniz yeterli.
+  ---
+
+  ## Değişiklik Geçmişi
+
+  - **Bu güncelleme:**
+    - Deneme Bonusu — İnceleme Kilidi (`bonus_lock.type: "review"`) belgelendi:
+      çevrim/hedef bakiye tamamlandığında otomatik devreye giren, sadece admin
+      onayıyla açılan, bahis+oyun+çekim engelleyen ve aktif oturumu
+      `trial_bonus:review_required` socket event'i ile anında kesen yeni kilit
+      türü.
+    - **Düzeltme:** `GET /users/wagering-status` içindeki `withdrawal_blocked`
+      alanı artık `bonus_lock.type === "review"` durumunda da `true` döner
+      (önceden sadece `"wagering"` için `true` dönüyordu — bu bir hataydı,
+      backend zaten `review` kilidinde çekimi reddediyordu, sadece bu alan
+      tutarsızdı).
+    - Deneme Bonusu talep uygunluğuna (`/bonus/trial/potential`,
+      `/bonus/trial/claim`) iki yeni kural eklendi: kayıt tarihi sınırı
+      (`registrationCutoffEnabled`/`registeredAfter`) ve önceden onaylı
+      yatırımı olma durumu (`blockIfDeposited`) — ilgili yeni hata mesajları
+      Bölüm 1'e eklendi.

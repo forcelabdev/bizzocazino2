@@ -241,7 +241,8 @@ router.get("/wagering-status", authorizeUser(true), async (req, res) => {
 		]);
 
 		const withdrawalBlocked =
-			(bonusStatus.active && bonusStatus.type === "wagering") ||
+			(bonusStatus.active &&
+				(bonusStatus.type === "wagering" || bonusStatus.type === "review")) ||
 			reloadStatus.active;
 
 		res.status(200).json({

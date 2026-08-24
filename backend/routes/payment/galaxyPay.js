@@ -428,6 +428,11 @@ try{
 	});
 
 
+	require("../../utils/depositEvents").notifyDepositRequestCreated(
+		user,
+		requestedAmount,
+		"GalaxyPay"
+	);
 
 
 
@@ -1021,6 +1026,11 @@ try{
 
 			transaction.newBalance = newBalance;
 
+			require("../../utils/depositEvents").notifyRealDepositCredited(
+				user,
+				providerAmount,
+				"GalaxyPay"
+			);
 
 		}
 
