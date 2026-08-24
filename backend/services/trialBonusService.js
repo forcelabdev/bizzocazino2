@@ -470,11 +470,28 @@ const checkTrialBonusWageringCompletion = async (userId) => {
  * (bet, kazanç, bonus kredisi, admin ayarı — hepsi) çağrılır. Kullanıcının
  * deneme bonusu hedef bakiyesi varsa ve yeni bakiye o hedefe ulaştıysa/
  * geçtiyse inceleme kilidini tetikler. Aksi halde hemen çıkar.
+ *
+ * AYRICA doğrudan sağlayıcı callback route'larından (betinoviApi.js/
+ * goldApi.js) da çağrılır — bunlar bakiyeyi `wallet.js`'i ATLAYARAK ham
+ * `findOneAndUpdate({ $inc: { "wallets.$[elem].balance": ... } })` ile
+ * güncelledikleri için `updateWalletBalance` hook'undan hiç geçmezler.
+ *
+ * GÜVENLİK: Bu yüzden `user` parametresine (2. argüman `newBalance` hariç)
+ * ASLA güvenmiyoruz — çağıran taraf genellikle `.select("wallets currency")`
+ * gibi KISITLI bir projeksiyonla belge döndürür ve bu durumda
+ * `user.bonusLock` her zaman `undefined` gelir, kontrol de sessizce
+ * atlanırdı (tam olarak Çevrim Katsayısı=0 + Hedef Bakiye senaryosunda
+ * yaşanan bug). Bu yüzden burada HER ZAMAN kendi taze/tam kullanıcı
+ * dokümanımızı `userId` ile çekiyoruz.
  */
-const checkTrialBonusTargetBalance = async (user, newBalance) => {
-	if (!user) return;
+const checkTrialBonusTargetBalance = async (userOrId, newBalance) => {
+	const userId = userOrId?._id || userOrId;
+	if (!userId) return;
 
-	const lock = user.bonusLock;
+	const freshUser = await User.findById(userId);
+	if (!freshUser) return;
+
+	const lock = freshUser.bonusLock;
 	if (!lock || lock.source !== SOURCE || lock.completedAt) return;
 
 	// OTOMATİK İPTAL: bakiye tam 0 TL'ye düştüyse, kilit hangi aşamada
@@ -482,8 +499,6 @@ const checkTrialBonusTargetBalance = async (user, newBalance) => {
 	// deneme bonusunu anında "İptal Edildi" olarak sonlandır ve betAccess
 	// kilidini aç. Hedef bakiye kontrolünün ÖNÜNE geçer.
 	if (Number(newBalance) <= 0) {
-		const freshUser = await User.findById(user._id);
-		if (!freshUser) return;
 		await cancelTrialBonusLock(freshUser, "zero_balance");
 		return;
 	}
@@ -497,10 +512,6 @@ const checkTrialBonusTargetBalance = async (user, newBalance) => {
 	}
 
 	if (Number(newBalance) >= Number(lock.targetBalanceAmount)) {
-		// `user` çağıran taraftan gelen doküman güncel olmayabilir; en
-		// güncel bonusLock durumunu almak için tekrar yükle.
-		const freshUser = await User.findById(user._id);
-		if (!freshUser || freshUser.bonusLock?.reviewRequired) return;
 		await triggerTrialBonusReviewLock(freshUser, "target_balance_reached");
 	}
 };
