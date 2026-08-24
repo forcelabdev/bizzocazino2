@@ -17,6 +17,7 @@ const ForcelabFinanceTransaction = require("../database/models/ForcelabFinanceTr
 const GalaxyPayTransaction = require("../database/models/GalaxyPayTransaction");
 const FluxKriptoTransaction = require("../database/models/FluxKriptoTransaction");
 const XPaymentTransaction = require("../database/models/XPaymentTransaction");
+const AdminManualAdjustment = require("../database/models/AdminManualAdjustment");
 const goldApiRoute = require("./goldApi");
 const drakonApiRoute = require("./drakonApi");
 const betinoviApiRoute = require("./betinoviApi");
@@ -531,27 +532,88 @@ router.get(
 	},
 );
 
-router.get("/bonus-history/:userId", async (req, res) => {
+// Bonus türü koduna göre kullanıcıya gösterilecek Türkçe başlık.
+const BONUS_TYPE_TITLES = {
+	// CryptoTransaction (data.bonusType)
+	welcome: "Hoş Geldin Bonusu",
+	casino_welcome: "Casino Hoş Geldin Bonusu",
+	sports_welcome: "Spor Hoş Geldin Bonusu",
+	live_casino_welcome: "Canlı Casino Hoş Geldin Bonusu",
+	freespin: "Freespin Bonusu",
+	// BalanceTransaction.type
+	promoCodeClaim: "Promosyon Kodu",
+	affiliateCommission: "Affiliate Komisyonu",
+	affiliateEarningClaim: "Affiliate Kazanç Talebi",
+	rakebackClaim: "Rakeback",
+	rainTip: "Yağmur Bonusu",
+	adminAdjust: "Admin Bonusu",
+	// BonusHistory.type (VIP)
+	upgradeReward: "VIP Seviye Ödülü",
+	dailyVipReward: "Günlük VIP Ödülü",
+	// AdminManualAdjustment.source
+	trial_bonus: "Deneme Bonusu",
+	deposit_bonus: "Yatırım Bonusu",
+	loss_bonus: "Kayıp Bonusu",
+	reload_bonus: "Reload Bonusu",
+	manual: "Manuel Bonus",
+	manual_bulk_bonus: "Toplu Bonus",
+};
+
+const bonusTitleFor = (code, fallback) => BONUS_TYPE_TITLES[code] || fallback || code || "Bonus";
+
+router.get(
+	"/bonus-history/:userId",
+	authorizeUser(true),
+	async (req, res) => {
 	try {
 		const { userId } = req.params;
 
-		// 1. CryptoTransactions -> deposit bonusları
-		const cryptoBonuses = await CryptoTransaction.find({
+		// ⚠️ GÜVENLİK: Kullanıcı sadece kendi bonus geçmişini görebilir (IDOR koruması)
+		if (String(req.user?._id || "") !== String(userId)) {
+			return res.status(403).json({
+				success: false,
+				error: "Yalnızca kendi bonus geçmişinizi görüntüleyebilirsiniz.",
+			});
+		}
+
+		// Opsiyonel tarih aralığı filtresi (?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD)
+		const { startDate, endDate } = req.query;
+		const dateFilter = {};
+		if (startDate) {
+			const from = new Date(startDate);
+			if (!Number.isNaN(from.getTime())) dateFilter.$gte = from;
+		}
+		if (endDate) {
+			const to = new Date(endDate);
+			if (!Number.isNaN(to.getTime())) {
+				to.setHours(23, 59, 59, 999);
+				dateFilter.$lte = to;
+			}
+		}
+		const hasDateFilter = Object.keys(dateFilter).length > 0;
+
+		// 1. CryptoTransactions -> yatırım bonusları
+		const cryptoQuery = {
 			user: userId,
 			type: "deposit",
 			"data.bonusAmount": { $gt: 0 },
-		}).lean();
+		};
+		if (hasDateFilter) cryptoQuery.createdAt = dateFilter;
+		const cryptoBonuses = await CryptoTransaction.find(cryptoQuery).lean();
 
 		const mappedCrypto = cryptoBonuses.map((tx) => ({
 			source: "crypto",
 			bonusType: tx.data?.bonusType,
+			title: bonusTitleFor(tx.data?.bonusType, "Yatırım Bonusu"),
 			bonusAmount: tx.data?.bonusAmount,
 			currency: tx.data?.currency,
+			status: "completed",
 			createdAt: tx.createdAt,
 		}));
 
-		// 2. BalanceTransactions -> bonus işlemleri
+		// 2. BalanceTransactions -> bonus/promosyon işlemleri
 		const bonusTypes = [
+			"promoCodeClaim",
 			"affiliateCommission",
 			"affiliateEarningClaim",
 			"rakebackClaim",
@@ -559,29 +621,76 @@ router.get("/bonus-history/:userId", async (req, res) => {
 			"adminAdjust",
 		];
 
-		const balanceBonuses = await BalanceTransaction.find({
-			user: userId,
-			type: { $in: bonusTypes },
-		}).lean();
+		const balanceQuery = { user: userId, type: { $in: bonusTypes } };
+		if (hasDateFilter) balanceQuery.createdAt = dateFilter;
+		const balanceBonuses = await BalanceTransaction.find(balanceQuery).lean();
 
 		const mappedBalance = balanceBonuses.map((tx) => ({
 			source: "balance",
 			bonusType: tx.type,
+			title: bonusTitleFor(tx.type),
 			bonusAmount: tx.amount,
 			currency: null,
+			status: tx.state || "completed",
 			createdAt: tx.createdAt,
 		}));
 
-		const bonusHistories = await BonusHistory.find({
-			userId: userId,
-		}).lean();
+		// 3. BonusHistory -> VIP ödülleri (günlük/seviye yükseltme)
+		const bonusHistoryQuery = { userId };
+		if (hasDateFilter) bonusHistoryQuery.claimedAt = dateFilter;
+		const bonusHistories = await BonusHistory.find(bonusHistoryQuery).lean();
 
 		const mappedHistories = bonusHistories.map((tx) => ({
-			source: "history",
+			source: "vip",
 			bonusType: tx.type,
+			title: bonusTitleFor(tx.type, "VIP Ödülü"),
 			bonusAmount: tx.amount,
 			level: tx.level,
 			currency: null,
+			status: "completed",
+			createdAt: tx.claimedAt,
+		}));
+
+		// 4. AdminManualAdjustment (kind: "bonus") -> Deneme/Yatırım/Kayıp/Reload/Manuel bonuslar
+		// Not: Kampanya bonusları (source: campaign_assign/campaign_revoke) burada
+		// HARİÇ TUTULUR; onlar ayrı olarak CampaignTransaction'dan (adım 5) gelir,
+		// aksi halde aynı bonus iki kez listelenir.
+		const adjustmentQuery = {
+			targetUser: userId,
+			kind: "bonus",
+			direction: "credit",
+			source: { $nin: ["campaign_assign", "campaign_revoke"] },
+		};
+		if (hasDateFilter) adjustmentQuery.createdAt = dateFilter;
+		const manualAdjustments = await AdminManualAdjustment.find(
+			adjustmentQuery
+		).lean();
+
+		const mappedAdjustments = manualAdjustments.map((adj) => ({
+			source: "manual_adjustment",
+			bonusType: adj.source,
+			title: bonusTitleFor(adj.source, adj.category),
+			bonusAmount: adj.appliedAmount,
+			currency: null,
+			status: "completed",
+			note: adj.note || null,
+			createdAt: adj.createdAt,
+		}));
+
+		// 5. CampaignTransaction -> kampanya bonusları
+		const campaignQuery = { user: userId };
+		if (hasDateFilter) campaignQuery.claimedAt = dateFilter;
+		const campaignTransactions = await CampaignTransaction.find(
+			campaignQuery
+		).lean();
+
+		const mappedCampaigns = campaignTransactions.map((tx) => ({
+			source: "campaign",
+			bonusType: "campaign",
+			title: tx.campaignTitle || "Kampanya Bonusu",
+			bonusAmount: tx.rewardAmount,
+			currency: null,
+			status: tx.status || "completed",
 			createdAt: tx.claimedAt,
 		}));
 
@@ -589,14 +698,17 @@ router.get("/bonus-history/:userId", async (req, res) => {
 			...mappedCrypto,
 			...mappedBalance,
 			...mappedHistories,
+			...mappedAdjustments,
+			...mappedCampaigns,
 		].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
-		res.json({ bonuses: allBonuses });
+		res.json({ success: true, bonuses: allBonuses });
 	} catch (error) {
 		console.error("Bonus history error:", error);
-		res.status(500).json({ error: "Server error" });
+		res.status(500).json({ success: false, error: "Server error" });
 	}
-});
+	},
+);
 
 router.get("/game-history/:identifier", async (req, res) => {
 	try {
