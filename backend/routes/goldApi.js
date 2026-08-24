@@ -335,6 +335,155 @@ router.post("/", async (req, res) => {
 				}
 
 				// ============================================================
+				// 2.5) SB (sportsbook) "info" alanını EN BAŞTA çözümle
+				// ============================================================
+				// KÖK NEDEN: Nexus, spor bahsinin SONUÇ bildirimini (won/lost/void)
+				// genellikle bahsin İLK "debit" isteğiyle AYNI txn_id üzerinden
+				// "credit" olarak gönderiyor (bkz. üretim loglarında canlı rulet
+				// örneğinde aynı txn_id'nin önce "debit" sonra "credit" olarak
+				// gelmesi ve "Existing txn found, attempting merge" satırı).
+				// Kod, aynı txn_id ile tekrar istek geldiğinde aşağıdaki "mükerrer
+				// txn_id" birleştirme bloğuna girip SADECE bakiyeyi güncelleyip
+				// erken dönüyordu (early return) — kuponun nihai durumunu
+				// (SportsBet.status / SportsBetEvent sonuçları) ve "info"
+				// içeriğini HİÇ işlemiyordu. Panelde kuponların sürekli "pending"
+				// kalması ve "Maç detayı bulunamadı" görünmesinin asıl sebebi buydu
+				// — Nexus'un "info" alanını göndermemesi değildi.
+				//
+				// Bu yüzden "info" çözümlemesini ve settlement (sonuçlandırma)
+				// mantığını burada, hem "yeni transaction" hem de "mükerrer
+				// txn_id" akışlarının ORTAK olarak kullanabileceği şekilde
+				// tanımlıyoruz.
+				const rawInfo =
+					info ??
+					(game_type === "SB" ? gameDetails?.info : undefined) ??
+					req.body.betInfo ??
+					req.body.bet_info ??
+					req.body.Info ??
+					null;
+
+				let betInfo = {};
+				if (rawInfo) {
+					try {
+						betInfo =
+							typeof rawInfo === "string" ? JSON.parse(rawInfo) : rawInfo;
+					} catch (parseErr) {
+						console.error(
+							"SB info alanı parse edilemedi:",
+							parseErr.message,
+							rawInfo
+						);
+						betInfo = {};
+					}
+				}
+
+				const couponCode = betInfo.couponCode || txn_id;
+				const betStatus = betInfo.status || "pending";
+
+				// Nexus'tan gelen maç/market seçim (betslip) durumunu bizim
+				// SportsBetEvent.status enum'una çeviriyoruz.
+				const mapSlipStatus = (rawStatus) => {
+					const map = {
+						won: "won",
+						win: "won",
+						lost: "lost",
+						lose: "lost",
+						void: "void",
+						cancelled: "cancelled",
+						canceled: "cancelled",
+						push: "void",
+						postponed: "postponed",
+						pending: "pending",
+					};
+					return map[String(rawStatus || "").toLowerCase()] || "pending";
+				};
+
+				// "0:1" veya "2-1" gibi skorları homeScore/awayScore'a ayırır.
+				const parseScore = (scoreStr) => {
+					if (!scoreStr || typeof scoreStr !== "string") return null;
+					const match = scoreStr.match(/^(\d+)\s*[:\-]\s*(\d+)$/);
+					if (!match) return null;
+					return {
+						homeScore: parseInt(match[1], 10),
+						awayScore: parseInt(match[2], 10),
+					};
+				};
+
+				// SB kuponunun/maçının nihai sonucunu (won/lost/void/...) hem
+				// SportsBet hem de SportsBetEvent kayıtlarına işler. Bu fonksiyon
+				// hem "yeni transaction" akışından hem de "mükerrer txn_id"
+				// birleştirme akışından (aynı txn_id ile gelen settlement)
+				// çağrılabiliyor — settlement artık HANGİ yoldan gelirse gelsin
+				// işleniyor.
+				const applySportsBetSettlement = async ({
+					winMoney,
+					balanceBefore,
+					balanceAfter,
+				}) => {
+					if (game_type !== "SB") return;
+					const sportsBet = await SportsBet.findOne({
+						provider: "nexusggr",
+						externalCouponId: couponCode,
+					});
+					if (!sportsBet || sportsBet.status !== "pending") return;
+
+					const statusMap = {
+						won: "won",
+						lost: "lost",
+						cashedout: "cashout",
+						canceled: "cancelled",
+					};
+					const mappedStatus = statusMap[betStatus] || betStatus;
+
+					sportsBet.status = mappedStatus;
+					sportsBet.actualWin = winMoney;
+					sportsBet.settlementBalanceBefore = balanceBefore;
+					sportsBet.settlementBalanceAfter = balanceAfter;
+					sportsBet.settledAt = new Date();
+					await sportsBet.save();
+
+					// Kuponun içindeki her bir maçı (betslip) kendi sonucuna göre
+					// (kazandı/kaybetti/vs.) ayrı ayrı güncelliyoruz.
+					const settledSlips = betInfo.betslips || [];
+					if (settledSlips.length > 0) {
+						const events = await SportsBetEvent.find({
+							bet: sportsBet._id,
+						});
+
+						for (const slip of settledSlips) {
+							const slipEventId = (
+								slip.id || slip.oddPoint || ""
+							).toString();
+							const event = events.find(
+								(ev) => ev.externalEventId === slipEventId
+							);
+							if (!event) continue;
+
+							const liveScore = parseScore(
+								slip.resultScore || slip.betScore
+							);
+
+							event.status = mapSlipStatus(slip.status);
+							event.finalScore =
+								slip.resultScore || slip.betScore || event.finalScore;
+							if (liveScore) {
+								event.homeScore = liveScore.homeScore;
+								event.awayScore = liveScore.awayScore;
+							}
+							event.extra = slip;
+							await event.save();
+						}
+					} else {
+						// Betslip detayı yoksa (eski format vs.) en azından kupon
+						// genel durumunu maçlara da yansıtalım.
+						await SportsBetEvent.updateMany(
+							{ bet: sportsBet._id },
+							{ $set: { status: mappedStatus } }
+						);
+					}
+				};
+
+				// ============================================================
 				// 3) Extract fields with proper fallbacks for SB
 				// ============================================================
 				let provider_code = gameDetails?.provider_code || null;
@@ -479,6 +628,11 @@ router.post("/", async (req, res) => {
 												? "debit_credit"
 												: existingTxn.txn_type,
 										balance_after: balanceAfterMerge,
+										// KÖK NEDEN DÜZELTMESİ: Bu birleştirme (merge) akışı daha
+										// önce "info"/ham webhook verisini hiç saklamıyordu — bu
+										// yüzden ayni txn_id ile gelen settlement (sonuç) bildirimi
+										// sessizce kayboluyordu. Artık merge'de de saklıyoruz.
+										extra: { info: rawInfo, betInfo, rawWebhook: req.body },
 									},
 								}
 							);
@@ -487,6 +641,18 @@ router.post("/", async (req, res) => {
 								_id: user._id,
 								wallets: updatedUserCredit.wallets,
 								currency: user.currency,
+							});
+
+							// KÖK NEDEN DÜZELTMESİ: SB (spor bahis) kuponları Nexus'tan
+							// settlement (won/lost/void) bildirimini genellikle bahsin
+							// AYNI txn_id'siyle "credit" olarak gönderiyor. Bu satır
+							// eklenmeden önce bu birleştirme (merge) yolu erken dönüş
+							// yaptığı için kupon durumu hiçbir zaman "pending" dışına
+							// çıkmıyor ve maç sonuçları hiç işlenmiyordu.
+							await applySportsBetSettlement({
+								winMoney: winMoneyNum,
+								balanceBefore: existingTxn.balance_after,
+								balanceAfter: balanceAfterMerge,
 							});
 
 							return res.status(200).json({
@@ -549,6 +715,9 @@ router.post("/", async (req, res) => {
 										win_money: winMoneyNum,
 										txn_type: "debit_credit",
 										balance_after: balanceAfterMerge,
+										// KÖK NEDEN DÜZELTMESİ: bkz. yukarıdaki "credit" dalındaki
+										// aynı not — merge'de "info"/ham webhook verisini de saklıyoruz.
+										extra: { info: rawInfo, betInfo, rawWebhook: req.body },
 									},
 								}
 							);
@@ -557,6 +726,13 @@ router.post("/", async (req, res) => {
 								_id: user._id,
 								wallets: updatedUserDebitCredit.wallets,
 								currency: user.currency,
+							});
+
+							// KÖK NEDEN DÜZELTMESİ: bkz. yukarıdaki "credit" dalındaki aynı not.
+							await applySportsBetSettlement({
+								winMoney: winMoneyNum,
+								balanceBefore: existingTxn.balance_after,
+								balanceAfter: balanceAfterMerge,
 							});
 
 							return res.status(200).json({
@@ -770,76 +946,15 @@ router.post("/", async (req, res) => {
 					// ============================================================
 					// 10) Handle nexus sportsbook bet tracking
 					// ============================================================
-					// ÖNEMLİ: Daha önce bu blok yalnızca kök seviyede "info" alanı
-					// DOLU geldiğinde çalışıyordu (if (... && info)). Gerçek Nexus
-					// trafiğinde bu alan hiç gelmediği için (bkz. üretim verisi)
-					// spor bahisleri hiçbir zaman SportsBet/SportsBetEvent kaydına
-					// dönüşmüyordu — panelde "Maç detayı bulunamadı" görünmesinin
-					// asıl sebebi buydu. Artık "info" olmasa da bahsi takip
-					// kaydına alıyoruz, olası alternatif alan adlarını da deniyoruz
-					// ve ham webhook body'sini "extra.rawWebhook" içine kaydederek
-					// sağlayıcının gerçek alan adını sonraki canlı bahiste
-					// doğrulayabilmemizi sağlıyoruz.
+					// NOT: "rawInfo"/"betInfo"/"couponCode"/"betStatus" ve
+					// "mapSlipStatus"/"parseScore" artık bu case'in en başında
+					// (2.5 numaralı adımda) TEK SEFER hesaplanıyor; hem burada
+					// (yeni bet oluşturma / ilk kez görülen settlement) hem de
+					// yukarıdaki "mükerrer txn_id" birleştirme akışında aynı
+					// değerler kullanılıyor. Bu sayede iki akış birbirinden
+					// sapmıyor.
 					if (game_type === "SB") {
 						try {
-							const rawInfo =
-								info ??
-								gameDetails?.info ??
-								req.body.betInfo ??
-								req.body.bet_info ??
-								req.body.Info ??
-								SB?.info ??
-								null;
-
-							let betInfo = {};
-							if (rawInfo) {
-								try {
-									betInfo =
-										typeof rawInfo === "string"
-											? JSON.parse(rawInfo)
-											: rawInfo;
-								} catch (parseErr) {
-									console.error(
-										"SB info alanı parse edilemedi:",
-										parseErr.message,
-										rawInfo
-									);
-									betInfo = {};
-								}
-							}
-
-							const couponCode = betInfo.couponCode || txn_id;
-							const betStatus = betInfo.status || "pending";
-
-							// Nexus'tan gelen maç/market seçim (betslip) durumunu bizim
-							// SportsBetEvent.status enum'una çeviriyoruz.
-							const mapSlipStatus = (rawStatus) => {
-								const map = {
-									won: "won",
-									win: "won",
-									lost: "lost",
-									lose: "lost",
-									void: "void",
-									cancelled: "cancelled",
-									canceled: "cancelled",
-									push: "void",
-									postponed: "postponed",
-									pending: "pending",
-								};
-								return map[String(rawStatus || "").toLowerCase()] || "pending";
-							};
-
-							// "0:1" veya "2-1" gibi skorları homeScore/awayScore'a ayırır.
-							const parseScore = (scoreStr) => {
-								if (!scoreStr || typeof scoreStr !== "string") return null;
-								const match = scoreStr.match(/^(\d+)\s*[:\-]\s*(\d+)$/);
-								if (!match) return null;
-								return {
-									homeScore: parseInt(match[1], 10),
-									awayScore: parseInt(match[2], 10),
-								};
-							};
-
 							if (txn_type === "debit" || txn_type === "bet") {
 								const existingBet = await SportsBet.findOne({
 									provider: "nexusggr",
@@ -968,6 +1083,16 @@ router.post("/", async (req, res) => {
 								});
 
 								if (sportsBet && sportsBet.status === "pending") {
+									// Ortak settlement mantığı: SportsBet.status/actualWin ve her
+									// betslip'in SportsBetEvent sonucunu günceller. Aynı fonksiyon
+									// yukarıdaki "mükerrer txn_id" birleştirme akışında da
+									// kullanılıyor, böylece iki yol birbirinden sapmıyor.
+									await applySportsBetSettlement({
+										winMoney: winMoneyNum,
+										balanceBefore,
+										balanceAfter,
+									});
+
 									const statusMap = {
 										won: "won",
 										lost: "lost",
@@ -975,55 +1100,6 @@ router.post("/", async (req, res) => {
 										canceled: "cancelled",
 									};
 									const mappedStatus = statusMap[betStatus] || betStatus;
-
-									sportsBet.status = mappedStatus;
-									sportsBet.actualWin = winMoneyNum;
-									sportsBet.settlementBalanceBefore = balanceBefore;
-									sportsBet.settlementBalanceAfter = balanceAfter;
-									sportsBet.settledAt = new Date();
-									await sportsBet.save();
-
-									// Kuponun içindeki her bir maçı (betslip) kendi sonucuna göre
-									// (kazandı/kaybetti/vs.) ayrı ayrı güncelliyoruz, hepsine kupon
-									// genel durumunu basmıyoruz — böylece çoklu kuponlarda hangi
-									// maçın kazanılıp hangisinin kaybedildiği görülebiliyor.
-									const settledSlips = betInfo.betslips || [];
-									if (settledSlips.length > 0) {
-										const events = await SportsBetEvent.find({
-											bet: sportsBet._id,
-										});
-
-										for (const slip of settledSlips) {
-											const slipEventId = (
-												slip.id || slip.oddPoint || ""
-											).toString();
-											const event = events.find(
-												(ev) => ev.externalEventId === slipEventId
-											);
-											if (!event) continue;
-
-											const liveScore = parseScore(
-												slip.resultScore || slip.betScore
-											);
-
-											event.status = mapSlipStatus(slip.status);
-											event.finalScore =
-												slip.resultScore || slip.betScore || event.finalScore;
-											if (liveScore) {
-												event.homeScore = liveScore.homeScore;
-												event.awayScore = liveScore.awayScore;
-											}
-											event.extra = slip;
-											await event.save();
-										}
-									} else {
-										// Betslip detayı yoksa (eski format vs.) en azından kupon
-										// genel durumunu maçlara da yansıtalım.
-										await SportsBetEvent.updateMany(
-											{ bet: sportsBet._id },
-											{ $set: { status: mappedStatus } }
-										);
-									}
 
 									if (mappedStatus === "won") {
 										await logEvent("win", {
