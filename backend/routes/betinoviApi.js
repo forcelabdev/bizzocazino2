@@ -1024,8 +1024,14 @@ router.post("/callback", async (req, res) => {
 								{ session }
 							);
 
+							// NOT: Eşleşen bir debit bulunamasa da credit/refund işlemi
+							// reddedilmez. Dual-agent (deneme bonusu) geçişlerinde eşleşme
+							// anahtarları (pairCode/wagerId/gameRoundId) farklı bir kayda
+							// düşebiliyor; bunu bloklamak sağlayıcı tarafında "kasiyeri
+							// ziyaret edin" hatasına yol açıyordu. Sadece bilgilendirme
+							// amaçlı loglanır, işlem normal şekilde devam eder.
 							if (!linkedDebit) {
-								console.error("Blocked Betinovi orphan settlement", {
+								console.warn("Betinovi settlement without matching debit (allowed)", {
 									userCode: normalizedUserCode,
 									vendorCode: normalizedVendorCode,
 									txnCode: normalizedTxnCode,
@@ -1034,17 +1040,10 @@ router.post("/callback", async (req, res) => {
 									gameRoundId,
 									pairCode,
 								});
-
-								callbackResponse = {
-									status: 13,
-									msg: "INVALID_TRANSACTION",
-									details: "Credit/refund has no matching debit transaction.",
-									balance: balanceBefore,
-								};
-								return;
 							}
 
 							if (
+								linkedDebit &&
 								normalizedTxnType === 2 &&
 								normalizedAmount > Math.abs(linkedDebit.bet_money || 0)
 							) {
