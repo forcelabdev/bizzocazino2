@@ -16,6 +16,16 @@ const rawNotifications = ref([])
 const isInitialized = ref(false)
 let socketInstance = null
 
+// Bildirim sesi aç/kapa tercihi — tarayıcı oturumları arasında kalıcı olsun
+// diye localStorage'da saklanır, tüm bileşenler arasında paylaşılır.
+const SOUND_MUTE_STORAGE_KEY = 'adminNotifSoundMuted'
+const isSoundMuted = ref(localStorage.getItem(SOUND_MUTE_STORAGE_KEY) === 'true')
+
+const toggleSound = () => {
+  isSoundMuted.value = !isSoundMuted.value
+  localStorage.setItem(SOUND_MUTE_STORAGE_KEY, String(isSoundMuted.value))
+}
+
 const TYPE_META = {
   withdraw: { icon: 'tabler-cash-banknote', color: 'warning' },
   deposit: { icon: 'tabler-cash', color: 'success' },
@@ -65,6 +75,9 @@ const getCurrentAdminId = () => {
 }
 
 const playNotificationSound = () => {
+  if (isSoundMuted.value)
+    return
+
   try {
     const audio = new Audio('/sounds/notification.wav')
     audio.volume = 0.6
@@ -233,5 +246,7 @@ export function useAdminNotifications() {
     markUnread,
     markAllRead,
     removeNotification,
+    isSoundMuted,
+    toggleSound,
   }
 }

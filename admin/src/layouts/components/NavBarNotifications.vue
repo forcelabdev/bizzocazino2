@@ -11,6 +11,8 @@ const {
   markRead,
   markUnread,
   removeNotification: removeNotificationAction,
+  isSoundMuted,
+  toggleSound,
 } = useAdminNotifications()
 
 init()
@@ -39,9 +41,11 @@ const handleNotificationClick = notification => {
 <template>
   <Notifications
     :notifications="notifications"
+    :sound-muted="isSoundMuted"
     @remove="removeNotification"
     @read="markReadAction"
     @unread="markUnReadAction"
     @click:notification="handleNotificationClick"
+    @toggle-sound="toggleSound"
   />
 </template>

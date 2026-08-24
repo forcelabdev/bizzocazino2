@@ -17,6 +17,11 @@ const props = defineProps({
     required: false,
     default: 'bottom end',
   },
+  soundMuted: {
+    type: Boolean,
+    required: false,
+    default: false,
+  },
 })
 
 const emit = defineEmits([
@@ -24,6 +29,7 @@ const emit = defineEmits([
   'unread',
   'remove',
   'click:notification',
+  'toggle-sound',
 ])
 
 const isAllMarkRead = computed(() => props.notifications.some(item => item.isSeen === false))
@@ -71,19 +77,32 @@ const totalUnseenNotifications = computed(() => {
           </VCardTitle>
 
           <template #append>
-            <IconBtn
-              v-show="props.notifications.length"
-              @click="markAllReadOrUnread"
-            >
-              <VIcon :icon="!isAllMarkRead ? 'tabler-mail' : 'tabler-mail-opened' " />
+            <div class="d-flex align-center gap-1">
+              <IconBtn @click="$emit('toggle-sound')">
+                <VIcon :icon="props.soundMuted ? 'tabler-volume-3' : 'tabler-volume'" />
 
-              <VTooltip
-                activator="parent"
-                location="start"
+                <VTooltip
+                  activator="parent"
+                  location="start"
+                >
+                  {{ props.soundMuted ? 'Bildirim sesini aç' : 'Bildirim sesini kapat' }}
+                </VTooltip>
+              </IconBtn>
+
+              <IconBtn
+                v-show="props.notifications.length"
+                @click="markAllReadOrUnread"
               >
-                {{ !isAllMarkRead ? 'Mark all as unread' : 'Mark all as read' }}
-              </VTooltip>
-            </IconBtn>
+                <VIcon :icon="!isAllMarkRead ? 'tabler-mail' : 'tabler-mail-opened' " />
+
+                <VTooltip
+                  activator="parent"
+                  location="start"
+                >
+                  {{ !isAllMarkRead ? 'Mark all as unread' : 'Mark all as read' }}
+                </VTooltip>
+              </IconBtn>
+            </div>
           </template>
         </VCardItem>
 
