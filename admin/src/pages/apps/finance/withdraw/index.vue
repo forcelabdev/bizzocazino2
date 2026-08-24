@@ -21,6 +21,51 @@ const withdrawStore = useWithdrawStore();
 // ---- Active Tab ----
 const activeTab = ref("all");
 
+// Ödeme Yöntem Yönetimi ekranındaki "Aktif" toggle'ı kapalıysa (isActive === false),
+// o sağlayıcının sekmesi burada gösterilmez. Ayarlar yüklenene kadar sekmeler
+// gizli kalmasın diye varsayılan olarak true tutuyoruz; ayarlar dönünce
+// gerçek duruma göre güncelleniyor.
+const providerEnabled = ref({
+	forcelab: true,
+	meeldev: true,
+	galaxypay: true,
+	fluxkripto: true,
+	xpayments: true,
+});
+
+const loadProviderEnabledStates = async () => {
+	const [forcelabRes, meeldevRes, galaxypayRes, fluxkriptoRes, xpaymentsRes] =
+		await Promise.allSettled([
+			axios.get("/admin/forcelab-finance/settings"),
+			axios.get("/admin/meeldev/settings"),
+			axios.get("/admin/galaxypay/settings"),
+			axios.get("/admin/fluxkripto/settings"),
+			axios.get("/admin/xpayments/settings"),
+		]);
+
+	const isActive = (result) =>
+		result.status === "fulfilled" ? result.value?.data?.data?.isActive === true : true;
+
+	providerEnabled.value = {
+		forcelab: isActive(forcelabRes),
+		meeldev: isActive(meeldevRes),
+		galaxypay: isActive(galaxypayRes),
+		fluxkripto: isActive(fluxkriptoRes),
+		xpayments: isActive(xpaymentsRes),
+	};
+
+	// Aktif sekmede kalan kullanıcı, o sağlayıcı sonradan pasife alınmışsa
+	// "Tümü" sekmesine geri düşer.
+	if (
+		Object.prototype.hasOwnProperty.call(providerEnabled.value, activeTab.value) &&
+		!providerEnabled.value[activeTab.value]
+	) {
+		activeTab.value = "all";
+	}
+};
+
+onMounted(loadProviderEnabledStates);
+
 // ---- Crypto Withdraw State ----
 const searchQuery = ref("");
 const dateRange = ref("");
@@ -659,11 +704,11 @@ meta:
 		<VTabs v-model="activeTab" class="mb-4">
 			<VTab value="all">Tümü</VTab>
 			<VTab value="crypto">Kripto Çekimler</VTab>
-			<VTab value="forcelab">Forcelab Finance</VTab>
-			<VTab value="meeldev">MeelDev</VTab>
-			<VTab value="galaxypay">GalaxyPay</VTab>
-			<VTab value="fluxkripto">FluxKripto</VTab>
-			<VTab value="xpayments">XPayment</VTab>
+			<VTab v-if="providerEnabled.forcelab" value="forcelab">Forcelab Finance</VTab>
+			<VTab v-if="providerEnabled.meeldev" value="meeldev">MeelDev</VTab>
+			<VTab v-if="providerEnabled.galaxypay" value="galaxypay">GalaxyPay</VTab>
+			<VTab v-if="providerEnabled.fluxkripto" value="fluxkripto">FluxKripto</VTab>
+			<VTab v-if="providerEnabled.xpayments" value="xpayments">XPayment</VTab>
 		</VTabs>
 
 		<UnifiedPaymentTable v-if="activeTab === 'all'" type="withdraw" />
