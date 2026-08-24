@@ -26,6 +26,10 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  soundBlocked: {
+    type: Boolean,
+    default: false,
+  },
 })
 
 const emit = defineEmits([
@@ -35,6 +39,7 @@ const emit = defineEmits([
   'click:notification',
   'toggle-sound',
   'testSound',
+  'enableSound',
 ])
 
 const isAllMarkRead = computed(() => props.notifications.some(item => item.isSeen === false))
@@ -126,6 +131,30 @@ const totalUnseenNotifications = computed(() => {
         </VCardItem>
 
         <VDivider />
+
+        <!-- 👉 Ses engeli uyarısı: tarayıcı autoplay politikası bu sekimde
+             henüz hiç etkileşim olmadığı için sesi engelliyor. Admin bunu
+             görüp tek tıkla etkinleştirebilir; aksi halde bildirim gelir
+             ama ses hiç çalmaz ve admin bunun nedenini anlayamaz. -->
+        <VAlert
+          v-if="props.soundBlocked"
+          type="warning"
+          variant="tonal"
+          density="compact"
+          class="ma-2"
+        >
+          <div class="d-flex align-center justify-space-between gap-2">
+            <span class="text-caption">Bildirim sesi tarayıcı tarafından engellendi.</span>
+            <VBtn
+              size="x-small"
+              variant="flat"
+              color="warning"
+              @click="$emit('enableSound')"
+            >
+              Sesi Etkinleştir
+            </VBtn>
+          </div>
+        </VAlert>
 
         <!-- 👉 Notifications list -->
         <PerfectScrollbar

@@ -27,6 +27,12 @@ const knownNotificationIds = new Set()
 const SOUND_MUTE_STORAGE_KEY = 'adminNotifSoundMuted'
 const isSoundMuted = ref(localStorage.getItem(SOUND_MUTE_STORAGE_KEY) === 'true')
 
+// Tarayıcının autoplay engeli aktifse (bu sekmede henüz hiç tıklama/tuş
+// etkileşimi olmadıysa) true olur. Admin bunu görüp tek tıkla sesi
+// etkinleştirebilsin diye arayüzde gösterilir — aksi halde bildirim gelir
+// ama ses sessizce hiç çalmaz ve admin bunun neden olduğunu anlayamaz.
+const isSoundBlocked = ref(false)
+
 const toggleSound = () => {
   isSoundMuted.value = !isSoundMuted.value
   localStorage.setItem(SOUND_MUTE_STORAGE_KEY, String(isSoundMuted.value))
@@ -101,12 +107,16 @@ const getNotificationAudio = () => {
   return notificationAudio
 }
 
+// Farklı giriş türlerinin tümü "gerçek kullanıcı etkileşimi" sayılır —
+// sadece mouse click'e güvenmek, sadece klavyeyle veya dokunmatik ekranla
+// kullanan adminlerde sesi hiç açmayabilir.
+const UNLOCK_EVENTS = ['pointerdown', 'click', 'keydown', 'touchstart']
+
 const removeSoundUnlockListeners = () => {
   if (!soundUnlockListenersAttached)
     return
 
-  window.removeEventListener('click', unlockNotificationSound, true)
-  window.removeEventListener('keydown', unlockNotificationSound, true)
+  UNLOCK_EVENTS.forEach(evt => window.removeEventListener(evt, unlockNotificationSound, true))
   soundUnlockListenersAttached = false
 }
 
@@ -114,8 +124,7 @@ const addSoundUnlockListeners = () => {
   if (soundUnlockListenersAttached)
     return
 
-  window.addEventListener('click', unlockNotificationSound, true)
-  window.addEventListener('keydown', unlockNotificationSound, true)
+  UNLOCK_EVENTS.forEach(evt => window.addEventListener(evt, unlockNotificationSound, true))
   soundUnlockListenersAttached = true
 }
 
@@ -131,10 +140,12 @@ const playNotificationSound = async ({ force = false } = {}) => {
     audio.volume = 0.6
     await audio.play()
     pendingNotificationSound = false
+    isSoundBlocked.value = false
     removeSoundUnlockListeners()
   } catch (error) {
     if (error?.name === 'NotAllowedError') {
       pendingNotificationSound = true
+      isSoundBlocked.value = true
       addSoundUnlockListeners()
 
       return false
@@ -167,9 +178,31 @@ async function unlockNotificationSound() {
     audio.pause()
     audio.currentTime = 0
     audio.volume = 0.6
+    isSoundBlocked.value = false
     removeSoundUnlockListeners()
   } catch {
     // Başka bir kullanıcı etkileşiminde yeniden denenecek.
+  }
+}
+
+// Panel yüklenir yüklenmez sesin engellenip engellenmediğini sessizce
+// (volume 0) test eder. Böylece admin bir bildirim kaçırmadan ÖNCE,
+// panelde "sesi etkinleştirmek için tıklayın" uyarısını görür.
+const detectSoundBlock = async () => {
+  try {
+    const audio = getNotificationAudio()
+
+    audio.volume = 0
+    await audio.play()
+    audio.pause()
+    audio.currentTime = 0
+    audio.volume = 0.6
+    isSoundBlocked.value = false
+  } catch (error) {
+    if (error?.name === 'NotAllowedError') {
+      isSoundBlocked.value = true
+      addSoundUnlockListeners()
+    }
   }
 }
 
@@ -390,10 +423,16 @@ export function useAdminNotifications() {
     isInitialized.value = true
 
     addSoundUnlockListeners()
+    detectSoundBlock()
     fetchNotifications()
     connectSocket()
     startNotificationPolling()
   }
+
+  // Admin "Sesi Etkinleştir" uyarısına tıkladığında çağrılır — tıklamanın
+  // kendisi zaten geçerli bir kullanıcı etkileşimi olduğu için ses burada
+  // güvenle unlock edilebilir.
+  const enableSound = () => unlockNotificationSound()
 
   return {
     notifications: bellNotifications,
@@ -407,5 +446,7 @@ export function useAdminNotifications() {
     isSoundMuted,
     toggleSound,
     testNotificationSound,
+    isSoundBlocked,
+    enableSound,
   }
 }
