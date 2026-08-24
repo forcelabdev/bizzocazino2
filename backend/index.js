@@ -82,19 +82,6 @@ app.set("view engine", "ejs");
 app.set("views", path.join(__dirname, "/views"));
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
-// TEMP TEST ROUTE — v0 tarafından sadece anlık bildirim/ses testi için eklendi, sonra kaldırılacak.
-app.get("/__v0_test_deposit_notification", async (req, res) => {
-	const { createAdminNotification } = require("./utils/adminNotification");
-	const n = await createAdminNotification(
-		"deposit",
-		"Yeni Yatırım İşlemi",
-		"v0testuser kullanıcısı 1234 ₺ tutarında GalaxyPay ile yatırım yaptı.",
-		null,
-		{ amount: 1234, provider: "GalaxyPay" },
-	);
-	res.json({ ok: !!n, id: n?._id });
-});
-
 // Mount routes
 app.use("/", require("./routes")(io));
 app.use("/public", express.static(path.join(__dirname, "public")));

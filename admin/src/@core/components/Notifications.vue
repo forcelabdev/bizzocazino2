@@ -22,6 +22,10 @@ const props = defineProps({
     required: false,
     default: false,
   },
+  showSoundTest: {
+    type: Boolean,
+    default: false,
+  },
 })
 
 const emit = defineEmits([
@@ -30,6 +34,7 @@ const emit = defineEmits([
   'remove',
   'click:notification',
   'toggle-sound',
+  'testSound',
 ])
 
 const isAllMarkRead = computed(() => props.notifications.some(item => item.isSeen === false))
@@ -78,6 +83,20 @@ const totalUnseenNotifications = computed(() => {
 
           <template #append>
             <div class="d-flex align-center gap-1">
+              <IconBtn
+                v-if="props.showSoundTest"
+                @click="$emit('testSound')"
+              >
+                <VIcon icon="tabler-volume-2" />
+
+                <VTooltip
+                  activator="parent"
+                  location="start"
+                >
+                  Bildirim sesini test et
+                </VTooltip>
+              </IconBtn>
+
               <IconBtn @click="$emit('toggle-sound')">
                 <VIcon :icon="props.soundMuted ? 'tabler-volume-3' : 'tabler-volume'" />
 

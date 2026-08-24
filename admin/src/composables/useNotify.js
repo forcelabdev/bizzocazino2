@@ -15,6 +15,7 @@ export function useNotify() {
 
   return {
     notifications,
+    push,
     success: msg => push('success', msg),
     error: msg => push('error', msg),
     info: msg => push('info', msg),
