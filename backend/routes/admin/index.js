@@ -4867,9 +4867,25 @@ const normalizePromoPayload = (body = {}) => {
 	};
 };
 
+// Toplu Bonus Yükle ekranındaki affiliate kodu listesiyle AYNI kaynağı
+// kullanır (bkz. listAffiliateCodes) — gerçekte kullanılan (redeemedCode)
+// kodlar da dahil olur, sadece kendi affiliates.code'u set edilmiş
+// kullanıcılarla sınırlı kalmaz.
 router.get("/promocodes/affiliate-options", checkPermission("finance.promo.read"), async (req, res) => {
-	const users = await User.find({ "affiliates.code": { $exists: true, $nin: [null, ""] } }).select("username affiliates.code").sort({ username: 1 }).lean();
-	res.json({ success: true, data: users.map(user => ({ code: user.affiliates.code, title: `${user.username} (${user.affiliates.code})` })) });
+	try {
+		const codes = await listAffiliateCodes();
+
+		res.json({
+			success: true,
+			data: codes.map(({ code, ownerUsername, referredCount }) => ({
+				code,
+				title: `${code}${ownerUsername ? ` — ${ownerUsername}` : ""} (${referredCount} üye)`,
+			})),
+		});
+	} catch (error) {
+		console.error("Promo affiliate option list error:", error);
+		res.status(500).json({ success: false, message: "Sunucu hatası." });
+	}
 });
 
 const PROMO_VALIDATION_MESSAGES = {
@@ -10164,7 +10180,7 @@ router.put(
 	},
 );
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ═════════════════════════════════════════════════════════════════���═════════
 // 📁 FILE MANAGER ENDPOINTS
 // ════════════════════════════════════════════════════════════════════��══════
 
