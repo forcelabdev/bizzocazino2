@@ -5,8 +5,11 @@ import { avatarText } from "@core/utils/formatters";
 import { useI18n } from "vue-i18n";
 import { VDataTableServer } from "vuetify/labs/VDataTable";
 import ability from "@/plugins/casl/ability";
+import { exportToXlsx } from "@/utils/exportXlsx";
+import { useNotify } from "@/composables/useNotify";
 
 const { t } = useI18n();
+const { success: notifySuccess, error: notifyError } = useNotify();
 const bankTransferStore = useBankTransferStore();
 const canManageBankTransfers = computed(
 	() =>
@@ -169,6 +172,56 @@ watch([searchQuery, statusFilter], () => {
 	if (options.value.page !== 1) options.value.page = 1;
 	else fetchTransfers();
 });
+
+// 📤 Mevcut filtrelere göre banka transferlerini xlsx olarak dışa aktar
+const isExporting = ref(false);
+
+const exportTransfers = async () => {
+	if (isExporting.value) return;
+	isExporting.value = true;
+
+	try {
+		const { data } = await bankTransferStore.fetchTransfers({
+			search: searchQuery.value,
+			status: statusFilter.value,
+			page: 1,
+			limit: 5000,
+		});
+
+		const list = data?.data || [];
+
+		if (!list.length) {
+			notifyError("Dışa aktarılacak kayıt yok.");
+			return;
+		}
+
+		const rows = list.map((item) => ({
+			[t("finance.user")]: item.user?.name || item.user?.username || "",
+			[t("finance.bankTransfer.bank")]: item.bankName || "",
+			[t("finance.bankTransfer.accountName")]: item.accountName || "",
+			[t("finance.bankTransfer.iban")]: item.iban || "",
+			[t("finance.amount")]: Number(item.amount || 0),
+			[t("finance.state")]: statusLabel(item.status),
+			[t("finance.date")]: item.createdAt
+				? new Date(item.createdAt).toLocaleString("tr-TR")
+				: "",
+		}));
+
+		await exportToXlsx({
+			rows,
+			fileName: "banka-transferleri",
+			sheetName: "Banka Transferleri",
+			columnWidths: [22, 18, 22, 26, 16, 14, 20],
+		});
+
+		notifySuccess("Banka transferleri başarıyla dışa aktarıldı.");
+	} catch (error) {
+		console.error("Bank transfer export error:", error);
+		notifyError("Dışa aktarım sırasında bir hata oluştu.");
+	} finally {
+		isExporting.value = false;
+	}
+};
 
 const openDetails = (transfer) => {
 	detailTransfer.value = transfer;

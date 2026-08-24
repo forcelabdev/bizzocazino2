@@ -846,6 +846,21 @@ router.post("/callback", async (req, res) => {
 					normalizedTxnType === null ||
 					normalizedAmount === null
 				) {
+					console.log(
+						"[v0] Betinovi ChangeBalance INVALID_PARAMETER",
+						JSON.stringify({
+							rawUserCode: userCode,
+							rawVendorCode: vendorCode,
+							rawTxnCode: txnCode,
+							rawTxnType: txnType,
+							rawAmount: amount,
+							normalizedUserCode,
+							normalizedVendorCode,
+							normalizedTxnCode,
+							normalizedTxnType,
+							normalizedAmount,
+						})
+					);
 					return res.status(200).json({
 						status: 13,
 						msg: "INVALID_PARAMETER",

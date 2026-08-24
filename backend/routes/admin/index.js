@@ -7895,7 +7895,7 @@ router.get(
 			const pageNum = Math.max(parseInt(page, 10) || 1, 1);
 			const limitNum = Math.min(
 				Math.max(parseInt(limit, 10) || 20, 1),
-				100,
+				5000,
 			);
 
 			const query = { type: "deposit" };
@@ -8017,7 +8017,7 @@ router.get(
 			const pageNum = Math.max(parseInt(page, 10) || 1, 1);
 			const limitNum = Math.min(
 				Math.max(parseInt(limit, 10) || 20, 1),
-				100,
+				5000,
 			);
 
 			const query = { type: "withdraw" };
