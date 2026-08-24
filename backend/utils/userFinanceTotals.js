@@ -286,9 +286,142 @@ const getUserApprovedFinanceTotalsInRange = async (userId, range = {}) => {
 	return totals;
 };
 
+/**
+ * Kullanıcının en son ONAYLI yatırımının tutarını döner (tüm ödeme
+ * sağlayıcıları dahil: kripto, fiat/Deposit, banka havalesi ve yerel
+ * sağlayıcılar). PromoCode.minLastDeposit şartı için kullanılır — "en az X TL
+ * yatırım yapmış olmalı" kontrolünde en güncel yatırımın tutarına bakılır.
+ *
+ * @param {string|mongoose.Types.ObjectId} userId
+ * @returns {Promise<number>} en son onaylı yatırım tutarı, hiç yoksa 0
+ */
+const getUserLastApprovedDepositAmount = async (userId) => {
+	if (!mongoose.Types.ObjectId.isValid(userId)) return 0;
+
+	const objectId = new mongoose.Types.ObjectId(userId);
+
+	const rows = await Deposit.aggregate([
+		{ $match: { user: objectId, status: APPROVED_PAYMENT_STATUS } },
+		{ $project: { amount: 1, createdAt: 1 } },
+		{
+			$unionWith: {
+				coll: CryptoTransaction.collection.name,
+				pipeline: [
+					{
+						$match: {
+							user: objectId,
+							type: "deposit",
+							state: { $in: APPROVED_CRYPTO_STATES },
+						},
+					},
+					{ $project: { amount: 1, createdAt: 1 } },
+				],
+			},
+		},
+		{
+			$unionWith: {
+				coll: BankTransfer.collection.name,
+				pipeline: [
+					{
+						$match: {
+							user: objectId,
+							type: "deposit",
+							status: APPROVED_PAYMENT_STATUS,
+						},
+					},
+					{ $project: { amount: 1, createdAt: 1 } },
+				],
+			},
+		},
+		{
+			$unionWith: {
+				coll: ForcelabFinanceTransaction.collection.name,
+				pipeline: [
+					{
+						$match: {
+							user: objectId,
+							status: APPROVED_PAYMENT_STATUS,
+							$or: [
+								{ providerType: "deposit" },
+								{ providerType: { $exists: false } },
+							],
+						},
+					},
+					{ $project: { amount: 1, createdAt: 1 } },
+				],
+			},
+		},
+		{
+			$unionWith: {
+				coll: MeelDevTransaction.collection.name,
+				pipeline: [
+					{
+						$match: {
+							user: objectId,
+							type: "deposit",
+							status: APPROVED_PAYMENT_STATUS,
+						},
+					},
+					{ $project: { amount: 1, createdAt: 1 } },
+				],
+			},
+		},
+		{
+			$unionWith: {
+				coll: GalaxyPayTransaction.collection.name,
+				pipeline: [
+					{
+						$match: {
+							user: objectId,
+							type: "deposit",
+							status: APPROVED_PAYMENT_STATUS,
+						},
+					},
+					{ $project: { amount: 1, createdAt: 1 } },
+				],
+			},
+		},
+		{
+			$unionWith: {
+				coll: FluxKriptoTransaction.collection.name,
+				pipeline: [
+					{
+						$match: {
+							user: objectId,
+							type: "deposit",
+							status: APPROVED_PAYMENT_STATUS,
+						},
+					},
+					{ $project: { amount: 1, createdAt: 1 } },
+				],
+			},
+		},
+		{
+			$unionWith: {
+				coll: XPaymentTransaction.collection.name,
+				pipeline: [
+					{
+						$match: {
+							user: objectId,
+							type: "deposit",
+							status: APPROVED_PAYMENT_STATUS,
+						},
+					},
+					{ $project: { amount: 1, createdAt: 1 } },
+				],
+			},
+		},
+		{ $sort: { createdAt: -1 } },
+		{ $limit: 1 },
+	]);
+
+	return rows.length ? Number(rows[0].amount || 0) : 0;
+};
+
 module.exports = {
 	APPROVED_PAYMENT_STATUS,
 	APPROVED_CRYPTO_STATES,
 	getUserApprovedFinanceTotals,
 	getUserApprovedFinanceTotalsInRange,
+	getUserLastApprovedDepositAmount,
 };
