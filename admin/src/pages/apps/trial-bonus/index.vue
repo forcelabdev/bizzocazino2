@@ -14,6 +14,7 @@ const userStore = useUserListStore()
 
 const settingsLoading = ref(false)
 const settingsSaving = ref(false)
+
 const settings = ref({
   enabled: false,
   autoApprove: true,
@@ -21,8 +22,11 @@ const settings = ref({
   wageringMultiplier: 0,
   blockOtherBonuses: false,
   durationHours: 0,
-  trialRtpLowPercent: 0,
-  trialRtpHighPercent: 0,
+  targetBalanceEnabled: false,
+  targetBalanceAmount: 0,
+  registrationCutoffEnabled: false,
+  registeredAfter: null,
+  blockIfDeposited: true,
   note: "",
 })
 
@@ -35,8 +39,7 @@ const fetchSettings = async () => {
     settings.value = {
       ...settings.value,
       ...data,
-      trialRtpLowPercent: Math.round(Number(data.trialRtpLow || 0) * 100),
-      trialRtpHighPercent: Math.round(Number(data.trialRtpHigh || 0) * 100),
+      registeredAfter: data.registeredAfter ? data.registeredAfter.slice(0, 10) : null,
     }
   } catch (error) {
     console.error("Deneme bonusu ayarları alınamadı:", error)
@@ -55,17 +58,20 @@ const saveSettings = async () => {
       wageringMultiplier: Number(settings.value.wageringMultiplier),
       blockOtherBonuses: settings.value.blockOtherBonuses,
       durationHours: Number(settings.value.durationHours),
-      trialRtpLow: Number(settings.value.trialRtpLowPercent || 0) / 100,
-      trialRtpHigh: Number(settings.value.trialRtpHighPercent || 0) / 100,
+      targetBalanceEnabled: settings.value.targetBalanceEnabled,
+      targetBalanceAmount: Number(settings.value.targetBalanceAmount || 0),
+      registrationCutoffEnabled: settings.value.registrationCutoffEnabled,
+      registeredAfter: settings.value.registeredAfter || null,
+      blockIfDeposited: settings.value.blockIfDeposited,
       note: settings.value.note,
     })
+
     const data = res.data.data || {}
 
     settings.value = {
       ...settings.value,
       ...data,
-      trialRtpLowPercent: Math.round(Number(data.trialRtpLow || 0) * 100),
-      trialRtpHighPercent: Math.round(Number(data.trialRtpHigh || 0) * 100),
+      registeredAfter: data.registeredAfter ? data.registeredAfter.slice(0, 10) : null,
     }
     snackbar.value = { show: true, text: t("trialBonusAdmin.saved"), color: "success" }
   } catch (error) {
@@ -106,12 +112,14 @@ const claimHeaders = [
 const statusColor = status => {
   if (status === "approved") return "success"
   if (status === "rejected") return "error"
+  
   return "warning"
 }
 
 const statusLabel = status => {
   if (status === "approved") return t("trialBonusAdmin.statusApproved")
   if (status === "rejected") return t("trialBonusAdmin.statusRejected")
+  
   return t("trialBonusAdmin.statusPending")
 }
 
@@ -142,6 +150,7 @@ const fetchClaims = async () => {
         status: statusFilter.value || undefined,
       },
     })
+
     claims.value = res.data.data
     totalClaims.value = res.data.total
     pendingCount.value = res.data.pendingCount
@@ -296,39 +305,75 @@ onMounted(() => {
               <VCol cols="12">
                 <VDivider class="mb-2" />
                 <h6 class="text-h6 mb-1">
-                  {{ t("trialBonusAdmin.rtpTitle") }}
+                  {{ t("trialBonusAdmin.targetBalanceTitle") }}
                 </h6>
-                <span class="text-caption text-disabled">{{ t("trialBonusAdmin.rtpHint") }}</span>
+                <span class="text-caption text-disabled">{{ t("trialBonusAdmin.targetBalanceHint") }}</span>
               </VCol>
 
               <VCol
                 cols="12"
-                md="3"
+                md="4"
+              >
+                <VSwitch
+                  v-model="settings.targetBalanceEnabled"
+                  :label="t('trialBonusAdmin.targetBalanceEnabled')"
+                />
+                <span class="text-caption text-disabled">{{ t("trialBonusAdmin.targetBalanceEnabledHint") }}</span>
+              </VCol>
+
+              <VCol
+                cols="12"
+                md="4"
               >
                 <AppTextField
-                  v-model="settings.trialRtpLowPercent"
+                  v-model="settings.targetBalanceAmount"
                   type="number"
                   min="0"
-                  max="100"
-                  suffix="%"
-                  :disabled="!settings.wageringMultiplier || Number(settings.wageringMultiplier) <= 0"
-                  :label="t('trialBonusAdmin.rtpLow')"
+                  :disabled="!settings.targetBalanceEnabled"
+                  :label="t('trialBonusAdmin.targetBalanceAmount')"
+                />
+              </VCol>
+
+              <VCol cols="12">
+                <VDivider class="mb-2" />
+                <h6 class="text-h6 mb-1">
+                  {{ t("trialBonusAdmin.eligibilityTitle") }}
+                </h6>
+                <span class="text-caption text-disabled">{{ t("trialBonusAdmin.eligibilityHint") }}</span>
+              </VCol>
+
+              <VCol
+                cols="12"
+                md="4"
+              >
+                <VSwitch
+                  v-model="settings.registrationCutoffEnabled"
+                  :label="t('trialBonusAdmin.registrationCutoffEnabled')"
+                />
+                <span class="text-caption text-disabled">{{ t("trialBonusAdmin.registrationCutoffEnabledHint") }}</span>
+              </VCol>
+
+              <VCol
+                cols="12"
+                md="4"
+              >
+                <AppTextField
+                  v-model="settings.registeredAfter"
+                  type="date"
+                  :disabled="!settings.registrationCutoffEnabled"
+                  :label="t('trialBonusAdmin.registeredAfter')"
                 />
               </VCol>
 
               <VCol
                 cols="12"
-                md="3"
+                md="4"
               >
-                <AppTextField
-                  v-model="settings.trialRtpHighPercent"
-                  type="number"
-                  min="0"
-                  max="100"
-                  suffix="%"
-                  :disabled="!settings.wageringMultiplier || Number(settings.wageringMultiplier) <= 0"
-                  :label="t('trialBonusAdmin.rtpHigh')"
+                <VSwitch
+                  v-model="settings.blockIfDeposited"
+                  :label="t('trialBonusAdmin.blockIfDeposited')"
                 />
+                <span class="text-caption text-disabled">{{ t("trialBonusAdmin.blockIfDepositedHint") }}</span>
               </VCol>
 
               <VCol cols="12">

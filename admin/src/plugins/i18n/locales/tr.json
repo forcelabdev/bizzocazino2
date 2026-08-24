@@ -1605,7 +1605,20 @@
 				"historyTitle": "Son Atamalar",
 				"noHistory": "Henüz atama geçmişi yok.",
 				"assignSuccess": "Reload ataması başarıyla oluşturuldu.",
-				"assignFailed": "Reload ataması oluşturulamadı."
+				"assignFailed": "Reload ataması oluşturulamadı.",
+				"trialTitle": "Deneme Bonusu",
+				"trialOk": "Normal",
+				"trialReviewLocked": "İnceleme Kilidi Aktif",
+				"trialReviewAlert": "Bu kullanıcı {reason} nedeniyle otomatik olarak kilitlendi. Bahis yapamaz, oyuna giremez ve çekim talep edemez.",
+				"trialReviewReasonWagering": "çevrim şartını tamamladığı",
+				"trialReviewReasonTarget": "hedef bakiyeye ulaştığı",
+				"trialReviewReasonUnknown": "belirlenen kurala ulaştığı",
+				"trialWageringLabel": "Çevrim İlerlemesi",
+				"trialTargetLabel": "Hedef Bakiye İlerlemesi",
+				"trialResolveButton": "İncelemeyi Tamamla ve Kilidi Aç",
+				"trialResolveConfirm": "İncelemeyi tamamlayıp kullanıcının kilidini açmak istediğinize emin misiniz?",
+				"trialResolveSuccess": "İnceleme tamamlandı, kullanıcının kilidi açıldı.",
+				"trialResolveFailed": "İnceleme kilidi açılamadı."
 			},
 		"manualAdjustments": {
 		"title": "Manuel İşlemler",
