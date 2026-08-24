@@ -18,6 +18,58 @@ görür. Bu doküman dış/partner site entegrasyonlarını (API-key korumalı,
 kullanıcı adı maskelenmiş endpoint'ler) KAPSAMAZ — onlar zaten `betcolabs`,
 `betinovi` gibi harici sağlayıcılar için ayrı bir mekanizmadır.
 
+## 0.1 Sunucunuza Taşımanız Gereken Dosyalar (bağımlılık zinciri)
+
+`trialBonusService.js` gibi servis dosyaları başka model/util dosyalarına
+`require` ile bağımlıdır. Sunucunuzda **"Cannot find module"** hatası
+almamak için, bu chat'te değişen/eklenen dosyalarla birlikte **altlarında
+listelenen tüm bağımlılıkları da** taşıyın (zaten sunucunuzda aynı isimle
+varsa üzerine yazmanız yeterli, YOKSA eksik demektir, eklemelisiniz):
+
+**Route dosyaları (bu chat'te değişen/yeni):**
+- `routes/index.js` (değişti — yeni route mount edildi)
+- `routes/sportsTournamentUserApi.js` (**yeni dosya**)
+- `routes/sportsTournamentApi.js`
+- `routes/raceApi.js`
+- `routes/promoCodes.js`
+- `routes/bonus/index.js`
+
+**Servis dosyaları:**
+- `services/sportsTournamentService.js` (değişti — `getUserRank` eklendi)
+- `services/trialBonusService.js`
+- `services/depositBonusService.js`
+- `services/lossBonusService.js`
+- `services/reloadBonusService.js`
+- `services/promoCodeService.js`
+- `services/raceService.js`
+- `services/adminManualAdjustmentService.js`
+
+**Model dosyaları (`database/models/`):**
+- `User.js`, `TrialBonusSetting.js`, `TrialBonusClaim.js`
+- `DepositBonusSetting.js`, `DepositBonusClaim.js`
+- `LossBonusSetting.js`, `LossBonusClaim.js`
+- `ReloadBonusSetting.js`, `ReloadBonusAssignment.js`, `ReloadBonusClaim.js`
+- `PromoCode.js`, `PromoCodeClaim.js`
+- `ForcelabFinanceTransaction.js`, `BalanceTransaction.js`
+- `RaceTournament.js`, `RaceEntry.js`
+- `SportsTournament.js`, `SportsBet.js`
+- `Bonus.js`, `BonusHistory.js`, `CryptoTransaction.js`
+
+**Utils dosyaları (`utils/`):**
+- `rivoWallet.js`, `bonusLock.js`
+- `userFinanceTotals.js`, `userBetActivity.js`
+- `promoConditionEngine.js`
+- `wallet.js`
+
+**Middleware dosyaları (`middleware/`):**
+- `auth.js`, `permission.js`
+
+Bu listedeki her dosya için: sunucunuzda **aynı yol ve isimle** yoksa hata
+almaya devam edersiniz. En hızlı yol: bu proje ile sunucunuzdaki `backend/`
+klasörünü karşılaştırıp eksik olan dosyaları tek tek yüklemek (tüm `backend/`
+klasörünü topluca üzerine yazmayın — sunucunuzda olup burada olmayan başka
+özel değişiklikleriniz olabilir).
+
 ## 0. Genel Bilgiler
 
 ### Base URL
