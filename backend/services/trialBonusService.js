@@ -403,23 +403,35 @@ const getApprovedClaimsMap = async (userIds = []) => {
 };
 
 /**
- * Kullanıcının deneme bonusundan kalan bir çevrim (wagering) şartı hâlâ
- * aktif mi diye bakar. Betinovi oyun başlatma akışında (game_launch),
- * true dönerse kullanıcı RTP override YERİNE ayrı bir Betinovi agent'ına
+ * Kullanıcının HÂLÂ SONLANMAMIŞ bir Deneme Bonusu kaydı olup olmadığına
+ * bakar. Betinovi oyun başlatma akışında (game_launch), true dönerse
+ * kullanıcı RTP override YERİNE ayrı bir Betinovi agent'ına
  * (BETINOVI_AGENT_CODE_2 / BETINOVI_AGENT_TOKEN_2 / BETINOVI_API_ENDPOINT_2
- * — "bizzodeneme") yönlendirilir. Çevrim tamamlandığı anda evaluateBonusLock
- * kilidi otomatik kapatır ve burası false dönmeye başlar; kullanıcı bir
- * dahaki oyun açılışında otomatik olarak normal (bizzocasinoyeni) agent'a
- * geri döner.
+ * — "bizzodeneme") yönlendirilir.
+ *
+ * GÜVENLİK NOTU: `evaluateBonusLock`'un `type === "wagering"` kontrolüne
+ * dayanmaz — çünkü Çevrim Katsayısı 0 (kapalı) ayarlandığında
+ * `applyWageringLock` HİÇBİR çevrim kilidi kurmaz (bkz. bonusLock.js:
+ * `wageringRequired <= 0` ise `null` döner) ve `evaluateBonusLock` bu
+ * durumda asla `"wagering"` tipini döndürmez — Hedef Bakiye tek başına
+ * aktif olsa bile. Bunun yerine doğrudan `user.bonusLock` üzerindeki tek
+ * doğruluk kaynağına bakılır: kilit bu deneme bonusuna aitse (`source`) ve
+ * henüz sonlanmamışsa (`completedAt` yok — ne tamamlanmış ne iptal
+ * edilmiş), çevrim şartı olsun olmasın, hedef bakiye takibi sürüyor olsun
+ * ya da inceleme kilidinde olsun, kullanıcı "bizzodeneme" agent'ında
+ * kalmalıdır. Kilit sonlandığı (çevrim/hedef bakiye tamamlanıp admin
+ * inceleyip açtığında VEYA iptal edildiğinde) anda `completedAt` set
+ * edilir ve burası otomatik olarak false dönmeye başlar; kullanıcı bir
+ * dahaki oyun açılışında normal (bizzocasinoyeni) agent'a geri döner.
  */
 const hasActiveTrialWageringLock = async (user) => {
 	if (!user) return false;
 
-	const lockStatus = await evaluateBonusLock(user);
-	if (!lockStatus.active) return false;
-	if (lockStatus.type !== "wagering") return false;
+	const lock = user.bonusLock;
+	if (!lock || lock.source !== SOURCE) return false;
+	if (lock.completedAt) return false;
 
-	return lockStatus.source === SOURCE;
+	return true;
 };
 
 /**
