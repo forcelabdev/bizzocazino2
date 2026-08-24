@@ -89,20 +89,10 @@ const dialogModelValueUpdate = val => {
   emit('update:searchQuery', '')
 }
 
-const resolveCategories = val => {
-  if (val === 'dashboards')
-    return 'Dashboards'
-  if (val === 'appsPages')
-    return 'Apps & Pages'
-  if (val === 'userInterface')
-    return 'User Interface'
-  if (val === 'formsTables')
-    return 'Forms Tables'
-  if (val === 'chartsMisc')
-    return 'Charts Misc'
-  
-  return 'Misc'
-}
+// Category headers are now real, already-localized section names
+// (e.g. "Kullanıcılar", "Finans") coming straight from the app's
+// navigation config, so we just display them as-is.
+const resolveCategories = val => val
 </script>
 
 <template>
@@ -289,14 +279,14 @@ const resolveCategories = val => {
                   icon="tabler-file-x"
                 />
                 <div class="d-flex align-center flex-wrap justify-center gap-2 text-h6 my-3">
-                  <span>No Result For </span>
+                  <span>Sonuç bulunamadı: </span>
                   <span>"{{ searchQuery }}"</span>
                 </div>
                 <div
                   v-if="props.noDataSuggestion"
                   class="mt-8"
                 >
-                  <span class="d-flex justify-center text-disabled">Try searching for</span>
+                  <span class="d-flex justify-center text-disabled">Bunları deneyebilirsiniz</span>
                   <h6
                     v-for="suggestion in props.noDataSuggestion"
                     :key="suggestion.title"
