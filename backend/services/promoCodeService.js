@@ -8,6 +8,7 @@ const { evaluateConditions } = require("../utils/promoConditionEngine");
 const {
 	getUserLastApprovedDepositAmount,
 } = require("../utils/userFinanceTotals");
+const { updateUserBalance } = require("../utils/wallet");
 
 // Aynı kullanıcı + kod çifti için eşzamanlı (çift tıklama / race condition)
 // claim isteklerini engellemek için basit in-memory kilit. `sockets/general/promo`
@@ -58,7 +59,7 @@ const claimPromoCode = async (userId, rawCode) => {
 	try {
 		const [user, promo] = await Promise.all([
 			User.findById(userId).select(
-				"balance xp affiliates limits createdAt username",
+				"xp affiliates limits createdAt username wallets currency",
 			),
 			PromoCode.findOne({ code }),
 		]);
@@ -174,25 +175,32 @@ const claimPromoCode = async (userId, rawCode) => {
 		}
 
 		// --- Tüm şartlar geçti, ödülü uygula ---
-		const incUpdate = { balance: promo.reward };
+		// ⚠️ ÖNEMLİ: Bakiye ASLA `User.balance` (eski/kullanılmayan alan)
+		// üzerine `$inc` ile yazılmaz. Sitedeki gerçek/görünen bakiye
+		// `wallets[0].balance`'tır ve yatırım callback'leri, admin
+		// ayarlamaları, VIP ödülleri gibi TÜM akışlar `updateUserBalance`
+		// (utils/wallet.js) üzerinden günceller — bu fonksiyon hem doğru
+		// alanı `$inc`'ler hem de socket "user" event'iyle frontend'e
+		// anlık bildirim gönderir hem de deneme bonusu hedef bakiye
+		// kontrolünü tetikler. Eski socket akışı (controllers/general/
+		// promo/index.js) bu deseni kullanmıyordu ve muhtemelen aynı
+		// bakiye-güncellenmeme hatasına sahipti; burada kasıtlı olarak
+		// düzeltildi.
+		const limitsIncUpdate = {};
 		if (promo.applyWageringLock && promo.wageringMultiplier > 0) {
-			incUpdate["limits.betToWithdraw"] = promo.reward * promo.wageringMultiplier;
+			limitsIncUpdate["limits.betToWithdraw"] =
+				promo.reward * promo.wageringMultiplier;
 		}
 
-		const setUpdate = { updatedAt: Date.now() };
+		const limitsSetUpdate = { updatedAt: Date.now() };
 		if (promo.minWithdraw > 0) {
-			setUpdate["limits.minWithdraw"] = Math.max(
+			limitsSetUpdate["limits.minWithdraw"] = Math.max(
 				user.limits?.minWithdraw || 0,
 				promo.minWithdraw,
 			);
 		}
 
-		const [updatedUser] = await Promise.all([
-			User.findByIdAndUpdate(
-				user._id,
-				{ $inc: incUpdate, $set: setUpdate },
-				{ new: true },
-			).select("balance"),
+		const otherUpdates = [
 			PromoCode.findByIdAndUpdate(promo._id, {
 				$push: { redeemers: { user: user._id, claimedAt: now } },
 				$inc: { redeemptionsTotal: 1 },
@@ -204,13 +212,30 @@ const claimPromoCode = async (userId, rawCode) => {
 				user: user._id,
 				state: "completed",
 			}),
+		];
+		if (Object.keys(limitsIncUpdate).length > 0) {
+			otherUpdates.push(
+				User.findByIdAndUpdate(user._id, {
+					$inc: limitsIncUpdate,
+					$set: limitsSetUpdate,
+				}),
+			);
+		} else if (Object.keys(limitsSetUpdate).length > 1) {
+			otherUpdates.push(
+				User.findByIdAndUpdate(user._id, { $set: limitsSetUpdate }),
+			);
+		}
+
+		const [newBalance] = await Promise.all([
+			updateUserBalance(user, promo.reward),
+			...otherUpdates,
 		]);
 
 		return {
 			success: true,
 			code: promo.code,
 			reward: promo.reward,
-			balance: updatedUser.balance,
+			balance: newBalance,
 			claimedAt: now,
 		};
 	} finally {
