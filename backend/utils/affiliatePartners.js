@@ -30,11 +30,13 @@ const buildPartnerCodeMap = async () => {
 };
 
 /**
- * CRM raporu "Partner" filtre listesi için: hem şu an bir partnere ait olan
- * kodları hem de üyeler tarafından kullanılmış ama artık hiçbir partnere
- * bağlı olmayan ("yetim") redeemedCode değerlerini birleştirip, TEK bir
- * case-insensitive, distinct liste olarak döner. Böylece partner hesabı
- * silinmiş/kod değişmiş olsa dahi o kodu kullanan üyeler filtrelenebilir.
+ * CRM raporu "Partner" filtre listesi için: sadece en az bir üye tarafından
+ * gerçekten kullanılmış (affiliates.redeemedCode) kodları döner. Hiç kimse
+ * tarafından kullanılmamış olsa dahi bir partnere ait olan kodlar (sadece
+ * affiliates.code'da bulunanlar) listeye dahil edilmez — filtre bu şekilde
+ * yalnızca gerçekten üye getirmiş partnerleri gösterir. Kod hâlâ bir
+ * partnere ait ise başlıkta partnerin kullanıcı adı da gösterilir; partner
+ * hesabı silinmiş/kod değişmişse ("yetim" kod) kodun kendisi gösterilir.
  */
 const listRedeemedAffiliateCodes = async () => {
 	const [partnerMap, redeemedCodeDocs] = await Promise.all([
@@ -51,21 +53,18 @@ const listRedeemedAffiliateCodes = async () => {
 
 	const byKey = new Map();
 
-	for (const [key, partner] of partnerMap.entries()) {
-		byKey.set(key, {
-			code: partner.code,
-			username: partner.username,
-			title: `${partner.username} (${partner.code})`,
-		});
-	}
-
 	for (const doc of redeemedCodeDocs) {
 		const rawCode = doc._id;
 		if (!rawCode) continue;
 		const key = normalizeCode(rawCode);
 		if (byKey.has(key)) continue;
-		// Yetim kod: şu an hiçbir partnere ait değil, olduğu gibi listelenir.
-		byKey.set(key, { code: rawCode, username: null, title: rawCode });
+
+		const partner = partnerMap.get(key);
+		byKey.set(key, {
+			code: partner?.code || rawCode,
+			username: partner?.username || null,
+			title: partner ? `${partner.username} (${partner.code})` : rawCode,
+		});
 	}
 
 	return [...byKey.values()].sort((a, b) => a.title.localeCompare(b.title));
