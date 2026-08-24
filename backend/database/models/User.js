@@ -282,6 +282,10 @@ const userSchema = new mongoose.Schema(
 			// Deneme bonusu talebi onaylandığı anda ayarlardan alınan snapshot;
 			// ayar sonradan değişse de bu kullanıcı için sabit kalır.
 			targetBalanceAmount: { type: Number, default: 0 },
+			// Kilit, çevrim tamamlanmadan gerçek bir yatırım nedeniyle güvenlik
+			// amacıyla erken sonlandırıldıysa "real_deposit" olarak işaretlenir
+			// (bkz. bonusLock.js → forfeitTrialWageringLockOnDeposit).
+			forfeitedReason: { type: String, default: "" },
 		},
 
 		// Reload Bonusu kilidi: bonusLock'tan tamamen bağımsızdır (Reload,

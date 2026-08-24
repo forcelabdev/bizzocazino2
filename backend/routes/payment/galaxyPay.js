@@ -1021,6 +1021,11 @@ try{
 
 			transaction.newBalance = newBalance;
 
+			require("../../utils/depositEvents").notifyRealDepositCredited(
+				user,
+				providerAmount,
+				"GalaxyPay"
+			);
 
 		}
 

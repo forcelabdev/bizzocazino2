@@ -336,6 +336,39 @@ const resolveTrialBonusReviewLock = async (user) => {
 	return true;
 };
 
+/**
+ * GÜVENLİK: Kullanıcı gerçek bir yatırım (deposit) yaptığında, hâlâ
+ * tamamlanmamış bir Deneme Bonusu çevrim (wagering) kilidi varsa anında
+ * sonlandırır. Amaç: deneme bonusu çevrimini tamamlamadan gerçek para
+ * yatıran bir kullanıcının, hâlâ deneme bonusu agent'ı (bizzodeneme)
+ * üzerinden gerçek parayla oyun oynamasını ÖNLEMEK — çevrimden kalan tutar
+ * ne olursa olsun (1 TL bile olsa) kullanıcı bir dahaki oyun açılışında
+ * normal (varsayılan) agent'a döner.
+ *
+ * Zaten inceleme kilidindeyse (`reviewRequired`) dokunmaz — o akış zaten
+ * admin onayı bekliyor ve ayrı bir güvenlik katmanı. Sadece süren
+ * ("wagering", henüz tamamlanmamış) bir Deneme Bonusu kilidini kapatır.
+ *
+ * @param {import("../database/models/User")} user
+ * @returns {Promise<boolean>} kilit gerçekten sonlandırıldıysa true
+ */
+const forfeitTrialWageringLockOnDeposit = async (user) => {
+	const lock = user?.bonusLock;
+	if (!lock || lock.source !== "trial_bonus") return false;
+	if (lock.reviewRequired || lock.completedAt) return false;
+	if (!lock.wageringRequired || lock.wageringRequired <= 0) return false;
+
+	await User.findByIdAndUpdate(user._id, {
+		$set: {
+			"bonusLock.completedAt": new Date(),
+			"bonusLock.targetBalanceAmount": 0,
+			"bonusLock.forfeitedReason": "real_deposit",
+		},
+	});
+
+	return true;
+};
+
 module.exports = {
 	applyBonusLock,
 	applyWageringLock,
@@ -345,4 +378,5 @@ module.exports = {
 	assertWithdrawalNotBlocked,
 	triggerTrialBonusReviewLock,
 	resolveTrialBonusReviewLock,
+	forfeitTrialWageringLockOnDeposit,
 };

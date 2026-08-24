@@ -12,6 +12,7 @@ const {
 	evaluateBonusLock,
 	triggerTrialBonusReviewLock,
 	resolveTrialBonusReviewLock,
+	forfeitTrialWageringLockOnDeposit,
 } = require("../utils/bonusLock");
 const { sumUserBetsSince } = require("../utils/userBetActivity");
 const {
@@ -467,6 +468,29 @@ const checkTrialBonusTargetBalance = async (user, newBalance) => {
 };
 
 /**
+ * GÜVENLİK: Tüm ödeme sağlayıcı yatırım onay noktaları (GalaxyPay, MeelDev,
+ * ForcelabFinance, FluxKripto, xPayments, Pix, Oxapay/Kripto) tarafından
+ * kullanıcıya GERÇEK bir yatırım tutarı kredilendiğinde çağrılır. Kullanıcının
+ * hâlâ tamamlanmamış bir Deneme Bonusu çevrim kilidi varsa anında sonlandırır
+ * — böylece bir dahaki oyun açılışında (game_launch) `hasActiveTrialWageringLock`
+ * false döner ve kullanıcı normal (varsayılan) agent'a yönlendirilir. Ana
+ * yatırım akışını asla bloklamaz/başarısız etmez, hatalar sadece loglanır.
+ */
+const handleRealDepositCredited = async (userId) => {
+	if (!userId) return;
+	try {
+		const user = await User.findById(userId);
+		if (!user) return;
+		await forfeitTrialWageringLockOnDeposit(user);
+	} catch (err) {
+		console.error(
+			"❌ handleRealDepositCredited → deneme bonusu kilidi sonlandırma hatası:",
+			err.message
+		);
+	}
+};
+
+/**
  * Admin panelinden "İncelemeyi Tamamla ve Kilidi Aç" aksiyonu tarafından
  * çağrılır.
  */
@@ -493,16 +517,5 @@ module.exports = {
 	checkTrialBonusWageringCompletion,
 	checkTrialBonusTargetBalance,
 	resolveTrialBonusReview,
-};
-
-module.exports = {
-	getSettings,
-	updateSettings,
-	getPotential,
-	claim,
-	approveClaim,
-	rejectClaim,
-	getApprovedClaimsMap,
-	getActiveRtp,
-	hasActiveTrialWageringLock,
+	handleRealDepositCredited,
 };

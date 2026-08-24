@@ -3,7 +3,7 @@ const mongoose = require('mongoose');
 const AdminNotificationSchema = new mongoose.Schema({
     type: {
         type: String,
-        enum: ['withdraw', 'new_user', 'sanction'],
+        enum: ['withdraw', 'deposit', 'new_user', 'sanction'],
         required: true,
     },
     title: {

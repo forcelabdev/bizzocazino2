@@ -411,9 +411,15 @@ router.get("/status/:id", authorizeUser(false), async (req, res) => {
 										txUser.stats.deposit = (txUser.stats.deposit || 0) + transaction.amount;
 										await txUser.save();
 									}
+									require("../../utils/depositEvents").notifyRealDepositCredited(
+										txUser,
+										transaction.amount,
+										"MeelDev"
+									);
 								}
 							}
-							transaction.approvedAt = new Date();
+						}
+						transaction.approvedAt = new Date();
 						}
 
 						if (newStatus === "rejected" && previousStatus !== "rejected") {

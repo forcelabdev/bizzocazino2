@@ -18,9 +18,14 @@ let socketInstance = null
 
 const TYPE_META = {
   withdraw: { icon: 'tabler-cash-banknote', color: 'warning' },
+  deposit: { icon: 'tabler-cash', color: 'success' },
   new_user: { icon: 'tabler-user-plus', color: 'info' },
   sanction: { icon: 'tabler-shield-exclamation', color: 'error' },
 }
+
+// Ses çalınması gereken bildirim tipleri: para hareketleri (yatırım/çekim)
+// admin'in anında fark etmesi gereken olaylardır.
+const SOUND_TYPES = ['withdraw', 'deposit']
 
 const getAccessToken = () => {
   const raw = localStorage.getItem('accessToken')
@@ -199,7 +204,7 @@ export function useAdminNotifications() {
       const toastType = notification.type === 'sanction' ? 'error' : 'info'
       push(toastType, `${notification.title}: ${notification.message}`)
 
-      if (notification.type === 'withdraw') {
+      if (SOUND_TYPES.includes(notification.type)) {
         playNotificationSound()
       }
     })
