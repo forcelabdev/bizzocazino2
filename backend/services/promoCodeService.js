@@ -5,6 +5,7 @@ const User = require("../database/models/User");
 const ForcelabFinanceTransaction = require("../database/models/ForcelabFinanceTransaction");
 const BalanceTransaction = require("../database/models/BalanceTransaction");
 const { evaluateConditions } = require("../utils/promoConditionEngine");
+const { getActiveWallet, updateWalletBalance } = require("../utils/wallet");
 
 class PromoCodeError extends Error {
 	constructor(code, message, status = 400) { super(message); this.code = code; this.status = status; }
@@ -63,12 +64,20 @@ const claimPromoCode = async ({ code, userId }) => {
 				}
 			}
 
-			user.balance = Number(user.balance || 0) + promo.reward;
+			// 💰 Gerçek bakiye User.wallets[].balance içinde tutulur; şema dışı
+			// "user.balance" alanına yazmak persist edilmiyordu (kullanıcıya
+			// "eklendi" mesajı gösterilse de bakiye hiç değişmiyordu).
+			const activeWallet = getActiveWallet(user);
+			if (!activeWallet) throw new PromoCodeError("WALLET_NOT_FOUND", "Kullanıcının aktif cüzdanı bulunamadı.", 500);
+
 			if (promo.applyWageringLock) {
 				user.limits.betToWithdraw = Number(user.limits.betToWithdraw || 0) + (promo.reward * promo.wageringMultiplier);
 				user.limits.minWithdraw = Math.max(Number(user.limits.minWithdraw || 0), promo.minWithdraw);
 			}
 			await user.save({ session });
+
+			const balanceAfter = await updateWalletBalance(user, activeWallet, promo.reward, { session });
+			if (balanceAfter === false) throw new PromoCodeError("BALANCE_UPDATE_FAILED", "Bakiye güncellenemedi.", 500);
 			promo.redeemers.push({ user: user._id, claimedAt: now });
 			promo.redeemptionsTotal += 1;
 			await promo.save({ session });
@@ -93,7 +102,7 @@ const claimPromoCode = async ({ code, userId }) => {
 			result = {
 				code: promo.code,
 				reward: promo.reward,
-				balance: user.balance,
+				balance: balanceAfter,
 				claimedAt: now,
 				wagering: promo.applyWageringLock ? {
 					required: promo.reward * promo.wageringMultiplier,
