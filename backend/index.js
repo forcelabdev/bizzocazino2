@@ -214,3 +214,57 @@ dbReadyPromise
 		console.error("🔥 Sunucu başlatılamadı, DB bağlantısı kurulamadı:", err);
 		process.exit(1);
 	});
+
+// 🛑 Graceful shutdown — PM2'nin restart/deploy sırasında gönderdiği
+// SIGTERM/SIGINT sinyalini karşılar. Daha önce bu hiç yoktu: PM2 bir restart
+// tetiklediğinde (deploy, kod güncelleme, `pm2 restart`) process ANINDA
+// öldürülüyordu — o anda işlenmekte olan istekler yarıda kesiliyor, yeni
+// gelen istekler ise yeni process (DB bağlantısı + migration'lar dahil)
+// tamamen ayağa kalkana kadar "bağlantı yok/502" görüyordu (frontend proxy
+// tarafında "Bağlantı hatası" olarak karşımıza çıkan tam olarak bu pencere).
+//
+// Bu handler eklenince: sinyal geldiğinde önce yeni bağlantıları kabul etmeyi
+// durduruyoruz (server.close), devam eden isteklerin bitmesine izin veriyoruz,
+// socket.io bağlantılarını düzgün kapatıyoruz, sonra mongoose bağlantısını
+// kapatıp çıkıyoruz. Bu, kesinti penceresini tamamen ortadan kaldırmaz (PM2
+// varsayılan olarak fork modda tek process çalıştırdığı için restart anında
+// hâlâ kısa bir "yeni process henüz dinlemiyor" aralığı olur) ama devam eden
+// isteklerin sert kesilmesini önler ve process'in DB bağlantısını temiz
+// kapatmasını sağlar. Kesinti penceresini sıfıra indirmek için PM2 cluster
+// modu (`exec_mode: "cluster"`, birden fazla instance) veya bir health-check
+// destekli reverse-proxy (zero-downtime reload) önerilir — bu ayrı bir konu.
+let shuttingDown = false;
+function gracefulShutdown(signal) {
+	if (shuttingDown) return;
+	shuttingDown = true;
+	console.log(`🛑 ${signal} alındı, sunucu düzgün şekilde kapatılıyor...`);
+
+	// Yeni bağlantı kabul etmeyi durdur, devam eden isteklerin bitmesine izin ver.
+	server.close(() => {
+		console.log("✅ HTTP sunucusu kapatıldı, artık yeni istek almıyor.");
+
+		const mongoose = require("mongoose");
+		mongoose.connection
+			.close(false)
+			.then(() => {
+				console.log("✅ MongoDB bağlantısı düzgün kapatıldı.");
+				process.exit(0);
+			})
+			.catch((err) => {
+				console.error("⚠️ MongoDB bağlantısı kapatılırken hata:", err);
+				process.exit(0);
+			});
+	});
+
+	// server.close() bir şekilde (açık socket.io bağlantıları vb. nedeniyle)
+	// asılı kalırsa, sonsuza kadar beklemeyip belirli bir süre sonra zorla çık.
+	setTimeout(() => {
+		console.error(
+			"⚠️ Graceful shutdown zaman aşımına uğradı, process zorla kapatılıyor.",
+		);
+		process.exit(1);
+	}, 10000).unref();
+}
+
+process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+process.on("SIGINT", () => gracefulShutdown("SIGINT"));
