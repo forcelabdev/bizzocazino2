@@ -3,40 +3,6 @@ process.env.XDG_CONFIG_HOME = "/tmp";
 process.env.PUPPETEER_SKIP_CHROMIUM_DOWNLOAD = "true";
 process.env.PUPPETEER_CACHE_DIR = "/tmp/puppeteer";
 
-// 🛡️ Global crash guard — EN BAŞTA tanımlanmalı.
-// Daha önce hiçbir uncaughtException/unhandledRejection handler'ı yoktu:
-// kod tabanının HERHANGİ bir yerinde (100+ route/socket/cron/service dosyası)
-// yakalanmamış tek bir hata (örn. eksik try/catch, .catch() unutulmuş bir
-// promise) olduğunda Node.js process'i ANINDA çökertiyordu — sadece o isteği
-// değil, TÜM backend'i. Bu, "bağlantı hatası" görüp 3-5 kez tekrar deneyince
-// çalışması davranışının olası nedenlerinden biriydi (PM2 process'i yeniden
-// başlatana kadar istekler başarısız oluyordu). Artık hata sadece loglanır,
-// process ayakta kalır ve isteğe kesinti olmadan devam edilir.
-// ÖNEMLİ DÜZELTME (2026-08-25): İlk versiyonda process burada KAPATILMIYORDU
-// (sadece logluyorduk). Bu, ör. EADDRINUSE (port zaten kullanımda) gibi
-// başlangıç/ölümcül hatalarında process'i "zombi" haline getirdi: Node
-// process teknik olarak ayakta kalıyor, PM2 ekranında "online" görünüyor
-// (çökmediği için restart sayacı da artmıyor), ama server.listen()
-// başarısız olduğu için HİÇBİR PORTU DİNLEMİYOR ve hiçbir isteğe cevap
-// veremiyor. PM2 bunu asla fark edip yeniden başlatmıyordu çünkü process
-// hiç çökmüyordu. Bu yüzden site "veri gelmiyor / 502" durumuna düşmüştü.
-//
-// Doğru/önerilen pattern: hatayı logla, SONRA process'i kapat (exit code 1)
-// — PM2 zaten bunu algılayıp otomatik yeniden başlatacak (restart sayacı
-// artar, bu da bize gerçek bir sinyal verir). "Hatadan sonra sessizce
-// yaşamaya devam etmek" Node.js'in resmi dokümantasyonunda da tavsiye
-// edilmez çünkü uygulama durumu tutarsız kalmış olabilir.
-process.on("uncaughtException", (err, origin) => {
-	console.error("🔥 [uncaughtException] Yakalanmamış hata:", err);
-	console.error("🔥 [uncaughtException] Origin:", origin);
-	process.exit(1);
-});
-
-process.on("unhandledRejection", (reason) => {
-	console.error("🔥 [unhandledRejection] Yakalanmamış promise reddi:", reason);
-	process.exit(1);
-});
-
 require("dotenv").config();
 
 const path = require("path");
@@ -89,15 +55,7 @@ require("./utils/io").init(io);
 
 //initTelegramBot(io);
 
-// connectDB() promise'i saklanıyor — server.listen() bu tamamlanana kadar
-// beklemeli (aşağıda). Önceden bu hiç await edilmiyordu: server.listen()
-// hemen çalışıyor, sunucu "hazırım" deyip istek almaya başlıyordu ama
-// arka planda hâlâ syncAllIndexes/migrateUsersToRivoWallet/seedSystemPermissions
-// gibi ağır DB işlemleri sürüyordu. Her process restart'ında (PM2 restart,
-// deploy, crash sonrası) ilk gelen istekler bu pencerede yavaş/kararsız
-// yanıt alabiliyordu — "bağlantı hatası" görüp tekrar deneyince çalışması
-// davranışının olası nedenlerinden biri.
-const dbReadyPromise = require("./database")();
+require("./database")();
 require("./utils/setting").settingInitDatabase();
 
 // Initialize avatar helper (preload fallback cache)
@@ -198,73 +156,8 @@ cron.schedule("* * * * *", () => {
 // Set app port
 const PORT = process.env.SERVER_PORT || 5000;
 
-// DB bağlantısı + kritik başlangıç işlemleri (index sync, migration, seed)
-// tamamlanmadan sunucu istek almasın. connectDB() zaten kendi içinde hata
-// durumunda process.exit(1) yaptığı için burada ekstra bir catch/exit
-// gerekmiyor — sadece "ne zaman hazır olduğunu" bekliyoruz.
-dbReadyPromise
-	.then(() => {
-		server.listen(PORT, () =>
-			console.log(
-				`Server running in ${process.env.NODE_ENV} mode on port ${PORT}`,
-			),
-		);
-	})
-	.catch((err) => {
-		console.error("🔥 Sunucu başlatılamadı, DB bağlantısı kurulamadı:", err);
-		process.exit(1);
-	});
-
-// 🛑 Graceful shutdown — PM2'nin restart/deploy sırasında gönderdiği
-// SIGTERM/SIGINT sinyalini karşılar. Daha önce bu hiç yoktu: PM2 bir restart
-// tetiklediğinde (deploy, kod güncelleme, `pm2 restart`) process ANINDA
-// öldürülüyordu — o anda işlenmekte olan istekler yarıda kesiliyor, yeni
-// gelen istekler ise yeni process (DB bağlantısı + migration'lar dahil)
-// tamamen ayağa kalkana kadar "bağlantı yok/502" görüyordu (frontend proxy
-// tarafında "Bağlantı hatası" olarak karşımıza çıkan tam olarak bu pencere).
-//
-// Bu handler eklenince: sinyal geldiğinde önce yeni bağlantıları kabul etmeyi
-// durduruyoruz (server.close), devam eden isteklerin bitmesine izin veriyoruz,
-// socket.io bağlantılarını düzgün kapatıyoruz, sonra mongoose bağlantısını
-// kapatıp çıkıyoruz. Bu, kesinti penceresini tamamen ortadan kaldırmaz (PM2
-// varsayılan olarak fork modda tek process çalıştırdığı için restart anında
-// hâlâ kısa bir "yeni process henüz dinlemiyor" aralığı olur) ama devam eden
-// isteklerin sert kesilmesini önler ve process'in DB bağlantısını temiz
-// kapatmasını sağlar. Kesinti penceresini sıfıra indirmek için PM2 cluster
-// modu (`exec_mode: "cluster"`, birden fazla instance) veya bir health-check
-// destekli reverse-proxy (zero-downtime reload) önerilir — bu ayrı bir konu.
-let shuttingDown = false;
-function gracefulShutdown(signal) {
-	if (shuttingDown) return;
-	shuttingDown = true;
-	console.log(`🛑 ${signal} alındı, sunucu düzgün şekilde kapatılıyor...`);
-
-	// Yeni bağlantı kabul etmeyi durdur, devam eden isteklerin bitmesine izin ver.
-	server.close(() => {
-		console.log("✅ HTTP sunucusu kapatıldı, artık yeni istek almıyor.");
-
-		const mongoose = require("mongoose");
-		mongoose.connection
-			.close(false)
-			.then(() => {
-				console.log("✅ MongoDB bağlantısı düzgün kapatıldı.");
-				process.exit(0);
-			})
-			.catch((err) => {
-				console.error("⚠️ MongoDB bağlantısı kapatılırken hata:", err);
-				process.exit(0);
-			});
-	});
-
-	// server.close() bir şekilde (açık socket.io bağlantıları vb. nedeniyle)
-	// asılı kalırsa, sonsuza kadar beklemeyip belirli bir süre sonra zorla çık.
-	setTimeout(() => {
-		console.error(
-			"⚠️ Graceful shutdown zaman aşımına uğradı, process zorla kapatılıyor.",
-		);
-		process.exit(1);
-	}, 10000).unref();
-}
-
-process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
-process.on("SIGINT", () => gracefulShutdown("SIGINT"));
+server.listen(PORT, () =>
+	console.log(
+		`Server running in ${process.env.NODE_ENV} mode on port ${PORT}`,
+	),
+);
