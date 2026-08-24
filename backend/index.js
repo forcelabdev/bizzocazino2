@@ -3,6 +3,29 @@ process.env.XDG_CONFIG_HOME = "/tmp";
 process.env.PUPPETEER_SKIP_CHROMIUM_DOWNLOAD = "true";
 process.env.PUPPETEER_CACHE_DIR = "/tmp/puppeteer";
 
+// 🛡️ Global crash guard — EN BAŞTA tanımlanmalı.
+// Daha önce hiçbir uncaughtException/unhandledRejection handler'ı yoktu:
+// kod tabanının HERHANGİ bir yerinde (100+ route/socket/cron/service dosyası)
+// yakalanmamış tek bir hata (örn. eksik try/catch, .catch() unutulmuş bir
+// promise) olduğunda Node.js process'i ANINDA çökertiyordu — sadece o isteği
+// değil, TÜM backend'i. Bu, "bağlantı hatası" görüp 3-5 kez tekrar deneyince
+// çalışması davranışının olası nedenlerinden biriydi (PM2 process'i yeniden
+// başlatana kadar istekler başarısız oluyordu). Artık hata sadece loglanır,
+// process ayakta kalır ve isteğe kesinti olmadan devam edilir.
+process.on("uncaughtException", (err, origin) => {
+	console.error("🔥 [uncaughtException] Yakalanmamış hata:", err);
+	console.error("🔥 [uncaughtException] Origin:", origin);
+	// Process'i KAPATMIYORUZ — sadece logluyoruz. Node.js resmi dokümantasyonu
+	// process'i bu noktada kapatmayı önerir çünkü uygulama durumu tutarsız
+	// olabilir; ancak bu backend'de tekil isteklerin çökmesi tüm sunucuyu
+	// düşürmekten çok daha az risklidir. Kritik/tekrarlayan hatalar için
+	// harici bir hata izleme servisi (Sentry vb.) eklenmesi önerilir.
+});
+
+process.on("unhandledRejection", (reason, promise) => {
+	console.error("🔥 [unhandledRejection] Yakalanmamış promise reddi:", reason);
+});
+
 require("dotenv").config();
 
 const path = require("path");
@@ -55,7 +78,15 @@ require("./utils/io").init(io);
 
 //initTelegramBot(io);
 
-require("./database")();
+// connectDB() promise'i saklanıyor — server.listen() bu tamamlanana kadar
+// beklemeli (aşağıda). Önceden bu hiç await edilmiyordu: server.listen()
+// hemen çalışıyor, sunucu "hazırım" deyip istek almaya başlıyordu ama
+// arka planda hâlâ syncAllIndexes/migrateUsersToRivoWallet/seedSystemPermissions
+// gibi ağır DB işlemleri sürüyordu. Her process restart'ında (PM2 restart,
+// deploy, crash sonrası) ilk gelen istekler bu pencerede yavaş/kararsız
+// yanıt alabiliyordu — "bağlantı hatası" görüp tekrar deneyince çalışması
+// davranışının olası nedenlerinden biri.
+const dbReadyPromise = require("./database")();
 require("./utils/setting").settingInitDatabase();
 
 // Initialize avatar helper (preload fallback cache)
@@ -156,8 +187,19 @@ cron.schedule("* * * * *", () => {
 // Set app port
 const PORT = process.env.SERVER_PORT || 5000;
 
-server.listen(PORT, () =>
-	console.log(
-		`Server running in ${process.env.NODE_ENV} mode on port ${PORT}`,
-	),
-);
+// DB bağlantısı + kritik başlangıç işlemleri (index sync, migration, seed)
+// tamamlanmadan sunucu istek almasın. connectDB() zaten kendi içinde hata
+// durumunda process.exit(1) yaptığı için burada ekstra bir catch/exit
+// gerekmiyor — sadece "ne zaman hazır olduğunu" bekliyoruz.
+dbReadyPromise
+	.then(() => {
+		server.listen(PORT, () =>
+			console.log(
+				`Server running in ${process.env.NODE_ENV} mode on port ${PORT}`,
+			),
+		);
+	})
+	.catch((err) => {
+		console.error("🔥 Sunucu başlatılamadı, DB bağlantısı kurulamadı:", err);
+		process.exit(1);
+	});
