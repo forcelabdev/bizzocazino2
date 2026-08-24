@@ -2754,9 +2754,13 @@ router.get(
 	async (req, res) => {
 		try {
 			const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
-			const limit = Math.max(
-				parseInt(req.query.itemsPerPage || req.query.limit, 10) || 20,
-				1,
+			const limit = Math.min(
+				Math.max(
+					parseInt(req.query.itemsPerPage || req.query.limit, 10) ||
+						20,
+					1,
+				),
+				5000,
 			);
 			const { q = "", kind, direction, actorId, userId } = req.query;
 

@@ -263,7 +263,21 @@ const submitStatusUpdate = async () => {
 <template>
 	<section>
 		<VCard>
-			<VCardTitle>{{ t("finance.bankTransfer.title") }}</VCardTitle>
+			<VCardTitle
+				class="d-flex align-center justify-space-between flex-wrap gap-2"
+			>
+				<span>{{ t("finance.bankTransfer.title") }}</span>
+				<VBtn
+					size="small"
+					variant="tonal"
+					color="success"
+					prepend-icon="tabler-file-spreadsheet"
+					:loading="isExporting"
+					@click="exportTransfers"
+				>
+					Excel'e Aktar
+				</VBtn>
+			</VCardTitle>
 			<VCardText>
 				<VRow class="mb-4">
 					<VCol cols="12" md="6">
