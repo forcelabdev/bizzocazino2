@@ -765,11 +765,43 @@ router.post("/", async (req, res) => {
 					// ============================================================
 					// 10) Handle nexus sportsbook bet tracking
 					// ============================================================
-					if (game_type === "SB" && info) {
+					// ÖNEMLİ: Daha önce bu blok yalnızca kök seviyede "info" alanı
+					// DOLU geldiğinde çalışıyordu (if (... && info)). Gerçek Nexus
+					// trafiğinde bu alan hiç gelmediği için (bkz. üretim verisi)
+					// spor bahisleri hiçbir zaman SportsBet/SportsBetEvent kaydına
+					// dönüşmüyordu — panelde "Maç detayı bulunamadı" görünmesinin
+					// asıl sebebi buydu. Artık "info" olmasa da bahsi takip
+					// kaydına alıyoruz, olası alternatif alan adlarını da deniyoruz
+					// ve ham webhook body'sini "extra.rawWebhook" içine kaydederek
+					// sağlayıcının gerçek alan adını sonraki canlı bahiste
+					// doğrulayabilmemizi sağlıyoruz.
+					if (game_type === "SB") {
 						try {
-							const betInfo = typeof info === "string"
-								? JSON.parse(info)
-								: info;
+							const rawInfo =
+								info ??
+								gameDetails?.info ??
+								req.body.betInfo ??
+								req.body.bet_info ??
+								req.body.Info ??
+								SB?.info ??
+								null;
+
+							let betInfo = {};
+							if (rawInfo) {
+								try {
+									betInfo =
+										typeof rawInfo === "string"
+											? JSON.parse(rawInfo)
+											: rawInfo;
+								} catch (parseErr) {
+									console.error(
+										"SB info alanı parse edilemedi:",
+										parseErr.message,
+										rawInfo
+									);
+									betInfo = {};
+								}
+							}
 
 							const couponCode = betInfo.couponCode || txn_id;
 							const betStatus = betInfo.status || "pending";
@@ -833,7 +865,9 @@ router.post("/", async (req, res) => {
 										eventCount,
 										isLive: hasLiveSlip,
 										ipAddress: getClientIp(req),
-										extra: { betInfo },
+										// rawWebhook: Nexus'un gerçek payload şeklini teyit
+										// edebilmek için ham request body'sini saklıyoruz.
+										extra: { betInfo, rawWebhook: req.body },
 									});
 
 									if (betslips.length > 0) {
