@@ -63,6 +63,23 @@ const ENV_FALLBACK = {
 	agentToken: "BETINOVI_AGENT_TOKEN",
 };
 
+// Deneme bonusu (bizzodeneme) agent'ı — sadece .env üzerinden gelir, admin
+// panelinden düzenlenemez. "Oyundaki Kullanıcılar" ve Call Management
+// panelleri bu agent'ı da sorgular ki deneme bonusu çevriminde olan
+// kullanıcılar da listelerde/rapor ekranlarında görünsün.
+const TRIAL_ENV_FALLBACK = {
+	baseUrl: "BETINOVI_API_ENDPOINT_2",
+	agentCode: "BETINOVI_AGENT_CODE_2",
+	agentToken: "BETINOVI_AGENT_TOKEN_2",
+};
+
+const hasTrialControlGameAgent = () =>
+	Boolean(
+		process.env[TRIAL_ENV_FALLBACK.baseUrl] &&
+			process.env[TRIAL_ENV_FALLBACK.agentCode] &&
+			process.env[TRIAL_ENV_FALLBACK.agentToken],
+	);
+
 const toPlainObject = (value) => {
 	if (!value) return {};
 	if (typeof value.toObject === "function") return value.toObject();
@@ -196,7 +213,7 @@ const saveClientAdminApiSettings = async (payload = {}) => {
 	return getClientAdminApiSettings();
 };
 
-const resolveRuntimeConfig = async (sectionKey) => {
+const resolveRuntimeConfig = async (sectionKey, agentSource = "default") => {
 	const siteSettings = await SiteSettings.findOne().lean();
 	const settings = normalizeAdminApiSettings(siteSettings?.apiSettings);
 	const section = settings[sectionKey];
@@ -211,6 +228,28 @@ const resolveRuntimeConfig = async (sectionKey) => {
 		const error = new Error("Bu Betinovi admin API alanı pasif durumda.");
 		error.statusCode = 400;
 		throw error;
+	}
+
+	// Deneme bonusu (bizzodeneme) agent'ı sadece controlGame alanında ve
+	// sadece .env üzerinden desteklenir; admin panelindeki baseUrl/agentCode/
+	// agentToken alanları bu agent için kullanılmaz.
+	if (sectionKey === "controlGame" && agentSource === "trial") {
+		const config = {
+			...section,
+			baseUrl: process.env[TRIAL_ENV_FALLBACK.baseUrl] || "",
+			agentCode: process.env[TRIAL_ENV_FALLBACK.agentCode] || "",
+			agentToken: process.env[TRIAL_ENV_FALLBACK.agentToken] || "",
+		};
+
+		if (!config.baseUrl || !config.agentCode || !config.agentToken) {
+			const error = new Error(
+				"Deneme bonusu (bizzodeneme) agent bilgileri (.env) eksik.",
+			);
+			error.statusCode = 400;
+			throw error;
+		}
+
+		return config;
 	}
 
 	const config = {
@@ -570,8 +609,9 @@ const buildRequestPayload = (sectionKey, methodName, payload, config) => {
 	return sanitizePayload(payload);
 };
 
-const betinoviAdminRequest = async (sectionKey, method, payload = {}) => {
-	const config = await resolveRuntimeConfig(sectionKey);
+const betinoviAdminRequest = async (sectionKey, method, payload = {}, options = {}) => {
+	const agentSource = options.agentSource === "trial" ? "trial" : "default";
+	const config = await resolveRuntimeConfig(sectionKey, agentSource);
 	const methodName = normalizeMethodName(sectionKey, method);
 
 	if (!methodName) {
@@ -706,34 +746,78 @@ const dedupeCurrentPlayersByLatestTransaction = async (players) => {
 };
 
 /**
+ * Tek bir agent'tan (default ya da trial/bizzodeneme) GetCurrentPlayers
+ * çeker ve satırları dedupe eder. Hata durumunda boş liste döner —
+ * bir agent çökse bile diğerinin listesi panelde görünmeye devam eder.
+ */
+const getCurrentPlayersForAgent = async (vendorCode, agentSource) => {
+	try {
+		const settings = await getClientAdminApiSettings();
+		const onlineUsersMethod = settings.controlGame.methods.onlineUsers;
+
+		const playersData = await betinoviAdminRequest(
+			"controlGame",
+			onlineUsersMethod,
+			{ vendorCode },
+			{ agentSource },
+		);
+		const rawPlayers = Array.isArray(playersData?.playerInfos)
+			? playersData.playerInfos
+			: [];
+		const deduped = await dedupeCurrentPlayersByLatestTransaction(rawPlayers);
+
+		return deduped.map((player) => ({ ...player, agentSource }));
+	} catch (error) {
+		console.error(
+			`ControlGame GetCurrentPlayers (${agentSource}) hatası:`,
+			error.message,
+		);
+		return [];
+	}
+};
+
+/**
  * "Akıllı kombinasyon": GetCurrentPlayers'tan gelen oyuncu listesini döner,
  * hasPendingCall === true olan oyuncular için (sadece bunlar için, paralel)
  * GetCallList ile zenginleştirme yapar. Diğer oyuncular için vendor API'sine
  * gereksiz istek atılmaz (hasPendingCall === false olan oyuncularda GetCallList
  * "Invalid post result from game" hatası döndürüyor).
+ *
+ * Deneme bonusu çevriminde olan kullanıcılar oyunu bizzodeneme (trial) agent'ı
+ * üzerinden açtığı için (bkz. backend/routes/betinoviApi.js game_launch),
+ * bu fonksiyon varsayılan agent'ın yanında (env'de tanımlıysa) bizzodeneme
+ * agent'ını da paralel sorgular ve iki listeyi birleştirir. Her satıra hangi
+ * agent'tan geldiğini belirten `agentSource` ("default" | "trial") eklenir;
+ * bu alan sonradan "call ver" (apply-call) isteğinde doğru agent'a
+ * yönlendirme yapmak için kullanılır.
  */
 const getEnrichedCurrentPlayers = async (vendorCode) => {
 	const settings = await getClientAdminApiSettings();
-	const onlineUsersMethod = settings.controlGame.methods.onlineUsers;
 	const callListMethod = settings.controlGame.methods.callList;
 
-	const playersData = await betinoviAdminRequest("controlGame", onlineUsersMethod, {
-		vendorCode,
-	});
-	const rawPlayers = Array.isArray(playersData?.playerInfos)
-		? playersData.playerInfos
-		: [];
-	const players = await dedupeCurrentPlayersByLatestTransaction(rawPlayers);
+	const agentSources = hasTrialControlGameAgent()
+		? ["default", "trial"]
+		: ["default"];
+
+	const playerLists = await Promise.all(
+		agentSources.map((agentSource) => getCurrentPlayersForAgent(vendorCode, agentSource)),
+	);
+	const players = playerLists.flat();
 
 	const pendingPlayers = players.filter((player) => player.hasPendingCall);
 
 	const callResults = await Promise.allSettled(
 		pendingPlayers.map((player) =>
-			betinoviAdminRequest("controlGame", callListMethod, {
-				vendorCode: player.vendorCode || vendorCode,
-				gameCode: player.gameCode,
-				callType: player.requestType,
-			}).then((result) => ({ player, result })),
+			betinoviAdminRequest(
+				"controlGame",
+				callListMethod,
+				{
+					vendorCode: player.vendorCode || vendorCode,
+					gameCode: player.gameCode,
+					callType: player.requestType,
+				},
+				{ agentSource: player.agentSource },
+			).then((result) => ({ player, result })),
 		),
 	);
 
@@ -751,6 +835,70 @@ const getEnrichedCurrentPlayers = async (vendorCode) => {
 			player,
 			call: callResultByUserCode.get(player.userCode) || null,
 		})),
+	};
+};
+
+// Vendor API'sinin liste alanı adı belgelenmemiş (rows/list/history/calls
+// gibi değişebiliyor); "Call Result" ve "Call Geçmişi" ekranlarındaki
+// GetCallHistory yanıtını birleştirirken frontend'deki extractListFromResponse
+// mantığıyla aynı önceliği kullanıyoruz ki hangi anahtar geldiyse onu koruyalım.
+const CALL_LIST_PREFERRED_KEYS = [
+	"rows",
+	"list",
+	"history",
+	"calls",
+	"callHistory",
+	"items",
+	"results",
+];
+
+const extractArrayKey = (payload) => {
+	if (!payload || typeof payload !== "object" || Array.isArray(payload)) return null;
+
+	for (const key of CALL_LIST_PREFERRED_KEYS) {
+		if (Array.isArray(payload[key])) return key;
+	}
+	for (const [key, value] of Object.entries(payload)) {
+		if (Array.isArray(value)) return key;
+	}
+
+	return null;
+};
+
+const tagResponseRows = (data, agentSource) => {
+	if (!data) return null;
+	if (Array.isArray(data)) return data.map((row) => ({ ...row, agentSource }));
+
+	const key = extractArrayKey(data);
+	if (!key) return data;
+
+	return { ...data, [key]: data[key].map((row) => ({ ...row, agentSource })) };
+};
+
+/**
+ * "Call Result" / "Call Geçmişi" ekranları için default + (varsa) trial
+ * (bizzodeneme) agent yanıtlarını birleştirir. Her satıra hangi agent'tan
+ * geldiğini belirten `agentSource` eklenir; frontend cancel-call isteğinde
+ * bu alanı geri gönderir ki iptal doğru agent'a yönlendirilebilsin.
+ */
+const mergeCallHistoryResponses = (defaultData, trialData) => {
+	const taggedDefault = tagResponseRows(defaultData, "default") || {};
+	const taggedTrial = tagResponseRows(trialData, "trial");
+
+	if (!taggedTrial) return taggedDefault;
+
+	if (Array.isArray(taggedDefault)) {
+		return [...taggedDefault, ...(Array.isArray(taggedTrial) ? taggedTrial : [])];
+	}
+
+	const key = extractArrayKey(taggedDefault) || extractArrayKey(taggedTrial);
+	if (!key) return taggedDefault;
+
+	const trialRows = Array.isArray(taggedTrial) ? taggedTrial : taggedTrial[key] || [];
+
+	return {
+		...taggedDefault,
+		[key]: [...(taggedDefault[key] || []), ...trialRows],
 	};
 };
 
@@ -792,4 +940,6 @@ module.exports = {
 	getControlGameVendors,
 	getEnrichedCurrentPlayers,
 	getAgentBalanceSummary,
+	hasTrialControlGameAgent,
+	mergeCallHistoryResponses,
 };
