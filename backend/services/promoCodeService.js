@@ -231,6 +231,17 @@ const claimPromoCode = async (userId, rawCode) => {
 			...otherUpdates,
 		]);
 
+		// updateUserBalance başarısız olursa (cüzdan bulunamadı/yarış durumu)
+		// sessizce "başarılı" dönmeyelim — kullanıcıya "eklendi" yazıp gerçekte
+		// bakiyeye hiçbir şey geçmemesi tam olarak bu kontrolün eksikliğinden
+		// kaynaklanıyordu.
+		if (newBalance === false) {
+			throw new Error(
+				`Promosyon kodu ödülü bakiyeye eklenemedi (userId: ${user._id}, code: ${promo.code}). ` +
+					"Cüzdan güncellenemedi; lütfen tekrar deneyin veya destek ile iletişime geçin.",
+			);
+		}
+
 		return {
 			success: true,
 			code: promo.code,
