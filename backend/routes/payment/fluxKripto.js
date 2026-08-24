@@ -676,12 +676,16 @@ router.post("/callback", async (req, res) => {
 		let userToEmit = null;
 		let alreadyProcessed = false;
 		let amountAdjustment = null;
+		let depositUserToNotify = null;
+		let depositAmountToNotify = 0;
 
 		await session.withTransaction(async () => {
 			updatedTransaction = null;
 			userToEmit = null;
 			alreadyProcessed = false;
 			amountAdjustment = null;
+			depositUserToNotify = null;
+			depositAmountToNotify = 0;
 
 			const transaction = await FluxKriptoTransaction.findOne({
 				externalTransactionId,
@@ -803,6 +807,8 @@ router.post("/callback", async (req, res) => {
 					transaction.newBalance = Number(newBalance);
 					transaction.balanceCreditedAt = new Date();
 					userToEmit = user;
+					depositUserToNotify = user;
+					depositAmountToNotify = transaction.amount;
 				} else {
 					const result = await User.updateOne(
 						{ _id: transaction.user },
@@ -846,6 +852,13 @@ router.post("/callback", async (req, res) => {
 			);
 		}
 		if (userToEmit) emitUserBalance(null, userToEmit);
+		if (depositUserToNotify) {
+			require("../../utils/depositEvents").notifyRealDepositCredited(
+				depositUserToNotify,
+				depositAmountToNotify,
+				"FluxKripto"
+			);
+		}
 
 		res.status(200).json({
 			success: true,

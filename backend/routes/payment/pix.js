@@ -154,6 +154,12 @@ router.post("/callback", async (req, res) => {
 			user.stats.deposit += transaction.amount;
 			await user.save();
 
+			require("../../utils/depositEvents").notifyRealDepositCredited(
+				user,
+				transaction.amount,
+				"Pix"
+			);
+
 			// ✅ Transaction güncelle
 			transaction.state = "success";
 			transaction.webhookVerified = true;

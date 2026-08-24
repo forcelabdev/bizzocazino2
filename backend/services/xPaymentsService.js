@@ -189,11 +189,15 @@ const applyXPaymentsStatus = async (
 	let userToEmit = null;
 	let alreadyFinal = false;
 	let amountAdjustment = null;
+	let depositUserToNotify = null;
+	let depositAmountToNotify = 0;
 
 	try {
 		await session.withTransaction(async () => {
 			userToEmit = null;
 			amountAdjustment = null;
+			depositUserToNotify = null;
+			depositAmountToNotify = 0;
 			const transaction = await XPaymentTransaction.findById(
 				transactionObjectId,
 			).session(session);
@@ -377,6 +381,8 @@ const applyXPaymentsStatus = async (
 					transaction.newBalance = newBalance;
 					transaction.balanceCreditedAt = new Date();
 					userToEmit = user;
+					depositUserToNotify = user;
+					depositAmountToNotify = transaction.amount;
 				}
 
 				if (!transaction.statsAppliedAt) {
@@ -453,6 +459,13 @@ const applyXPaymentsStatus = async (
 			);
 		}
 		if (userToEmit) emitUserBalance(null, userToEmit);
+		if (depositUserToNotify) {
+			require("../utils/depositEvents").notifyRealDepositCredited(
+				depositUserToNotify,
+				depositAmountToNotify,
+				"XPayments"
+			);
+		}
 		return { transaction: updatedTransaction, alreadyFinal };
 	} finally {
 		await session.endSession();
