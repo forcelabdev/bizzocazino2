@@ -268,9 +268,13 @@ onMounted(() => {
       />
     </VCol>
 
-    <!-- Deneme Bonusu: çevrim/hedef bakiye ilerlemesi + inceleme kilidi -->
+    <!-- Deneme Bonusu: çevrim/hedef bakiye ilerlemesi + inceleme kilidi.
+         Sadece kilit HÂLÂ AKTİFSE (tamamlanmamış/iptal edilmemiş) gösterilir —
+         sonlanmış (tamamlanmış/iptal edilmiş) kilit zaten aşağıdaki
+         "Geçmiş Deneme Bonusları" tablosunda görünür, burada tekrar
+         göstermeye gerek yok. -->
     <VCol
-      v-if="trialBonus?.bonusLock"
+      v-if="trialBonus?.isActiveTrialLock"
       cols="12"
     >
       <VCard
