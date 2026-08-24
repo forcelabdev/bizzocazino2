@@ -12,6 +12,7 @@ const {
 	evaluateBonusLock,
 	triggerTrialBonusReviewLock,
 	resolveTrialBonusReviewLock,
+	cancelTrialBonusLock,
 	forfeitTrialWageringLockOnDeposit,
 } = require("../utils/bonusLock");
 const { sumUserBetsSince } = require("../utils/userBetActivity");
@@ -447,11 +448,21 @@ const checkTrialBonusTargetBalance = async (user, newBalance) => {
 	if (!user) return;
 
 	const lock = user.bonusLock;
+	if (!lock || lock.source !== SOURCE || lock.completedAt) return;
+
+	// OTOMATİK İPTAL: bakiye tam 0 TL'ye düştüyse, kilit hangi aşamada
+	// olursa olsun (çevrim/hedef bakiye sürerken VEYA inceleme kilidindeyken)
+	// deneme bonusunu anında "İptal Edildi" olarak sonlandır ve betAccess
+	// kilidini aç. Hedef bakiye kontrolünün ÖNÜNE geçer.
+	if (Number(newBalance) <= 0) {
+		const freshUser = await User.findById(user._id);
+		if (!freshUser) return;
+		await cancelTrialBonusLock(freshUser, "zero_balance");
+		return;
+	}
+
 	if (
-		!lock ||
-		lock.source !== SOURCE ||
 		lock.reviewRequired ||
-		lock.completedAt ||
 		!lock.targetBalanceAmount ||
 		lock.targetBalanceAmount <= 0
 	) {
@@ -505,6 +516,29 @@ const resolveTrialBonusReview = async ({ userId }) => {
 	return user;
 };
 
+/**
+ * Admin panelinden "Deneme Bonusunu İptal Et" aksiyonu tarafından çağrılır.
+ * Deneme bonusu aktif olduğu HER aşamada (çevrim/hedef bakiye sürerken VEYA
+ * inceleme kilidindeyken) çalışır — `resolveTrialBonusReview`'ın aksine
+ * `reviewRequired` beklemez. Kullanıcı bir dahaki oyun açılışında normal
+ * (varsayılan) agent'a döner ve betAccess kilidi (varsa) hemen açılır.
+ */
+const cancelTrialBonus = async ({ userId, reason = "admin_manual" }) => {
+	const user = await User.findById(userId);
+	if (!user) throw new Error("USER_NOT_FOUND");
+	if (!user.bonusLock || user.bonusLock.source !== SOURCE) {
+		throw new Error("NO_ACTIVE_TRIAL_BONUS");
+	}
+	if (user.bonusLock.completedAt) {
+		throw new Error("NO_ACTIVE_TRIAL_BONUS");
+	}
+
+	const cancelled = await cancelTrialBonusLock(user, reason);
+	if (!cancelled) throw new Error("NO_ACTIVE_TRIAL_BONUS");
+
+	return user;
+};
+
 module.exports = {
 	getSettings,
 	updateSettings,
@@ -517,5 +551,6 @@ module.exports = {
 	checkTrialBonusWageringCompletion,
 	checkTrialBonusTargetBalance,
 	resolveTrialBonusReview,
+	cancelTrialBonus,
 	handleRealDepositCredited,
 };

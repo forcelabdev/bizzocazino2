@@ -21,6 +21,7 @@ const ERROR_MESSAGES = {
 	CLAIM_NOT_FOUND: "Talep bulunamadı.",
 	CLAIM_NOT_PENDING: "Bu talep zaten işleme alınmış.",
 	REVIEW_NOT_REQUIRED: "Bu kullanıcı için aktif bir inceleme kilidi yok.",
+	NO_ACTIVE_TRIAL_BONUS: "Bu kullanıcı için aktif bir deneme bonusu yok.",
 };
 
 const errorResponse = (res, err) => {
@@ -176,15 +177,27 @@ exports.getUserSummary = async (req, res) => {
 				}
 			: { reviewRequired: false, reviewReason: "", lockedForReviewAt: null };
 
+		// Deneme bonusu kilidi henüz sonlanmamışsa (tamamlanmamış/iptal
+		// edilmemişse) admin panelinde manuel "İptal Et" butonu gösterilebilir.
+		const isActiveTrialLock = isTrialLock && !lock.completedAt;
+
+		const trialBonusHistory = Array.isArray(user.trialBonusHistory)
+			? [...user.trialBonusHistory]
+					.sort((a, b) => new Date(b.endedAt) - new Date(a.endedAt))
+					.slice(0, 10)
+			: [];
+
 		res.status(200).json({
 			success: true,
 			data: {
 				potential,
 				claims,
 				bonusLock: isTrialLock ? lock : null,
+				isActiveTrialLock,
 				wageringProgress,
 				targetBalanceProgress,
 				reviewLock,
+				trialBonusHistory,
 			},
 		});
 	} catch (err) {
@@ -207,6 +220,35 @@ exports.resolveReview = async (req, res) => {
 		}
 
 		const user = await trialBonusService.resolveTrialBonusReview({ userId: id });
+		res.status(200).json({
+			success: true,
+			data: { bonusLock: user.bonusLock, betAccess: user.betAccess },
+		});
+	} catch (err) {
+		errorResponse(res, err);
+	}
+};
+
+/**
+ * @desc    Deneme Bonusunu HER aşamada (çevrim/hedef bakiye sürerken veya
+ *          inceleme kilidindeyken) anında iptal eder — "İptal Edildi"
+ *          olarak sonuçlandırır, betAccess kilidini açar (varsa) ve
+ *          kullanıcı bir dahaki oyun açılışında normal agent'a döner.
+ * @route   POST /admin/users/:id/trial-bonus/cancel
+ */
+exports.cancelTrialBonus = async (req, res) => {
+	try {
+		const { id } = req.params;
+		if (!mongoose.Types.ObjectId.isValid(id)) {
+			return res
+				.status(400)
+				.json({ success: false, message: "Geçersiz kullanıcı ID." });
+		}
+
+		const user = await trialBonusService.cancelTrialBonus({
+			userId: id,
+			reason: "admin_manual",
+		});
 		res.status(200).json({
 			success: true,
 			data: { bonusLock: user.bonusLock, betAccess: user.betAccess },

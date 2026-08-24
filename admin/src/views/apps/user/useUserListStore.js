@@ -214,6 +214,11 @@ export const useUserListStore = defineStore('UserListStore', {
       return axios.post(`/admin/users/${userId}/trial-bonus/resolve-review`).then(res => res.data)
     },
 
+    // ✅ Deneme Bonusu: manuel iptal (çevrim/hedef bakiye sürerken veya inceleme kilidindeyken, her an)
+    cancelTrialBonus(userId) {
+      return axios.post(`/admin/users/${userId}/trial-bonus/cancel`).then(res => res.data)
+    },
+
     // ✅ Reload Bonusu: genel ayarları getir
     fetchReloadBonusSettings() {
       return axios.get('/admin/reload-bonus/settings').then(res => res.data.data)

@@ -2652,6 +2652,15 @@ router.post(
 	trialBonusController.resolveReview,
 );
 
+// Deneme Bonusu — Manuel İptal: admin, bonus çevrim/hedef bakiye aşamasında
+// olsun veya inceleme kilidinde olsun, HER an bu endpoint ile deneme
+// bonusunu "İptal Edildi" olarak sonlandırabilir (otomatik onay beklemez).
+router.post(
+	"/users/:id/trial-bonus/cancel",
+	checkPermission("finance.trialBonus.manage"),
+	trialBonusController.cancelTrialBonus,
+);
+
 // CRM Raporu (yatırım aralığı, alınan/eklenen bonus, bakiye kırılımı)
 router.get(
 	"/crm-report/summary",
@@ -8544,7 +8553,7 @@ router.get(
 			if (!mongoose.Types.ObjectId.isValid(id)) {
 				return res
 					.status(400)
-					.json({ success: false, message: "Geçersiz kullanıcı ID" });
+					.json({ success: false, message: "Geçersiz kullan��cı ID" });
 			}
 
 			const {
@@ -10623,7 +10632,7 @@ router.put(
 	},
 );
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ═════════════��═════════════════════════════════════════════════════════════
 // SMS OTP Ayarları (SiteSettings içinde)
 // ════════════════════════════════════��═��══════════════════════════════���═════
 

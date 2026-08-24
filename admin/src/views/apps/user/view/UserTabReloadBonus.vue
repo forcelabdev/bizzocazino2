@@ -22,6 +22,7 @@ const pastAssignments = ref([])
 const trialBonus = ref(null)
 const trialBonusLoading = ref(false)
 const resolvingTrialReview = ref(false)
+const cancellingTrialBonus = ref(false)
 
 const intervalTypeOptions = [
   { value: "daily", title: t("reloadBonusAdmin.intervalDaily") },
@@ -221,6 +222,30 @@ const resolveTrialReview = async () => {
   }
 }
 
+const trialOutcomeLabel = outcome => {
+  if (outcome === "completed") return t("userTabReloadBonus.trialOutcomeCompleted")
+  if (outcome === "cancelled") return t("userTabReloadBonus.trialOutcomeCancelled")
+
+  return "—"
+}
+
+const cancelTrialBonus = async () => {
+  if (!props.selectedUserId) return
+  if (!confirm(t("userTabReloadBonus.trialCancelConfirm"))) return
+
+  cancellingTrialBonus.value = true
+  try {
+    await userStore.cancelTrialBonus(props.selectedUserId)
+    feedback.value = { show: true, text: t("userTabReloadBonus.trialCancelSuccess"), color: "success" }
+    await fetchTrialBonus()
+  } catch (error) {
+    console.error("Deneme bonusu iptal edilemedi:", error)
+    feedback.value = { show: true, text: error.response?.data?.message || t("userTabReloadBonus.trialCancelFailed"), color: "error" }
+  } finally {
+    cancellingTrialBonus.value = false
+  }
+}
+
 watch(() => props.selectedUserId, () => {
   fetchSummary()
   fetchTrialBonus()
@@ -263,6 +288,13 @@ onMounted(() => {
               size="small"
             >
               {{ t("userTabReloadBonus.trialReviewLocked") }}
+            </VChip>
+            <VChip
+              v-else-if="trialBonus.bonusLock?.outcome === 'cancelled'"
+              color="secondary"
+              size="small"
+            >
+              {{ t("userTabReloadBonus.trialStatusCancelled") }}
             </VChip>
             <VChip
               v-else
@@ -325,10 +357,19 @@ onMounted(() => {
           </VRow>
 
           <div
-            v-if="trialBonus.reviewLock?.reviewRequired"
-            class="d-flex justify-end mt-4"
+            v-if="trialBonus.isActiveTrialLock"
+            class="d-flex flex-wrap justify-end gap-2 mt-4"
           >
             <VBtn
+              variant="outlined"
+              color="error"
+              :loading="cancellingTrialBonus"
+              @click="cancelTrialBonus"
+            >
+              {{ t("userTabReloadBonus.trialCancelButton") }}
+            </VBtn>
+            <VBtn
+              v-if="trialBonus.reviewLock?.reviewRequired"
               color="error"
               :loading="resolvingTrialReview"
               @click="resolveTrialReview"
@@ -336,6 +377,51 @@ onMounted(() => {
               {{ t("userTabReloadBonus.trialResolveButton") }}
             </VBtn>
           </div>
+        </VCardText>
+      </VCard>
+    </VCol>
+
+    <!-- Geçmiş Deneme Bonusları: sonlanan (tamamlanan/iptal edilen) kilitler -->
+    <VCol
+      v-if="trialBonus?.trialBonusHistory?.length"
+      cols="12"
+    >
+      <VCard>
+        <VCardText>
+          <h5 class="text-h5 mb-4">
+            {{ t("userTabReloadBonus.trialHistoryTitle") }}
+          </h5>
+
+          <VTable>
+            <thead>
+              <tr>
+                <th>{{ t("userTabReloadBonus.trialHistoryAmount") }}</th>
+                <th>{{ t("userTabReloadBonus.trialHistoryResult") }}</th>
+                <th>{{ t("userTabReloadBonus.trialHistoryDate") }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="(item, index) in trialBonus.trialBonusHistory"
+                :key="item.claimId || index"
+              >
+                <td class="font-weight-medium">
+                  {{ formatMoney(item.bonusAmount) }}
+                </td>
+                <td>
+                  <VChip
+                    :color="item.outcome === 'completed' ? 'success' : 'secondary'"
+                    size="small"
+                  >
+                    {{ trialOutcomeLabel(item.outcome) }}
+                  </VChip>
+                </td>
+                <td class="text-caption">
+                  {{ formatDate(item.endedAt) }}
+                </td>
+              </tr>
+            </tbody>
+          </VTable>
         </VCardText>
       </VCard>
     </VCol>
