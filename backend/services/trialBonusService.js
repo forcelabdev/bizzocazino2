@@ -330,6 +330,26 @@ const getActiveRtp = async (user) => {
 	};
 };
 
+/**
+ * Kullanıcının deneme bonusundan kalan bir çevrim (wagering) şartı hâlâ
+ * aktif mi diye bakar. Betinovi oyun başlatma akışında (game_launch),
+ * true dönerse kullanıcı RTP override YERİNE ayrı bir Betinovi agent'ına
+ * (BETINOVI_AGENT_CODE_2 / BETINOVI_AGENT_TOKEN_2 / BETINOVI_API_ENDPOINT_2
+ * — "bizzodeneme") yönlendirilir. Çevrim tamamlandığı anda evaluateBonusLock
+ * kilidi otomatik kapatır ve burası false dönmeye başlar; kullanıcı bir
+ * dahaki oyun açılışında otomatik olarak normal (bizzocasinoyeni) agent'a
+ * geri döner.
+ */
+const hasActiveTrialWageringLock = async (user) => {
+	if (!user) return false;
+
+	const lockStatus = await evaluateBonusLock(user);
+	if (!lockStatus.active) return false;
+	if (lockStatus.type !== "wagering") return false;
+
+	return lockStatus.source === SOURCE;
+};
+
 module.exports = {
 	getSettings,
 	updateSettings,
@@ -339,4 +359,5 @@ module.exports = {
 	rejectClaim,
 	getApprovedClaimsMap,
 	getActiveRtp,
+	hasActiveTrialWageringLock,
 };

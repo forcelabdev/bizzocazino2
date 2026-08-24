@@ -25,10 +25,18 @@ const { generalUserGetRakeback } = require("../utils/general/user");
 const trialBonusService = require("../services/trialBonusService");
 const { onBetSettled } = require("../utils/wagerHooks");
 
-// Betinovi API Credentials
+// Betinovi API Credentials (varsayılan / bizzocasinoyeni agent)
 const BETINOVI_BASE_URL = process.env.BETINOVI_API_ENDPOINT;
 const BETINOVI_AGENT_CODE = process.env.BETINOVI_AGENT_CODE;
 const BETINOVI_AGENT_TOKEN = process.env.BETINOVI_AGENT_TOKEN;
+
+// Betinovi API Credentials (deneme bonusu / bizzodeneme agent). Aktif bir
+// deneme bonusu çevrim şartı olan kullanıcılar oyunu bu agent üzerinden
+// açar; çevrim tamamlanınca otomatik olarak yukarıdaki varsayılan agent'a
+// geri döner. Bkz. trialBonusService.hasActiveTrialWageringLock.
+const BETINOVI_BASE_URL_2 = process.env.BETINOVI_API_ENDPOINT_2;
+const BETINOVI_AGENT_CODE_2 = process.env.BETINOVI_AGENT_CODE_2;
+const BETINOVI_AGENT_TOKEN_2 = process.env.BETINOVI_AGENT_TOKEN_2;
 
 const SINGLE_GAME_VENDORS = {
 	"sport-bbbet": {
@@ -196,15 +204,22 @@ const buildBetinoviProcessedResponse = (transaction, fallbackBalance = 0) => {
 	};
 };
 
-// Helper: Make API request to Betinovi
-const betinoviRequest = async (payload) => {
+// Helper: Make API request to Betinovi.
+// `agent` "trial" ise bizzodeneme (BETINOVI_*_2) kimlik bilgileri, aksi
+// halde (varsayılan) bizzocasinoyeni kimlik bilgileri kullanılır.
+const betinoviRequest = async (payload, agent = "default") => {
+	const useTrialAgent = agent === "trial";
+	const baseUrl = useTrialAgent ? BETINOVI_BASE_URL_2 : BETINOVI_BASE_URL;
+	const agentToken = useTrialAgent ? BETINOVI_AGENT_TOKEN_2 : BETINOVI_AGENT_TOKEN;
+	const agentCode = useTrialAgent ? BETINOVI_AGENT_CODE_2 : BETINOVI_AGENT_CODE;
+
 	try {
 		const response = await axios.post(
-			BETINOVI_BASE_URL,
+			baseUrl,
 			{
 				...payload,
-				token: BETINOVI_AGENT_TOKEN,
-				agentCode: BETINOVI_AGENT_CODE,
+				token: agentToken,
+				agentCode: agentCode,
 			},
 			{
 				headers: {
@@ -293,11 +308,14 @@ router.post("/", async (req, res) => {
 					});
 				}
 
-				// Deneme bonusundan kalan çevrim şartı aktifse, admin panelinde
-				// belirlenen yükseltilmiş RTP değerleri gönderilir. Çevrim
-				// tamamlandığında (veya hiç yoksa) burası null döner ve
-				// sağlayıcı varsayılan RTP'sine otomatik olarak geri dönülür.
-				const trialRtp = await trialBonusService.getActiveRtp(user);
+				// Deneme bonusundan kalan çevrim şartı aktifse, oyun bizzodeneme
+				// (BETINOVI_*_2) agent'ı üzerinden açılır — RTP override YOKTUR,
+				// bizzodeneme agent'ının kendi konfigürasyonu geçerlidir. Çevrim
+				// tamamlandığında (veya hiç yoksa) burası false döner ve bir
+				// dahaki oyun açılışında otomatik olarak varsayılan
+				// (bizzocasinoyeni) agent'a geri dönülür.
+				const useTrialAgent =
+					await trialBonusService.hasActiveTrialWageringLock(user);
 
 				const launchPayload = {
 					method: "GetGameUrl",
@@ -309,11 +327,12 @@ router.post("/", async (req, res) => {
 					language: language || "tr",
 					channel: channel || "desktop",
 					...(customData && { customData }),
-					...(trialRtp?.lowRtp !== undefined && { lowRtp: trialRtp.lowRtp }),
-					...(trialRtp?.highRtp !== undefined && { highRtp: trialRtp.highRtp }),
 				};
 
-				const response = await betinoviRequest(launchPayload);
+				const response = await betinoviRequest(
+					launchPayload,
+					useTrialAgent ? "trial" : "default"
+				);
 
 				if (response.status === 0 && response.launchUrl) {
 					await logEvent("game_start", {
@@ -746,8 +765,13 @@ router.post("/callback", async (req, res) => {
 	// 	JSON.stringify(req.body, null, 2)
 	// );
 
-	// Validate token
-	if (token !== BETINOVI_AGENT_TOKEN) {
+	// Validate token — hem varsayılan (bizzocasinoyeni) hem de deneme bonusu
+	// (bizzodeneme) agent'ından gelen callback'ler kabul edilir; ikisi de
+	// aynı kullanıcı/cüzdan üzerinde işlem yapar.
+	if (
+		token !== BETINOVI_AGENT_TOKEN &&
+		(!BETINOVI_AGENT_TOKEN_2 || token !== BETINOVI_AGENT_TOKEN_2)
+	) {
 		console.error("Invalid token in callback");
 		return res.status(200).json({
 			status: 3,
