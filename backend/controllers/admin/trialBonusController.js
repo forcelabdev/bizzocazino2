@@ -18,6 +18,8 @@ const ERROR_MESSAGES = {
 		"Bu tarihten önce kayıt olan üyeler deneme bonusu talep edemez.",
 	HAS_APPROVED_DEPOSIT:
 		"Daha önce yatırım yapmış üyeler deneme bonusu talep edemez.",
+	HAS_TRIAL_BONUS_HISTORY:
+		"Bu üye deneme bonusunu daha önce kullandığı için tekrar talep edemez.",
 	CLAIM_NOT_FOUND: "Talep bulunamadı.",
 	CLAIM_NOT_PENDING: "Bu talep zaten işleme alınmış.",
 	REVIEW_NOT_REQUIRED: "Bu kullanıcı için aktif bir inceleme kilidi yok.",

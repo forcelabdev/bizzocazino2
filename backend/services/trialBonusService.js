@@ -81,6 +81,20 @@ const getUserBalance = (user) => {
  * @returns {Promise<{ eligible: boolean, reason?: string, message?: string }>}
  */
 const checkClaimEligibility = async (user, settings) => {
+	// GÜVENLİK: bu kullanıcı için daha önce sonlanmış (tamamlanmış VEYA iptal
+	// edilmiş) bir Deneme Bonusu kaydı varsa, bir daha talep edemez. Bu kontrol
+	// `existingClaim` (TrialBonusClaim status: pending/approved) kontrolünden
+	// BAĞIMSIZ ve ona ek bir güvenlik katmanıdır — çünkü `trialBonusHistory`
+	// hiçbir zaman silinmez/değişmez, kalıcı bir kayıttır.
+	if (Array.isArray(user.trialBonusHistory) && user.trialBonusHistory.length > 0) {
+		return {
+			eligible: false,
+			reason: "HAS_TRIAL_BONUS_HISTORY",
+			message:
+				"Deneme bonusunu daha önce kullandığınız için tekrar talep edemezsiniz.",
+		};
+	}
+
 	if (settings.registrationCutoffEnabled && settings.registeredAfter) {
 		const cutoff = new Date(settings.registeredAfter);
 		const registeredAt = new Date(user.createdAt);
@@ -186,6 +200,7 @@ const claim = async (userId) => {
 	const eligibilityCheck = await checkClaimEligibility(user, settings);
 	if (!eligibilityCheck.eligible) {
 		const err = new Error(eligibilityCheck.reason || "NOT_ELIGIBLE");
+		err.code = eligibilityCheck.reason || "NOT_ELIGIBLE";
 		err.message = eligibilityCheck.message || err.message;
 		throw err;
 	}

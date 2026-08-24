@@ -401,6 +401,23 @@ const cancelTrialBonusLock = async (user, reason) => {
 	}
 
 	await user.save();
+
+	// GÜVENLİK: kullanıcı o an "bizzodeneme" (trial) agent'ı üzerinden AÇIK
+	// bir oyun oturumundaysa bile, sitedeki aktif bağlantısını hemen keserek
+	// bir dahaki game_launch çağrısının doğru (varsayılan) agent'a
+	// yönlenmesini garantiye al. Fire-and-forget: bağlantı sinyali
+	// başarısız olsa da kilidin kendisi zaten veritabanında iptal edilmiş.
+	try {
+		const { getIO } = require("./io");
+		const { notifyAndKickUserForTrialBonusCancelled } = require("./trialBonusReviewKick");
+		const io = getIO();
+		notifyAndKickUserForTrialBonusCancelled(io, user._id, reason).catch((err) =>
+			console.error("❌ cancelTrialBonusLock → soket bildirimi hatası:", err.message)
+		);
+	} catch (err) {
+		console.error("❌ cancelTrialBonusLock → soket bildirimi kurulamadı:", err.message);
+	}
+
 	return true;
 };
 
@@ -439,6 +456,21 @@ const forfeitTrialWageringLockOnDeposit = async (user) => {
 			trialBonusHistory: user.trialBonusHistory,
 		},
 	});
+
+	// GÜVENLİK: gerçek yatırım nedeniyle deneme bonusu kilidi sonlandırıldı —
+	// kullanıcı hâlâ "bizzodeneme" agent'ı üzerinden AÇIK bir oyun
+	// oturumundaysa bile aktif bağlantısını hemen keser, bir dahaki
+	// game_launch çağrısı doğru (varsayılan) agent'a yönlensin.
+	try {
+		const { getIO } = require("./io");
+		const { notifyAndKickUserForTrialBonusCancelled } = require("./trialBonusReviewKick");
+		const io = getIO();
+		notifyAndKickUserForTrialBonusCancelled(io, user._id, "real_deposit").catch((err) =>
+			console.error("❌ forfeitTrialWageringLockOnDeposit → soket bildirimi hatası:", err.message)
+		);
+	} catch (err) {
+		console.error("❌ forfeitTrialWageringLockOnDeposit → soket bildirimi kurulamadı:", err.message);
+	}
 
 	return true;
 };
