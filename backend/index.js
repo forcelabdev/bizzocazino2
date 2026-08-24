@@ -12,18 +12,29 @@ process.env.PUPPETEER_CACHE_DIR = "/tmp/puppeteer";
 // çalışması davranışının olası nedenlerinden biriydi (PM2 process'i yeniden
 // başlatana kadar istekler başarısız oluyordu). Artık hata sadece loglanır,
 // process ayakta kalır ve isteğe kesinti olmadan devam edilir.
+// ÖNEMLİ DÜZELTME (2026-08-25): İlk versiyonda process burada KAPATILMIYORDU
+// (sadece logluyorduk). Bu, ör. EADDRINUSE (port zaten kullanımda) gibi
+// başlangıç/ölümcül hatalarında process'i "zombi" haline getirdi: Node
+// process teknik olarak ayakta kalıyor, PM2 ekranında "online" görünüyor
+// (çökmediği için restart sayacı da artmıyor), ama server.listen()
+// başarısız olduğu için HİÇBİR PORTU DİNLEMİYOR ve hiçbir isteğe cevap
+// veremiyor. PM2 bunu asla fark edip yeniden başlatmıyordu çünkü process
+// hiç çökmüyordu. Bu yüzden site "veri gelmiyor / 502" durumuna düşmüştü.
+//
+// Doğru/önerilen pattern: hatayı logla, SONRA process'i kapat (exit code 1)
+// — PM2 zaten bunu algılayıp otomatik yeniden başlatacak (restart sayacı
+// artar, bu da bize gerçek bir sinyal verir). "Hatadan sonra sessizce
+// yaşamaya devam etmek" Node.js'in resmi dokümantasyonunda da tavsiye
+// edilmez çünkü uygulama durumu tutarsız kalmış olabilir.
 process.on("uncaughtException", (err, origin) => {
 	console.error("🔥 [uncaughtException] Yakalanmamış hata:", err);
 	console.error("🔥 [uncaughtException] Origin:", origin);
-	// Process'i KAPATMIYORUZ — sadece logluyoruz. Node.js resmi dokümantasyonu
-	// process'i bu noktada kapatmayı önerir çünkü uygulama durumu tutarsız
-	// olabilir; ancak bu backend'de tekil isteklerin çökmesi tüm sunucuyu
-	// düşürmekten çok daha az risklidir. Kritik/tekrarlayan hatalar için
-	// harici bir hata izleme servisi (Sentry vb.) eklenmesi önerilir.
+	process.exit(1);
 });
 
-process.on("unhandledRejection", (reason, promise) => {
+process.on("unhandledRejection", (reason) => {
 	console.error("🔥 [unhandledRejection] Yakalanmamış promise reddi:", reason);
+	process.exit(1);
 });
 
 require("dotenv").config();
