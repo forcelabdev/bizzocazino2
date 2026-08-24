@@ -735,9 +735,14 @@ router.post("/", async (req, res) => {
 						// SB (sportsbook) kuponlarının maç/market detaylarını (info) daha
 						// sonra referans/debug için Transaction kaydında da saklıyoruz.
 						// NOT: "info" request body'nin kök seviyesinden geliyor (SB'nin içinden değil).
+						// ÖNEMLİ: Daha önce bu alan sadece "info" DOLU geldiğinde
+						// yazılıyordu; "info" boş geldiğinde hiçbir iz kalmıyordu ve
+						// sonradan hangi alanın eksik geldiğini teşhis etmek
+						// imkansız oluyordu. Artık SB işlemlerinde "info" boş olsa
+						// bile ham request body'sini saklıyoruz.
 						extra:
-							game_type === "SB" && info
-								? { info }
+							game_type === "SB"
+								? { info: info || null, rawWebhook: req.body }
 								: undefined,
 					});
 
