@@ -261,15 +261,27 @@ const userSchema = new mongoose.Schema(
 		//   blockedUntil saatine kadar aktiftir (sadece diğer bonusları engeller,
 		//   çekimi engellemez).
 		bonusLock: {
-			source: { type: String, default: "" }, // "deposit_bonus" | "loss_bonus"
+			source: { type: String, default: "" }, // "deposit_bonus" | "loss_bonus" | "trial_bonus"
 			claimId: { type: mongoose.Schema.Types.ObjectId, default: null },
-			claimModel: { type: String, default: "" }, // "DepositBonusClaim" | "LossBonusClaim"
+			claimModel: { type: String, default: "" }, // "DepositBonusClaim" | "LossBonusClaim" | "TrialBonusClaim"
 			bonusAmount: { type: Number, default: 0 },
 			wageringMultiplier: { type: Number, default: 0 },
 			wageringRequired: { type: Number, default: 0 },
 			wageringSince: { type: Date, default: null },
 			blockedUntil: { type: Date },
 			completedAt: { type: Date, default: null },
+
+			// Deneme Bonusu — İnceleme Kilidi: çevrim şartı tamamlandığında VEYA
+			// hedef bakiyeye ulaşıldığında otomatik tetiklenir. `evaluateBonusLock`
+			// bu alan true iken normal tamamlanma/süre mantığını by-pass eder —
+			// yani OTOMATİK açılmaz, sadece admin "İncelemeyi Tamamla" dediğinde
+			// `resolveTrialBonusReviewLock` ile kapanır.
+			reviewRequired: { type: Boolean, default: false },
+			reviewReason: { type: String, default: "" }, // "wagering_completed" | "target_balance_reached"
+			lockedForReviewAt: { type: Date, default: null },
+			// Deneme bonusu talebi onaylandığı anda ayarlardan alınan snapshot;
+			// ayar sonradan değişse de bu kullanıcı için sabit kalır.
+			targetBalanceAmount: { type: Number, default: 0 },
 		},
 
 		// Reload Bonusu kilidi: bonusLock'tan tamamen bağımsızdır (Reload,

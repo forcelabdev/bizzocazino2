@@ -27,13 +27,21 @@ const trialBonusSettingSchema = new mongoose.Schema(
 
 		blockOtherBonuses: { type: Boolean, default: false },
 
-		// Çevrim şartı aktifken (wageringMultiplier > 0 ve kullanıcının
-		// çevrimi henüz tamamlanmamışken) oyun sağlayıcısına gönderilecek
-		// yükseltilmiş RTP değerleri (0-1 arası, örn. 0.80 = %80). 0/boş
-		// bırakılırsa o RTP hiç gönderilmez ve sağlayıcı varsayılanı kullanılır.
-		// Çevrim tamamlandığında otomatik olarak normal RTP'ye döner.
-		trialRtpLow: { type: Number, default: 0, min: 0, max: 1 },
-		trialRtpHigh: { type: Number, default: 0, min: 0, max: 1 },
+		// Hedef Bakiye: çevrim katsayısından TAMAMEN bağımsız, isteğe bağlı
+		// ek kural. Açıksa, kullanıcının bakiyesi bu tutara ulaştığında
+		// (çevrim tamamlanmış olsun ya da olmasın) inceleme kilidi tetiklenir.
+		// İkisi de açıksa hangisi önce gerçekleşirse kilit devreye girer.
+		targetBalanceEnabled: { type: Boolean, default: false },
+		targetBalanceAmount: { type: Number, default: 0, min: 0 },
+
+		// Kayıt Tarihi Sınırı: açıksa, `registeredAfter` tarihinden ÖNCE
+		// kayıt olan üyeler deneme bonusunu talep edemez.
+		registrationCutoffEnabled: { type: Boolean, default: false },
+		registeredAfter: { type: Date, default: null },
+
+		// Açıksa, daha önce en az bir onaylı yatırımı (deposit) olan üyeler
+		// deneme bonusunu talep edemez. Varsayılan olarak açıktır.
+		blockIfDeposited: { type: Boolean, default: true },
 
 		note: { type: String, default: "", trim: true },
 

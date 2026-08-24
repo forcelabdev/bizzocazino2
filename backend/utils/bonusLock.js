@@ -79,7 +79,22 @@ const applyWageringLock = async (
  */
 const evaluateBonusLock = async (user) => {
 	const lock = user?.bonusLock;
-	if (!lock || (!lock.blockedUntil && !lock.wageringRequired)) {
+	if (!lock) return { active: false };
+
+	// Deneme Bonusu — İnceleme Kilidi: çevrim/hedef bakiye tamamlandığında
+	// tetiklenir ve SADECE admin "İncelemeyi Tamamla" dediğinde kapanır.
+	// Süre/çevrim hesaplamasının önüne geçer, otomatik açılmaz.
+	if (lock.reviewRequired) {
+		return {
+			active: true,
+			type: "review",
+			source: lock.source || "",
+			reviewReason: lock.reviewReason || "",
+			lockedForReviewAt: lock.lockedForReviewAt || null,
+		};
+	}
+
+	if (!lock.blockedUntil && !lock.wageringRequired) {
 		return { active: false };
 	}
 
@@ -229,6 +244,14 @@ const evaluateReloadLock = async (user) => {
  */
 const assertWithdrawalNotBlocked = async (user) => {
 	const status = await evaluateBonusLock(user);
+	if (status.active && status.type === "review") {
+		const err = new Error(
+			"Hesabınız deneme bonusu incelemesi nedeniyle geçici olarak kilitlendi. Canlı destek ile iletişime geçin."
+		);
+		err.code = "TRIAL_BONUS_REVIEW_REQUIRED";
+		err.wagering = status;
+		throw err;
+	}
 	if (status.active && status.type === "wagering") {
 		const err = new Error(
 			`Devam eden bir bonus çevrim şartınız var. Çekim yapabilmek için ${status.wageringRemaining} TL daha çevrim yapmanız gerekiyor.`
@@ -251,6 +274,68 @@ const assertWithdrawalNotBlocked = async (user) => {
 	return status;
 };
 
+/**
+ * Deneme Bonusu çevrim şartı tamamlandığında VEYA hedef bakiyeye
+ * ulaşıldığında çağrılır. Kullanıcıyı hem bahis/oyun hem çekim için
+ * kilitler; kilit SADECE `resolveTrialBonusReviewLock` ile admin
+ * tarafından açılır (otomatik açılma yoktur).
+ *
+ * @param {object} user - Mongoose User dokümanı (kaydedilebilir olmalı).
+ * @param {"wagering_completed"|"target_balance_reached"} reason
+ * @param {{ session?: object }} [options]
+ */
+const triggerTrialBonusReviewLock = async (user, reason, { session } = {}) => {
+	if (!user || user.bonusLock?.reviewRequired) return false;
+
+	user.bonusLock.reviewRequired = true;
+	user.bonusLock.reviewReason = reason;
+	user.bonusLock.lockedForReviewAt = new Date();
+
+	user.betAccess = user.betAccess || {};
+	user.betAccess.blocked = true;
+	user.betAccess.reason = "trial_bonus_review";
+	user.betAccess.updatedAt = new Date();
+
+	await user.save(session ? { session } : undefined);
+
+	// Fire-and-forget: aktif oturumu soket üzerinden kes. Sinyali göndermek
+	// başarısız olsa da kilidin kendisi zaten veritabanında aktif.
+	try {
+		const { getIO } = require("./io");
+		const { notifyAndKickUserForTrialBonusReview } = require("./trialBonusReviewKick");
+		const io = getIO();
+		notifyAndKickUserForTrialBonusReview(io, user._id).catch((err) =>
+			console.error("❌ triggerTrialBonusReviewLock → soket bildirimi hatası:", err.message)
+		);
+	} catch (err) {
+		console.error("❌ triggerTrialBonusReviewLock → soket bildirimi kurulamadı:", err.message);
+	}
+
+	return true;
+};
+
+/**
+ * Admin panelinden "İncelemeyi Tamamla ve Kilidi Aç" aksiyonu tarafından
+ * çağrılır. Sadece `betAccess.reason === "trial_bonus_review"` ise
+ * betAccess kilidini temizler — başka bir sebeple (admin manuel engeli vb.)
+ * bloklanmışsa dokunmaz.
+ */
+const resolveTrialBonusReviewLock = async (user) => {
+	if (!user || !user.bonusLock?.reviewRequired) return false;
+
+	user.bonusLock.reviewRequired = false;
+	user.bonusLock.completedAt = new Date();
+
+	if (user.betAccess?.reason === "trial_bonus_review") {
+		user.betAccess.blocked = false;
+		user.betAccess.reason = "";
+		user.betAccess.updatedAt = new Date();
+	}
+
+	await user.save();
+	return true;
+};
+
 module.exports = {
 	applyBonusLock,
 	applyWageringLock,
@@ -258,4 +343,6 @@ module.exports = {
 	applyReloadWageringLock,
 	evaluateReloadLock,
 	assertWithdrawalNotBlocked,
+	triggerTrialBonusReviewLock,
+	resolveTrialBonusReviewLock,
 };

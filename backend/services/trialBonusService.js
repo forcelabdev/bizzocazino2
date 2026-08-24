@@ -10,7 +10,13 @@ const {
 	applyBonusLock,
 	applyWageringLock,
 	evaluateBonusLock,
+	triggerTrialBonusReviewLock,
+	resolveTrialBonusReviewLock,
 } = require("../utils/bonusLock");
+const { sumUserBetsSince } = require("../utils/userBetActivity");
+const {
+	getUserApprovedFinanceTotals,
+} = require("../utils/userFinanceTotals");
 
 const CATEGORY = "DENEME BONUSU";
 const SOURCE = "trial_bonus";
@@ -35,8 +41,11 @@ const updateSettings = async (patch = {}, actorUser = null) => {
 		"wageringMultiplier",
 		"durationHours",
 		"blockOtherBonuses",
-		"trialRtpLow",
-		"trialRtpHigh",
+		"targetBalanceEnabled",
+		"targetBalanceAmount",
+		"registrationCutoffEnabled",
+		"registeredAfter",
+		"blockIfDeposited",
 		"note",
 	];
 
@@ -64,6 +73,42 @@ const getUserBalance = (user) => {
 };
 
 /**
+ * Deneme bonusu talebi için yeni uygunluk kuralları: kayıt tarihi sınırı ve
+ * önceden onaylı yatırımı olma durumu. Bakiyeyi/veritabanını DEĞİŞTİRMEZ.
+ *
+ * @returns {Promise<{ eligible: boolean, reason?: string, message?: string }>}
+ */
+const checkClaimEligibility = async (user, settings) => {
+	if (settings.registrationCutoffEnabled && settings.registeredAfter) {
+		const cutoff = new Date(settings.registeredAfter);
+		const registeredAt = new Date(user.createdAt);
+		if (registeredAt < cutoff) {
+			return {
+				eligible: false,
+				reason: "REGISTERED_BEFORE_CUTOFF",
+				message:
+					"Bu tarihten önce kayıt olan üyeler deneme bonusu talep edemez.",
+			};
+		}
+	}
+
+	if (settings.blockIfDeposited) {
+		const totalsByUser = await getUserApprovedFinanceTotals([user._id]);
+		const totals = totalsByUser.get(String(user._id));
+		if (totals && totals.depositCount > 0) {
+			return {
+				eligible: false,
+				reason: "HAS_APPROVED_DEPOSIT",
+				message:
+					"Daha önce yatırım yapmış üyeler deneme bonusu talep edemez.",
+			};
+		}
+	}
+
+	return { eligible: true };
+};
+
+/**
  * Kullanıcının deneme bonusunu talep edip edemeyeceğini döner. Bakiyeyi/
  * veritabanını DEĞİŞTİRMEZ, sadece önizleme amaçlıdır.
  */
@@ -79,8 +124,12 @@ const getPotential = async (userId) => {
 
 	const lockStatus = await evaluateBonusLock(user);
 	const blockedByOtherBonus = lockStatus.active;
+	const eligibilityCheck = await checkClaimEligibility(user, settings);
 	const eligible = Boolean(
-		settings.enabled && !existingClaim && !blockedByOtherBonus
+		settings.enabled &&
+			!existingClaim &&
+			!blockedByOtherBonus &&
+			eligibilityCheck.eligible
 	);
 
 	let message;
@@ -88,6 +137,11 @@ const getPotential = async (userId) => {
 		message = "Deneme bonusu şu anda aktif değil.";
 	} else if (existingClaim) {
 		message = "Deneme bonusunu daha önce talep ettiniz.";
+	} else if (!eligibilityCheck.eligible) {
+		message = eligibilityCheck.message;
+	} else if (blockedByOtherBonus && lockStatus.type === "review") {
+		message =
+			"Hesabınız deneme bonusu incelemesi nedeniyle kilitli. Canlı destek ile iletişime geçin.";
 	} else if (blockedByOtherBonus && lockStatus.type === "wagering") {
 		message = `Devam eden bir bonusun çevrim şartını tamamlamadan yeni bonus talep edemezsiniz. Çevrim için ${lockStatus.wageringRemaining.toLocaleString("tr-TR")} TL daha bahis yapmanız gerekiyor.`;
 	} else if (blockedByOtherBonus) {
@@ -124,6 +178,13 @@ const claim = async (userId) => {
 	if (lockStatus.active) {
 		const err = new Error("OTHER_BONUS_BLOCKED");
 		err.wagering = lockStatus.type === "wagering" ? lockStatus : null;
+		throw err;
+	}
+
+	const eligibilityCheck = await checkClaimEligibility(user, settings);
+	if (!eligibilityCheck.eligible) {
+		const err = new Error(eligibilityCheck.reason || "NOT_ELIGIBLE");
+		err.message = eligibilityCheck.message || err.message;
 		throw err;
 	}
 
@@ -194,6 +255,16 @@ const claim = async (userId) => {
 					)
 				: null;
 
+		// Hedef Bakiye ayarının anlık değerini kullanıcı üzerinde sabitle
+		// (snapshot) — ayar sonradan değişse de bu talep için sabit kalır.
+		await User.findByIdAndUpdate(user._id, {
+			$set: {
+				"bonusLock.targetBalanceAmount": settings.targetBalanceEnabled
+					? roundMoney(settings.targetBalanceAmount)
+					: 0,
+			},
+		});
+
 		claimDoc.otherBonusesBlockedUntil = blockedUntil;
 		claimDoc.adjustmentRef = result.adjustment._id;
 		await claimDoc.save();
@@ -251,6 +322,16 @@ const approveClaim = async (claimId, actorUser) => {
 				)
 			: null;
 
+	// Hedef Bakiye ayarının anlık değerini kullanıcı üzerinde sabitle
+	// (snapshot) — ayar sonradan değişse de bu talep için sabit kalır.
+	await User.findByIdAndUpdate(user._id, {
+		$set: {
+			"bonusLock.targetBalanceAmount": settings.targetBalanceEnabled
+				? roundMoney(settings.targetBalanceAmount)
+				: 0,
+		},
+	});
+
 	claimDoc.otherBonusesBlockedUntil = blockedUntil;
 	claimDoc.status = "approved";
 	claimDoc.reviewedBy = actorUser?._id || null;
@@ -305,32 +386,6 @@ const getApprovedClaimsMap = async (userIds = []) => {
 };
 
 /**
- * Kullanıcının deneme bonusundan kalan bir çevrim (wagering) şartı aktifse
- * yükseltilmiş RTP değerlerini döner, yoksa null döner. Oyun her açılışında
- * (GetGameUrl) canlı olarak çağrılır — çevrim tamamlandığı anda
- * evaluateBonusLock kilidi otomatik kapatır ve burası null dönmeye başlar,
- * böylece RTP ek bir job/cron olmadan kendiliğinden normale döner.
- */
-const getActiveRtp = async (user) => {
-	if (!user) return null;
-
-	const settings = await getSettings();
-	const low = Number(settings.trialRtpLow || 0);
-	const high = Number(settings.trialRtpHigh || 0);
-	if (low <= 0 && high <= 0) return null;
-
-	const lockStatus = await evaluateBonusLock(user);
-	if (!lockStatus.active) return null;
-	if (lockStatus.type !== "wagering") return null;
-	if (lockStatus.source !== SOURCE) return null;
-
-	return {
-		lowRtp: low > 0 ? low : undefined,
-		highRtp: high > 0 ? high : undefined,
-	};
-};
-
-/**
  * Kullanıcının deneme bonusundan kalan bir çevrim (wagering) şartı hâlâ
  * aktif mi diye bakar. Betinovi oyun başlatma akışında (game_launch),
  * true dönerse kullanıcı RTP override YERİNE ayrı bir Betinovi agent'ına
@@ -348,6 +403,96 @@ const hasActiveTrialWageringLock = async (user) => {
 	if (lockStatus.type !== "wagering") return false;
 
 	return lockStatus.source === SOURCE;
+};
+
+/**
+ * `wagerHooks.js → onBetSettled` tarafından HER bahis sonuçlandığında
+ * (tüm iç oyunlar + tüm dış sağlayıcı callback'leri kapsar) çağrılır.
+ * Kullanıcının deneme bonusu çevrim şartı tamamlandıysa inceleme kilidini
+ * tetikler. Zaten inceleme kilidindeyse veya tamamlanmışsa hemen çıkar —
+ * performans etkisi minimaldir.
+ */
+const checkTrialBonusWageringCompletion = async (userId) => {
+	if (!userId) return;
+
+	const user = await User.findById(userId);
+	if (!user) return;
+
+	const lock = user.bonusLock;
+	if (
+		!lock ||
+		lock.source !== SOURCE ||
+		lock.reviewRequired ||
+		lock.completedAt ||
+		!lock.wageringRequired ||
+		lock.wageringRequired <= 0
+	) {
+		return;
+	}
+
+	const wageringProgress = await sumUserBetsSince(user._id, lock.wageringSince);
+	if (wageringProgress >= lock.wageringRequired) {
+		await triggerTrialBonusReviewLock(user, "wagering_completed");
+	}
+};
+
+/**
+ * `wallet.js → updateWalletBalance` tarafından HER bakiye değişikliğinde
+ * (bet, kazanç, bonus kredisi, admin ayarı — hepsi) çağrılır. Kullanıcının
+ * deneme bonusu hedef bakiyesi varsa ve yeni bakiye o hedefe ulaştıysa/
+ * geçtiyse inceleme kilidini tetikler. Aksi halde hemen çıkar.
+ */
+const checkTrialBonusTargetBalance = async (user, newBalance) => {
+	if (!user) return;
+
+	const lock = user.bonusLock;
+	if (
+		!lock ||
+		lock.source !== SOURCE ||
+		lock.reviewRequired ||
+		lock.completedAt ||
+		!lock.targetBalanceAmount ||
+		lock.targetBalanceAmount <= 0
+	) {
+		return;
+	}
+
+	if (Number(newBalance) >= Number(lock.targetBalanceAmount)) {
+		// `user` çağıran taraftan gelen doküman güncel olmayabilir; en
+		// güncel bonusLock durumunu almak için tekrar yükle.
+		const freshUser = await User.findById(user._id);
+		if (!freshUser || freshUser.bonusLock?.reviewRequired) return;
+		await triggerTrialBonusReviewLock(freshUser, "target_balance_reached");
+	}
+};
+
+/**
+ * Admin panelinden "İncelemeyi Tamamla ve Kilidi Aç" aksiyonu tarafından
+ * çağrılır.
+ */
+const resolveTrialBonusReview = async ({ userId }) => {
+	const user = await User.findById(userId);
+	if (!user) throw new Error("USER_NOT_FOUND");
+	if (!user.bonusLock?.reviewRequired) {
+		throw new Error("REVIEW_NOT_REQUIRED");
+	}
+
+	await resolveTrialBonusReviewLock(user);
+	return user;
+};
+
+module.exports = {
+	getSettings,
+	updateSettings,
+	getPotential,
+	claim,
+	approveClaim,
+	rejectClaim,
+	getApprovedClaimsMap,
+	hasActiveTrialWageringLock,
+	checkTrialBonusWageringCompletion,
+	checkTrialBonusTargetBalance,
+	resolveTrialBonusReview,
 };
 
 module.exports = {

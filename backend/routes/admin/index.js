@@ -2644,6 +2644,14 @@ router.get(
 	trialBonusController.getUserSummary,
 );
 
+// Deneme Bonusu — İnceleme Kilidi: çevrim/hedef bakiye tamamlandığında
+// otomatik tetiklenir, SADECE bu endpoint ile (admin onayı) kapatılabilir.
+router.post(
+	"/users/:id/trial-bonus/resolve-review",
+	checkPermission("finance.trialBonus.manage"),
+	trialBonusController.resolveReview,
+);
+
 // CRM Raporu (yatırım aralığı, alınan/eklenen bonus, bakiye kırılımı)
 router.get(
 	"/crm-report/summary",
@@ -4044,7 +4052,7 @@ router.put(
 			}
 		}
 
-		// Number alanlarını string'den Number'a çevir
+		// Number alanlarını string'den Number'a ��evir
 		const numberFields = [
 			"provider_id", "has_lobby", "is_mobile", "has_freespins",
 			"has_tables", "only_demo", "status", "lobby_id", "rtp",
@@ -10617,7 +10625,7 @@ router.put(
 
 // ═══════════════════════════════════════════════════════════════════════════
 // SMS OTP Ayarları (SiteSettings içinde)
-// ════════════════════════════════════��════════════════════════════════���═════
+// ════════════════════════════════════��═��══════════════════════════════���═════
 
 const normalizePositiveInteger = (value, fallback = 0) => {
 	const parsed = Number.parseInt(value, 10);

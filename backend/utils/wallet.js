@@ -102,6 +102,27 @@ async function updateWalletBalance(user, wallet, amount, options = {}) {
 		const newBalance = updatedUser.wallets[walletIndex]?.balance || 0;
 
 		if (emitSocket && user._id) emitUserBalance(null, updatedUser);
+
+		// Fire-and-forget: Deneme Bonusu hedef bakiye kontrolü. Bu, TÜM
+		// bakiye değişikliklerinin (bet/kazanç/bonus/admin ayarı) tek geçiş
+		// noktasıdır; ana bakiye güncelleme akışını asla bloklamaz/başarısız
+		// etmez — hatalar burada yutulup sadece loglanır.
+		try {
+			require("../services/trialBonusService")
+				.checkTrialBonusTargetBalance(updatedUser, newBalance)
+				.catch((err) =>
+					console.error(
+						"❌ updateWalletBalance → deneme bonusu hedef bakiye kontrolü hatası:",
+						err.message
+					)
+				);
+		} catch (err) {
+			console.error(
+				"❌ updateWalletBalance → deneme bonusu hedef bakiye kontrolü kurulamadı:",
+				err.message
+			);
+		}
+
 		return newBalance;
 	} catch (error) {
 		console.error("updateWalletBalance failed:", error.message);
