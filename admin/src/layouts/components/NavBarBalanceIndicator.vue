@@ -64,9 +64,11 @@ onBeforeUnmount(() => {
 					v-bind="props"
 					class="balance-pill balance-pill--agent d-flex align-center gap-x-2 rounded px-3 py-1"
 				>
-					<VIcon size="18" icon="tabler-wallet" />
-					<span class="text-xs text-disabled">Kalan Agent</span>
-					<span class="text-sm font-weight-medium text-mono">{{ formatMoney(remainingAgentBalance) }}</span>
+					<VIcon size="20" icon="tabler-wallet" />
+					<div class="d-flex flex-column leading-none">
+						<span class="text-sm font-weight-medium text-mono">{{ formatMoney(remainingAgentBalance) }}</span>
+						<span class="text-xs text-disabled">Kalan Agent</span>
+					</div>
 				</div>
 			</template>
 			Kalan Agent Bakiyesi
@@ -78,9 +80,11 @@ onBeforeUnmount(() => {
 					v-bind="props"
 					class="balance-pill balance-pill--bonus d-flex align-center gap-x-2 rounded px-3 py-1"
 				>
-					<VIcon size="18" icon="tabler-gift" />
-					<span class="text-xs text-disabled">Kalan Bonus</span>
-					<span class="text-sm font-weight-medium text-mono">{{ formatMoney(remainingBonusBalance) }}</span>
+					<VIcon size="20" icon="tabler-gift" />
+					<div class="d-flex flex-column leading-none">
+						<span class="text-sm font-weight-medium text-mono">{{ formatMoney(remainingBonusBalance) }}</span>
+						<span class="text-xs text-disabled">Kalan Bonus</span>
+					</div>
 				</div>
 			</template>
 			Kalan Bonus Bakiyesi
@@ -110,5 +114,9 @@ onBeforeUnmount(() => {
 	font-family: "Courier New", monospace;
 	font-variant-numeric: tabular-nums;
 	letter-spacing: 0.5px;
+}
+
+.leading-none {
+	line-height: 1.1;
 }
 </style>

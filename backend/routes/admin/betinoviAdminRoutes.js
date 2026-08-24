@@ -8,6 +8,8 @@ const {
 	getControlGameVendors,
 	getEnrichedCurrentPlayers,
 	getAgentBalanceSummary,
+	hasTrialControlGameAgent,
+	mergeCallHistoryResponses,
 } = require("../../services/betinoviAdminApiService");
 const FreeSpinGrant = require("../../database/models/FreeSpinGrant");
 
@@ -242,11 +244,55 @@ router.post(
 
 			const settings = await getClientAdminApiSettings();
 			const method = settings.controlGame.methods[methodKey];
-			const data = await betinoviAdminRequest(
-				"controlGame",
-				method,
-				req.body,
-			);
+
+			// "Call Result" / "Call Geçmişi" ekranları belirli bir kullanıcıya
+			// değil, vendor + tarih aralığına göre sorgulanır; bu yüzden burada
+			// (varsa) hem varsayılan hem de bizzodeneme agent'ı otomatik olarak
+			// sorgulanıp sonuçlar birleştirilir. Diğer tipler (call-list,
+			// apply-call, cancel-call, free-round işlemleri) belirli bir
+			// userCode/oturuma özgüdür; bunlar için frontend req.body.agentSource
+			// ile hangi agent'a gönderileceğini açıkça belirtir (bkz. "Oyundaki
+			// Kullanıcılar" panelindeki player.agentSource / call satırındaki
+			// row.agentSource).
+			const isVendorScopedHistoryQuery =
+				type === "call-result" || type === "call-history";
+
+			let data;
+			if (isVendorScopedHistoryQuery && hasTrialControlGameAgent()) {
+				const [defaultResult, trialResult] = await Promise.allSettled([
+					betinoviAdminRequest("controlGame", method, req.body, {
+						agentSource: "default",
+					}),
+					betinoviAdminRequest("controlGame", method, req.body, {
+						agentSource: "trial",
+					}),
+				]);
+
+				if (
+					defaultResult.status === "rejected" &&
+					trialResult.status === "rejected"
+				) {
+					throw defaultResult.reason;
+				}
+
+				data = mergeCallHistoryResponses(
+					defaultResult.status === "fulfilled" ? defaultResult.value : null,
+					trialResult.status === "fulfilled" ? trialResult.value : null,
+				);
+			} else {
+				const agentSource = req.body?.agentSource === "trial" ? "trial" : "default";
+
+				if (agentSource === "trial" && !hasTrialControlGameAgent()) {
+					return res.status(400).json({
+						success: false,
+						message: "Deneme bonusu (bizzodeneme) agent bilgileri (.env) eksik.",
+					});
+				}
+
+				data = await betinoviAdminRequest("controlGame", method, req.body, {
+					agentSource,
+				});
+			}
 
 			// 🎰 Freespin başarıyla uygulandıysa, Dashboard "bugün verilen
 			// freespin" raporlaması için yerel bir defter kaydı oluşturulur.

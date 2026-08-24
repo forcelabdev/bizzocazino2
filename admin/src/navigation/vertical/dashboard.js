@@ -12,7 +12,5 @@ export default [
         subject: 'dashboard',
       },
     ],
-    badgeContent: '3',
-    badgeClass: 'bg-primary',
   },
 ]

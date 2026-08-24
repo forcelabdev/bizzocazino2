@@ -56,7 +56,7 @@ exports.getGamesByCategorySlug = async (req, res) => {
 		const [games, total] = await Promise.all([
 			Game.find(query)
 				.select(
-					"game_name game_code banner background views featured provider_code provider categories category"
+					"game_name game_code banner background views featured provider_code provider categories category distribution"
 				)
 				.sort({ featured: -1, views: -1 })
 				.skip(offset)
@@ -85,7 +85,7 @@ exports.searchGames = async (req, res) => {
 			game_name: { $regex: query, $options: "i" },
 		})
 			.select(
-				"game_name game_code banner background views featured provider_code provider"
+				"game_name game_code banner background views featured provider_code provider distribution"
 			)
 			.sort({ featured: -1, views: -1 })
 			.limit(30) // performans için sınır koyuyoruz
@@ -103,7 +103,7 @@ exports.getFeaturedGames = async (req, res) => {
 
 		const games = await Game.find({ featured: true })
 			.select(
-				"game_name game_code banner background views featured provider_code provider"
+				"game_name game_code banner background views featured provider_code provider distribution"
 			)
 			.sort({ views: -1 })
 			.limit(limit)
@@ -129,7 +129,7 @@ exports.getCategoriesWithGames = async (req, res) => {
 				const [games, totalCount] = await Promise.all([
 					Game.find(categoryQuery)
 						.select(
-							"game_name game_code banner background views featured provider_code provider categories category"
+							"game_name game_code banner background views featured provider_code provider categories category distribution"
 						)
 						.sort({ featured: -1, views: -1 })
 						.limit(20)

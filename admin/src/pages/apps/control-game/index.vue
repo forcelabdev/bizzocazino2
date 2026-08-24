@@ -242,6 +242,10 @@ const normalizeCallRow = (row, index) => {
 		callId: pickField(row, ["callId", "call_id"], ""),
 		callRtp: pickField(row, ["callRtp", "callAmountRate", "rate"], ""),
 		currencyCode: pickField(row, ["currencyCode", "currency_code"], "TRY"),
+		// Backend (mergeCallHistoryResponses) her satıra hangi agent'tan geldiğini
+		// ekler: "default" (bizzocasinoyeni) | "trial" (bizzodeneme). Call İptal
+		// isteğinde doğru agent'a yönlendirmek için geri gönderilir.
+		agentSource: pickField(row, ["agentSource"], "default"),
 	};
 };
 
@@ -290,6 +294,7 @@ const cancelCallRow = async (row) => {
 			callRtp: row.callRtp,
 			betAmount: pickField(row._raw, ["betAmount", "bet", "bet_amount"], undefined),
 			callId: row.callId,
+			agentSource: row.agentSource,
 		});
 		successMessage.value = `Call iptal edildi: ${row.userCode}`;
 		await fetchCallResults();
@@ -401,6 +406,7 @@ const openGiveCallDialog = async (player) => {
 			vendorCode: player.vendorCode,
 			gameCode: player.gameCode,
 			callType: player.requestType,
+			agentSource: player.agentSource,
 		});
 		giveCallDialog.value.options = Array.isArray(data.data?.calls) ? data.data.calls : [];
 	} catch (error) {
@@ -426,6 +432,7 @@ const applySelectedCall = async () => {
 			callType: player.requestType,
 			callRtp: giveCallDialog.value.selectedRtp,
 			betAmount: player.betAmount,
+			agentSource: player.agentSource,
 		});
 		giveCallDialog.value.result = data.data || null;
 		successMessage.value = `Call uygulandı: ${player.userCode} için ${giveCallDialog.value.selectedRtp}x RTP.`;
@@ -472,6 +479,7 @@ const playersHeaders = [
 	{ title: "Toplam Kazanım", key: "totalCredit" },
 	{ title: "Gerçek RTP", key: "realRtp", sortable: false },
 	{ title: "Deneme Bonusu", key: "trialBonus", sortable: false },
+	{ title: "Agent", key: "agentSource", sortable: false },
 	{ title: "Kontrol", key: "actions", sortable: false, align: "end" },
 ];
 
@@ -490,6 +498,7 @@ const playersTableRowsAll = computed(() =>
 	totalDebit: formatNumber(player.totalDebit),
 	totalCredit: formatNumber(player.totalCredit),
 	_trialBonus: trialBonusMap.value[player.userCode] || null,
+	agentSource: player.agentSource || "default",
 	})),
 	);
 
@@ -515,6 +524,7 @@ const callResultHeaders = [
 	{ title: "Call Tutarı", key: "callAmount" },
 	{ title: "Call Oranı", key: "callAmountRate" },
 	{ title: "Durum", key: "status" },
+	{ title: "Agent", key: "agentSource", sortable: false },
 	{ title: "Kontrol", key: "actions", sortable: false, align: "end" },
 ];
 
@@ -531,6 +541,7 @@ const historyHeaders = [
 	{ title: "Bahis", key: "bet" },
 	{ title: "Call Tutarı", key: "callAmount" },
 	{ title: "Durum", key: "status" },
+	{ title: "Agent", key: "agentSource", sortable: false },
 ];
 
 const tabs = [
@@ -746,6 +757,15 @@ onBeforeUnmount(() => {
 						</VTooltip>
 						<span v-else class="text-medium-emphasis">-</span>
 					</template>
+					<template #item.agentSource="{ item }">
+						<VChip
+							size="small"
+							variant="tonal"
+							:color="(item.raw || item).agentSource === 'trial' ? 'warning' : 'default'"
+						>
+							{{ (item.raw || item).agentSource === 'trial' ? 'Deneme Bonusu (bizzodeneme)' : 'Normal' }}
+						</VChip>
+					</template>
 					<template #item.actions="{ item }">
 						<VBtn
 							size="small"
@@ -856,6 +876,15 @@ onBeforeUnmount(() => {
 							{{ (item.raw || item).status }}
 						</VChip>
 					</template>
+					<template #item.agentSource="{ item }">
+						<VChip
+							size="small"
+							variant="tonal"
+							:color="(item.raw || item).agentSource === 'trial' ? 'warning' : 'default'"
+						>
+							{{ (item.raw || item).agentSource === 'trial' ? 'Deneme Bonusu' : 'Normal' }}
+						</VChip>
+					</template>
 					<template #item.actions="{ item }">
 						<VBtn
 							v-if="isWaitingStatus((item.raw || item).status)"
@@ -888,6 +917,15 @@ onBeforeUnmount(() => {
 					<template #item.status="{ item }">
 						<VChip size="small" :color="statusColor((item.raw || item).status)" variant="tonal">
 							{{ (item.raw || item).status }}
+						</VChip>
+					</template>
+					<template #item.agentSource="{ item }">
+						<VChip
+							size="small"
+							variant="tonal"
+							:color="(item.raw || item).agentSource === 'trial' ? 'warning' : 'default'"
+						>
+							{{ (item.raw || item).agentSource === 'trial' ? 'Deneme Bonusu' : 'Normal' }}
 						</VChip>
 					</template>
 				</VDataTable>

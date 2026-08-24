@@ -85,6 +85,41 @@ const getLeaderboard = async (tournamentId, limit = 100) => {
 	return computeLeaderboard(tournament, limit);
 };
 
+/**
+ * 👤 Belirli bir kullanıcının bu turnuvadaki KENDİ sırasını/istatistiğini
+ * döner (leaderboard'da top N'e girip girmediğine bakmadan). Sitenin KENDİ
+ * frontend'i, kullanıcı giriş yaptıktan sonra "senin sıran" kartı için
+ * kullanır. Kullanıcının hiç uygun bahsi yoksa `null` döner.
+ */
+const getUserRank = async (tournamentId, userId) => {
+	const tournament = await SportsTournament.findById(tournamentId).lean();
+	if (!tournament) throw new SportsTournamentError("NOT_FOUND", "Turnuva bulunamadı.", 404);
+
+	if (tournament.state === "completed" && tournament.leaderboard?.length) {
+		const entry = tournament.leaderboard.find((row) => String(row.user) === String(userId));
+		if (!entry) return null;
+		return {
+			rank: entry.rank,
+			totalStake: entry.totalStake,
+			betCount: entry.betCount,
+			prizeAmount: entry.prizeAmount,
+			prizeAwarded: entry.prizeAwarded,
+		};
+	}
+
+	// Turnuva devam ediyorsa canlı hesaplanan tam sıralamadan kullanıcıyı bulur.
+	const fullLeaderboard = await computeLeaderboard(tournament, 100000);
+	const entry = fullLeaderboard.find((row) => row.user && String(row.user._id) === String(userId));
+	if (!entry) return null;
+	return {
+		rank: entry.rank,
+		totalStake: entry.totalStake,
+		betCount: entry.betCount,
+		prizeAmount: 0,
+		prizeAwarded: false,
+	};
+};
+
 /** 🚦 Zamanı gelen turnuvaları "running" yap, süresi bitenleri sonuçlandır — cron ile çağrılır. */
 const advanceTournamentStates = async () => {
 	const now = new Date();
@@ -172,6 +207,7 @@ module.exports = {
 	SportsTournamentError,
 	getLeaderboard,
 	computeLeaderboard,
+	getUserRank,
 	advanceTournamentStates,
 	settleTournament,
 };

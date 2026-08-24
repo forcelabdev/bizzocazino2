@@ -27,12 +27,25 @@ const props = defineProps({
     type: Array,
     required: false,
   },
+  // 👉 Canlı kullanıcı arama sonuçları (kart görünümü). Her öğe zaten
+  // ekranda gösterilecek şekilde biçimlendirilmiş gelir (bkz. NavSearchBar.vue).
+  userResults: {
+    type: Array,
+    required: false,
+    default: () => [],
+  },
+  userResultsLoading: {
+    type: Boolean,
+    required: false,
+    default: false,
+  },
 })
 
 const emit = defineEmits([
   'update:isDialogVisible',
   'update:searchQuery',
   'itemSelected',
+  'userSelected',
 ])
 
 const { ctrl_k, meta_k } = useMagicKeys({
@@ -89,20 +102,10 @@ const dialogModelValueUpdate = val => {
   emit('update:searchQuery', '')
 }
 
-const resolveCategories = val => {
-  if (val === 'dashboards')
-    return 'Dashboards'
-  if (val === 'appsPages')
-    return 'Apps & Pages'
-  if (val === 'userInterface')
-    return 'User Interface'
-  if (val === 'formsTables')
-    return 'Forms Tables'
-  if (val === 'chartsMisc')
-    return 'Charts Misc'
-  
-  return 'Misc'
-}
+// Category headers are now real, already-localized section names
+// (e.g. "Kullanıcılar", "Finans") coming straight from the app's
+// navigation config, so we just display them as-is.
+const resolveCategories = val => val
 </script>
 
 <template>
@@ -177,6 +180,100 @@ const resolveCategories = val => {
         :options="{ wheelPropagation: false, suppressScrollX: true }"
         class="h-100"
       >
+        <!-- 👉 Canlı Kullanıcı Arama Sonuçları (kart görünümü) -->
+        <div
+          v-show="searchQuery.length && (userResultsLoading || !!userResults.length)"
+          class="pa-2"
+        >
+          <VListSubheader class="text-disabled">
+            Kullanıcılar
+          </VListSubheader>
+
+          <div
+            v-if="userResultsLoading"
+            class="d-flex align-center gap-2 px-4 py-3"
+          >
+            <VProgressCircular
+              size="18"
+              width="2"
+              indeterminate
+              color="primary"
+            />
+            <span class="text-caption text-disabled">Kullanıcılar aranıyor...</span>
+          </div>
+
+          <VList
+            v-else
+            density="compact"
+            class="app-bar-user-search-list"
+          >
+            <VListItem
+              v-for="user in userResults"
+              :key="user._id"
+              link
+              rounded="lg"
+              class="app-bar-user-result border mb-2"
+              lines="two"
+              @click="$emit('userSelected', user)"
+            >
+              <template #prepend>
+                <VAvatar
+                  size="38"
+                  :variant="!user.avatar ? 'tonal' : undefined"
+                  :color="!user.avatar ? 'primary' : undefined"
+                  class="me-3"
+                >
+                  <VImg
+                    v-if="user.avatar"
+                    :src="user.avatar"
+                  />
+                  <span
+                    v-else
+                    class="text-caption font-weight-medium"
+                  >{{ user.initials }}</span>
+                </VAvatar>
+              </template>
+
+              <VListItemTitle class="d-flex align-center flex-wrap gap-2">
+                <span class="font-weight-medium">{{ user.username }}</span>
+                <VChip
+                  size="x-small"
+                  :color="user.rankColor"
+                  variant="tonal"
+                  class="text-capitalize"
+                >
+                  {{ user.rank }}
+                </VChip>
+              </VListItemTitle>
+
+              <VListItemSubtitle class="d-flex flex-wrap align-center gap-x-3 gap-y-1 text-caption mt-1">
+                <span v-if="user.numericId">Hesap No: {{ user.numericId }}</span>
+                <span v-if="user.email">{{ user.email }}</span>
+                <span v-if="user.phone">{{ user.phone }}</span>
+              </VListItemSubtitle>
+
+              <template #append>
+                <div class="d-flex flex-column align-end gap-1">
+                  <VChip
+                    size="x-small"
+                    color="primary"
+                    label
+                  >
+                    {{ user.balanceLabel }}
+                  </VChip>
+                  <VIcon
+                    size="16"
+                    icon="tabler-corner-down-left"
+                    class="enter-icon text-disabled"
+                  />
+                </div>
+              </template>
+            </VListItem>
+          </VList>
+        </div>
+
+        <VDivider v-show="searchQuery.length && (userResultsLoading || !!userResults.length)" />
+
         <!-- 👉 Search List -->
         <VList
           v-show="searchQuery.length && !!searchResults.length"
@@ -278,7 +375,7 @@ const resolveCategories = val => {
 
         <!-- 👉 No Data found -->
         <div
-          v-show="!searchResults.length && searchQuery.length"
+          v-show="!searchResults.length && !userResults.length && !userResultsLoading && searchQuery.length"
           class="h-100"
         >
           <slot name="noData">
@@ -289,14 +386,14 @@ const resolveCategories = val => {
                   icon="tabler-file-x"
                 />
                 <div class="d-flex align-center flex-wrap justify-center gap-2 text-h6 my-3">
-                  <span>No Result For </span>
+                  <span>Sonuç bulunamadı: </span>
                   <span>"{{ searchQuery }}"</span>
                 </div>
                 <div
                   v-if="props.noDataSuggestion"
                   class="mt-8"
                 >
-                  <span class="d-flex justify-center text-disabled">Try searching for</span>
+                  <span class="d-flex justify-center text-disabled">Bunları deneyebilirsiniz</span>
                   <h6
                     v-for="suggestion in props.noDataSuggestion"
                     :key="suggestion.title"
@@ -384,6 +481,31 @@ const resolveCategories = val => {
       min-block-size: auto;
       padding-block: 0.6875rem 0.3125rem;
       text-transform: uppercase;
+    }
+  }
+
+  .app-bar-user-search-list {
+    .app-bar-user-result {
+      border-color: rgba(var(--v-border-color), var(--v-border-opacity)) !important;
+      transition: border-color 0.2s ease, background-color 0.2s ease;
+
+      .v-list-item__append {
+        .enter-icon {
+          visibility: hidden;
+        }
+      }
+
+      &:hover,
+      &:focus {
+        border-color: rgb(var(--v-theme-primary)) !important;
+        background-color: rgba(var(--v-theme-primary), 0.04);
+
+        .v-list-item__append {
+          .enter-icon {
+            visibility: visible;
+          }
+        }
+      }
     }
   }
 }

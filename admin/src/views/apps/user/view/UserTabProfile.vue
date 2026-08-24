@@ -42,14 +42,6 @@ const copyToClipboard = async (value, messageKey) => {
 
 <template>
   <VRow>
-    <!-- Notlar + Etiketler (risk göstergesi ile) -->
-    <VCol cols="12">
-      <UserRiskNotesCard
-        :user-data="userData"
-        @updated="emit('updated', $event)"
-      />
-    </VCol>
-
     <!-- Personal Information -->
     <VCol cols="12">
       <VCard>
@@ -204,6 +196,14 @@ const copyToClipboard = async (value, messageKey) => {
           </VRow>
         </VCardText>
       </VCard>
+    </VCol>
+
+    <!-- Notlar + Etiketler (risk göstergesi ile) -->
+    <VCol cols="12">
+      <UserRiskNotesCard
+        :user-data="userData"
+        @updated="emit('updated', $event)"
+      />
     </VCol>
 
     <!-- Wallets -->

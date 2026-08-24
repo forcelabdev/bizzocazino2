@@ -20,12 +20,6 @@ export default [
         action: "read",
         subject: "communication",
       },
-      {
-        title: "communication.telegram",
-        to: "apps-telegram",
-        action: "read",
-        subject: "communication",
-      },
     ],
   },
 
@@ -385,12 +379,6 @@ export default [
       {
         title: "platform.siteSettings",
         to: "site-settings",
-        action: "read",
-        subject: "platform",
-      },
-      {
-        title: "platform.bonus",
-        to: "apps-bonus",
         action: "read",
         subject: "platform",
       },

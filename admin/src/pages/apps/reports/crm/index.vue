@@ -15,7 +15,7 @@ const customStart = ref(null)
 const customEnd = ref(null)
 
 const bonusOrigin = ref("all") // all | claimed | manual
-const bonusCategory = ref(null)
+const bonusCategory = ref([]) // çoklu seçim (manuel bonus kategorileri)
 const bucket = ref(null)
 const depositMin = ref(null)
 const depositMax = ref(null)
@@ -130,9 +130,12 @@ const commonParams = computed(() => {
     startDate: startDate || undefined,
     endDate: endDate || undefined,
     bonusOrigin: bonusOrigin.value !== "all" ? bonusOrigin.value : undefined,
+    bonusCategory: bonusCategory.value.length ? bonusCategory.value : undefined,
     depositMin: depositMin.value || undefined,
     depositMax: depositMax.value || undefined,
     gameType: gameType.value || undefined,
+    providerCode: providerCode.value || undefined,
+    gameCode: gameCode.value || undefined,
     vipLevel: vipLevel.value !== null && vipLevel.value !== undefined ? vipLevel.value : undefined,
     country: country.value || undefined,
     activityStatus: activityStatus.value || undefined,
@@ -217,6 +220,38 @@ const fetchFilterOptions = async () => {
   }
 }
 
+// Seçilen oyun türüne göre sağlayıcı + oyun listesini getirir. Oyun listesi
+// tüm sağlayıcılar için tek seferde çekilir; sağlayıcı seçimine göre
+// aşağıdaki `filteredGameOptions` computed'ı ile client-side filtrelenir
+// (sağlayıcı değiştikçe ekstra istek atmaya gerek kalmaz).
+const fetchGameOptions = async () => {
+  if (!gameType.value) {
+    providerOptions.value = []
+    gameOptions.value = []
+
+    return
+  }
+  gameOptionsLoading.value = true
+  try {
+    const res = await axios.get("/admin/crm-report/game-options", {
+      params: { gameType: gameType.value },
+    })
+
+    providerOptions.value = res.data.data?.providers || []
+    gameOptions.value = res.data.data?.games || []
+  } catch (error) {
+    console.error("Oyun/sağlayıcı seçenekleri alınamadı:", error)
+    providerOptions.value = []
+    gameOptions.value = []
+  } finally {
+    gameOptionsLoading.value = false
+  }
+}
+
+const filteredGameOptions = computed(() =>
+  gameOptions.value.filter(g => !providerCode.value || g.providerCode === providerCode.value),
+)
+
 const fetchMembers = async () => {
   membersLoading.value = true
   try {
@@ -254,10 +289,10 @@ const selectBucket = key => {
 }
 
 const selectGameBucket = key => {
+  // gameType değişimi tetiklenince aşağıdaki watch(gameType) sağlayıcı/oyun
+  // seçeneklerini yeniden çekip tüm listeleri (özet, segmentler, üyeler)
+  // otomatik yeniler.
   gameType.value = gameType.value === key ? null : key
-  page.value = 1
-  fetchSummary()
-  fetchMembers()
 }
 
 let searchTimeout = null
@@ -293,6 +328,25 @@ watch([customStart, customEnd], () => {
 
 watch(bonusOrigin, refreshAll)
 
+watch(bonusCategory, refreshAll, { deep: true })
+
+// Oyun Türü → Sağlayıcı → Oyun sıralı (cascading) filtresi: bir üst seviye
+// değiştiğinde alt seviyedeki seçim sıfırlanır ve seçilen türe göre
+// sağlayıcı/oyun listesi yeniden çekilir.
+watch(gameType, () => {
+  providerCode.value = null
+  gameCode.value = null
+  fetchGameOptions()
+  refreshAll()
+})
+
+watch(providerCode, () => {
+  gameCode.value = null
+  refreshAll()
+})
+
+watch(gameCode, refreshAll)
+
 watch([vipLevel, country, activityStatus, tag, partner], refreshAll)
 
 watch([page, itemsPerPage], fetchMembers)
@@ -327,6 +381,7 @@ const exportMembers = async () => {
       "Toplam Çekim": m.totalWithdrawal || 0,
       "Alınan Bonus": m.claimedBonus || 0,
       "Eklenen Bonus": m.manualBonus || 0,
+      "Bonus Kategorileri": (m.manualBonusCategories || []).join(", "),
       "Eklenen Bakiye": m.manualBalance || 0,
       Bakiye: m.walletBalance || 0,
       "Toplam Bahis": m.betTotal || 0,
@@ -353,7 +408,7 @@ const exportMembers = async () => {
       { wch: 16 },
       { wch: 14 },
       { wch: 16 },
-      { wch: 16 },
+      { wch: 24 },
       { wch: 16 },
       { wch: 16 },
       { wch: 16 },
@@ -543,6 +598,25 @@ onMounted(() => {
           </VBtn>
         </div>
 
+        <VRow class="mb-2">
+          <VCol
+            cols="12"
+            sm="6"
+          >
+            <VSelect
+              v-model="bonusCategory"
+              :items="filterOptions.manualBonusCategories"
+              label="Manuel Bonus Kategorisi"
+              placeholder="Tümü"
+              multiple
+              chips
+              closable-chips
+              clearable
+              density="compact"
+            />
+          </VCol>
+        </VRow>
+
         <VRow>
           <VCol
             cols="12"
@@ -587,7 +661,42 @@ onMounted(() => {
               placeholder="Tümü"
               clearable
               density="compact"
-              @update:model-value="() => { page = 1; fetchSummary(); fetchMembers() }"
+            />
+          </VCol>
+          <VCol
+            cols="12"
+            sm="4"
+            md="2"
+          >
+            <VSelect
+              v-model="providerCode"
+              :items="providerOptions"
+              item-title="name"
+              item-value="code"
+              label="Sağlayıcı"
+              placeholder="Tümü"
+              :disabled="!gameType"
+              :loading="gameOptionsLoading"
+              clearable
+              density="compact"
+            />
+          </VCol>
+          <VCol
+            cols="12"
+            sm="4"
+            md="2"
+          >
+            <VSelect
+              v-model="gameCode"
+              :items="filteredGameOptions"
+              item-title="name"
+              item-value="code"
+              label="Oyun"
+              placeholder="Tümü"
+              :disabled="!gameType"
+              :loading="gameOptionsLoading"
+              clearable
+              density="compact"
             />
           </VCol>
           <VCol
@@ -662,6 +771,8 @@ onMounted(() => {
             <VSelect
               v-model="partner"
               :items="filterOptions.partners"
+              item-title="title"
+              item-value="code"
               label="Partner"
               placeholder="Tümü"
               clearable

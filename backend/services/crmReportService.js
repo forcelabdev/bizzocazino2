@@ -18,6 +18,11 @@ const Game = require("../database/models/Game");
 const GameProvider = require("../database/models/GameProvider");
 const ManualBonusCategory = require("../database/models/ManualBonusCategory");
 const { RIVO_WALLET } = require("../utils/rivoWallet");
+const {
+	normalizeCode,
+	buildPartnerCodeMap,
+	listRedeemedAffiliateCodes,
+} = require("../utils/affiliatePartners");
 
 const APPROVED_STATUS = "approved";
 const APPROVED_CRYPTO_STATES = ["completed", "success"];
@@ -418,16 +423,14 @@ const getActivityStatus = (lastActivityAt, betCount) => {
 const buildMemberRecords = async ({ startDate, endDate } = {}) => {
 	const dateRange = buildDateRange(startDate, endDate);
 
-	const [depositMap, adjustmentMap, gameStatsMap, vipLevels, tagDocs, partnerDocs] =
+	const [depositMap, adjustmentMap, gameStatsMap, vipLevels, tagDocs, partnerCodeMap] =
 		await Promise.all([
 			aggregateDepositsByUser(dateRange),
 			aggregateAdjustmentsByUser(dateRange),
 			aggregateGameStatsByUser(dateRange),
 			Vip.find({}).sort({ level: 1 }).select("level levelName requiredXp").lean(),
 			Tag.find({}).select("name color category").lean(),
-			User.find({ "affiliates.code": { $exists: true, $ne: null } })
-				.select("username affiliates.code")
-				.lean(),
+			buildPartnerCodeMap(),
 		]);
 
 	const tagById = new Map(tagDocs.map((t) => [String(t._id), t]));
@@ -459,13 +462,6 @@ const buildMemberRecords = async ({ startDate, endDate } = {}) => {
 		)
 		.lean();
 
-	const codeToPartner = {};
-	partnerDocs.forEach((u) => {
-		if (u.affiliates?.code && u.username) {
-			codeToPartner[u.affiliates.code] = u.username;
-		}
-	});
-
 	const records = [];
 	for (const u of userDocs) {
 		if (!u.username) continue;
@@ -494,6 +490,12 @@ const buildMemberRecords = async ({ startDate, endDate } = {}) => {
 			playedGameKeys: new Set(),
 		};
 		const redeemedCode = u.affiliates?.redeemedCode || null;
+		// Partner kodu büyük/küçük harf duyarsız eşleştirilir (partner
+		// kendi affiliates.code'unu bir şekilde, redeemedCode üyeler
+		// tarafından farklı harf ile girilmiş olabilir).
+		const matchedPartner = redeemedCode
+			? partnerCodeMap.get(normalizeCode(redeemedCode))
+			: null;
 		const { vipLevel, vipLevelName } = resolveVipLevel(u.xp, vipLevels);
 		const tags = (u.tags || [])
 			.map((tagId) => tagById.get(String(tagId)))
@@ -508,7 +510,7 @@ const buildMemberRecords = async ({ startDate, endDate } = {}) => {
 			phone: u.phone || null,
 			redeemedCode,
 			partnerName: redeemedCode
-				? codeToPartner[redeemedCode] || redeemedCode
+				? matchedPartner?.username || redeemedCode
 				: null,
 			totalDeposit: round2(deposit.totalDeposit),
 			depositCount: deposit.depositCount || 0,
@@ -587,9 +589,17 @@ const applyFilters = (
 		filtered = filtered.filter((r) => r.manualBonus > 0);
 	}
 	if (bonusCategory) {
-		filtered = filtered.filter((r) =>
-			r.manualBonusCategories.includes(bonusCategory),
-		);
+		// Çoklu (tikleme) seçim: bonusCategory bir dizi ya da tekil değer
+		// olabilir - üye, seçilen kategorilerden en az birine sahipse dahil
+		// edilir (OR mantığı).
+		const categories = Array.isArray(bonusCategory)
+			? bonusCategory
+			: [bonusCategory];
+		if (categories.length) {
+			filtered = filtered.filter((r) =>
+				r.manualBonusCategories.some((c) => categories.includes(c)),
+			);
+		}
 	}
 	if (gameType && GAME_CATEGORY_KEYS.includes(gameType)) {
 		filtered = filtered.filter((r) => r.gameBreakdown[gameType]?.count > 0);
@@ -621,7 +631,10 @@ const applyFilters = (
 		filtered = filtered.filter((r) => r.tags.some((t) => t.id === tag));
 	}
 	if (partner) {
-		filtered = filtered.filter((r) => r.redeemedCode === partner);
+		const normalizedPartner = normalizeCode(partner);
+		filtered = filtered.filter(
+			(r) => normalizeCode(r.redeemedCode) === normalizedPartner,
+		);
 	}
 
 	const trimmedSearch = String(search || "").trim().toLowerCase();
@@ -784,7 +797,7 @@ const getGameTypeBuckets = async (query = {}) => {
  * bağımsız statik/global seçenek listeleri.
  */
 const getFilterOptions = async () => {
-	const [countries, vipLevels, tags, partnerDocs, manualBonusCategoryDocs] =
+	const [countries, vipLevels, tags, partners, manualBonusCategoryDocs] =
 		await Promise.all([
 			User.aggregate([
 				{ $match: { "country.code": { $exists: true, $ne: null } } },
@@ -793,23 +806,15 @@ const getFilterOptions = async () => {
 			]),
 			Vip.find({}).select("level levelName").sort({ level: 1 }).lean(),
 			Tag.find({}).select("name color category").sort({ name: 1 }).lean(),
-			User.find({ "affiliates.code": { $exists: true, $ne: null } })
-				.select("username affiliates.code")
-				.lean(),
+			// Şu an partner olan kullanıcılar + üyeler tarafından kullanılmış
+			// ama artık hiçbir partnere ait olmayan ("yetim") redeemedCode
+			// değerleri de dahil, TÜM distinct kodlar (case-insensitive).
+			listRedeemedAffiliateCodes(),
 			ManualBonusCategory.find({ active: true })
 				.select("name order")
 				.sort({ order: 1, name: 1 })
 				.lean(),
 		]);
-
-	const partners = partnerDocs
-		.filter((u) => u.username && u.affiliates?.code)
-		.map((u) => ({
-			code: u.affiliates.code,
-			username: u.username,
-			title: `${u.username} (${u.affiliates.code})`,
-		}))
-		.sort((a, b) => a.title.localeCompare(b.title));
 
 	return {
 		countries: countries.map((c) => ({ code: c._id, name: c.name || c._id })),
