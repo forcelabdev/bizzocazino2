@@ -184,7 +184,7 @@ const onSubmit = () => {
 	display: flex;
 	flex-direction: column;
 	align-items: center;
-	margin-block-end: 1.75rem;
+	margin-block-end: 2.25rem;
 	text-align: center;
 }
 
@@ -192,19 +192,19 @@ const onSubmit = () => {
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	margin-block-end: 1rem;
+	margin-block-end: 1.25rem;
 	color: rgb(var(--v-global-theme-primary));
 	line-height: 0;
 
 	:deep(svg) {
-		inline-size: 42px;
-		block-size: 42px;
+		inline-size: 60px;
+		block-size: 60px;
 	}
 }
 
 .auth-brand-title {
-	margin-block-end: 0.625rem;
-	font-size: 1.375rem;
+	margin-block-end: 0.875rem;
+	font-size: 1.875rem;
 	font-weight: 600;
 	letter-spacing: 0.01em;
 }
@@ -212,19 +212,19 @@ const onSubmit = () => {
 .auth-brand-meta {
 	display: flex;
 	align-items: center;
-	gap: 0.375rem;
+	gap: 0.5rem;
 }
 
 .auth-brand-chip {
-	border-radius: 0.5rem;
+	border-radius: 0.625rem;
 	background-color: rgba(var(--v-theme-primary), 0.16);
 	color: rgb(var(--v-theme-primary));
-	font-size: 0.75rem;
+	font-size: 0.9375rem;
 	font-weight: 500;
 	letter-spacing: 0.02em;
 	line-height: 1.7;
-	padding-block: 0.0625rem;
-	padding-inline: 0.5rem;
+	padding-block: 0.25rem;
+	padding-inline: 0.75rem;
 
 	&--muted {
 		background-color: rgba(var(--v-theme-on-surface), 0.08);
