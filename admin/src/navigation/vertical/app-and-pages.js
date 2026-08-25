@@ -1,6 +1,4 @@
 export default [
-  { heading: "Apps & Pages" },
-
   // 👤 Kullanıcı Yönetimi
   {
     title: "Kullanıcı Yönetimi",
