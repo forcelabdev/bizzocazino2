@@ -153,10 +153,15 @@ const getRemainingTrialBonusBalance = async (settings) => {
 	]);
 
 	const trialBonusSum = round2(Number(trialBonusResult[0]?.total || 0));
+	// Şema alanı henüz eski bir dokümana yazılmamışsa (migration edilmemiş
+	// kayıt) undefined/NaN'a düşmeyip varsayılan 1.000.000 TL'ye geri dönülür.
+	const trialBonusInitial = Number.isFinite(Number(settings.trialBonusBalanceInitial))
+		? Number(settings.trialBonusBalanceInitial)
+		: 1000000;
 
 	return {
 		trialBonusSum,
-		remaining: round2(settings.trialBonusBalanceInitial - trialBonusSum),
+		remaining: round2(trialBonusInitial - trialBonusSum),
 	};
 };
 
