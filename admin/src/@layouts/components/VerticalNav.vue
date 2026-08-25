@@ -90,12 +90,14 @@ const handleNavScroll = (evt) => {
 					to="/"
 					class="app-logo d-flex align-center gap-x-3 app-title-wrapper"
 				>
-					<VNodeRenderer :nodes="config.app.logo" />
+					<div class="app-logo-icon flex-shrink-0">
+						<VNodeRenderer :nodes="config.app.logo" />
+					</div>
 
 					<Transition name="vertical-nav-app-title">
 						<h1
 							v-show="!hideTitleAndIcon"
-							class="app-title font-weight-bold text-capitalize leading-normal text-xl"
+							class="app-title font-weight-bold text-capitalize leading-normal text-base"
 						>
 							Forcelab BackOffice
 						</h1>
@@ -182,7 +184,21 @@ const handleNavScroll = (evt) => {
 	}
 
 	.app-title-wrapper {
+		min-inline-size: 0;
 		margin-inline-end: auto;
+	}
+
+	.app-logo-icon {
+		display: flex;
+		flex-shrink: 0;
+		align-items: center;
+	}
+
+	.app-title {
+		overflow: hidden;
+		min-inline-size: 0;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 
 	.nav-items {
