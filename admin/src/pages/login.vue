@@ -10,6 +10,7 @@ import {
 import axios from "axios"
 import { VForm } from "vuetify/components/VForm"
 
+import logo from "@images/logo.svg?raw"
 import { emailValidator, requiredValidator } from "@validators"
 
 const isPasswordVisible = ref(false)
@@ -110,6 +111,20 @@ const onSubmit = () => {
         class="mt-12 mt-sm-0 pa-4"
       >
         <VCardText>
+          <div class="auth-brand">
+            <div
+              class="auth-brand-logo"
+              v-html="logo"
+            />
+            <h1 class="auth-brand-title">
+              Forcelab Backoffice
+            </h1>
+            <div class="auth-brand-meta">
+              <span class="auth-brand-chip">Bizzocasino</span>
+              <span class="auth-brand-chip auth-brand-chip--muted">Proje No: 3</span>
+            </div>
+          </div>
+
           <VForm
             ref="refVForm"
             @submit.prevent="onSubmit"
@@ -164,6 +179,58 @@ const onSubmit = () => {
 
 <style lang="scss">
 @use "@core/scss/template/pages/page-auth.scss";
+
+.auth-brand {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	margin-block-end: 1.75rem;
+	text-align: center;
+}
+
+.auth-brand-logo {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	margin-block-end: 1rem;
+	color: rgb(var(--v-global-theme-primary));
+	line-height: 0;
+
+	:deep(svg) {
+		inline-size: 42px;
+		block-size: 42px;
+	}
+}
+
+.auth-brand-title {
+	margin-block-end: 0.625rem;
+	font-size: 1.375rem;
+	font-weight: 600;
+	letter-spacing: 0.01em;
+}
+
+.auth-brand-meta {
+	display: flex;
+	align-items: center;
+	gap: 0.375rem;
+}
+
+.auth-brand-chip {
+	border-radius: 0.5rem;
+	background-color: rgba(var(--v-theme-primary), 0.16);
+	color: rgb(var(--v-theme-primary));
+	font-size: 0.75rem;
+	font-weight: 500;
+	letter-spacing: 0.02em;
+	line-height: 1.7;
+	padding-block: 0.0625rem;
+	padding-inline: 0.5rem;
+
+	&--muted {
+		background-color: rgba(var(--v-theme-on-surface), 0.08);
+		color: rgba(var(--v-theme-on-surface), 0.7);
+	}
+}
 </style>
 
 <route lang="yaml">
