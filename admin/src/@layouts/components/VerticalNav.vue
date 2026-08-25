@@ -104,7 +104,10 @@ const handleNavScroll = (evt) => {
 							>
 								Forcelab BackOffice
 							</h1>
-							<span class="app-site-name">Bizzocasino</span>
+							<div class="app-meta-row">
+								<span class="app-site-name">Bizzocasino</span>
+								<span class="app-project-no">Proje No: 3</span>
+							</div>
 						</div>
 					</Transition>
 				</RouterLink>
@@ -217,22 +220,37 @@ const handleNavScroll = (evt) => {
 		white-space: nowrap;
 	}
 
-	.app-site-name {
+	.app-meta-row {
+		display: flex;
 		overflow: hidden;
-		align-self: flex-start;
-		max-inline-size: 100%;
+		align-items: center;
+		gap: 0.25rem;
 		margin-block-start: 0.125rem;
-		border-radius: 0.25rem;
-		background-color: rgba(var(--v-theme-primary), 0.16);
-		color: rgb(var(--v-theme-primary));
+	}
+
+	.app-site-name,
+	.app-project-no {
+		overflow: hidden;
+		border-radius: 0.5rem;
 		font-size: 0.625rem;
 		font-weight: 500;
 		letter-spacing: 0.02em;
-		line-height: 1.5;
+		line-height: 1.6;
 		padding-block: 0;
 		padding-inline: 0.375rem;
 		text-overflow: ellipsis;
 		white-space: nowrap;
+	}
+
+	.app-site-name {
+		background-color: rgba(var(--v-theme-primary), 0.16);
+		color: rgb(var(--v-theme-primary));
+	}
+
+	.app-project-no {
+		flex-shrink: 0;
+		background-color: rgba(var(--v-theme-on-surface), 0.08);
+		color: rgba(var(--v-theme-on-surface), 0.7);
 	}
 
 	.nav-items {
