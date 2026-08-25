@@ -8,7 +8,7 @@ import { breakpointsVuetify } from "@vueuse/core";
 
 export const config = {
 	app: {
-		title: "Bizzocazino",
+		title: "Bizzocasino",
 		logo: h("img", {
 			src: "/src/assets/logo.svg",
 			style: { width: "28px", height: "28px" },

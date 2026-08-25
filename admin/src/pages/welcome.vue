@@ -4,7 +4,7 @@ import miscMaskDark from "@images/pages/misc-mask-dark.png";
 import miscMaskLight from "@images/pages/misc-mask-light.png";
 import { useGenerateImageVariant } from "@core/composable/useGenerateImageVariant";
 
-const siteName = "Bizzocazino";
+const siteName = "Bizzocasino";
 const authThemeMask = useGenerateImageVariant(miscMaskLight, miscMaskDark);
 const theme = useTheme();
 

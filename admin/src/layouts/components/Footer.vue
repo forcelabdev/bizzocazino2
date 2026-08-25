@@ -10,6 +10,7 @@
 				size="1.25rem"
 				class="mx-1"
 			/>
+			Forcelab
 		</span>
 	</div>
 </template>

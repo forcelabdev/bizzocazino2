@@ -97,7 +97,7 @@ const handleNavScroll = (evt) => {
 							v-show="!hideTitleAndIcon"
 							class="app-title font-weight-bold text-capitalize leading-normal text-xl"
 						>
-							Bizzocazino
+							Forcelab BackOffice
 						</h1>
 					</Transition>
 				</RouterLink>
