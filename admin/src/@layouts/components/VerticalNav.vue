@@ -197,6 +197,8 @@ const handleNavScroll = (evt) => {
 	.app-title {
 		overflow: hidden;
 		min-inline-size: 0;
+		font-size: 1.0625rem;
+		letter-spacing: 0;
 		text-overflow: ellipsis;
 		white-space: nowrap;
 	}

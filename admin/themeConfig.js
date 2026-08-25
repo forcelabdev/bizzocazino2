@@ -17,7 +17,8 @@ export const { themeConfig, layoutConfig } = defineThemeConfig({
 		title: "Bizzocasino",
 		logo: h("div", {
 			innerHTML: logo,
-			style: "line-height:0; color: rgb(var(--v-global-theme-primary))",
+			style:
+				"line-height:0; flex: 0 0 auto; inline-size: 30px; block-size: 30px; color: rgb(var(--v-global-theme-primary))",
 		}),
 		contentWidth: ContentWidth.Boxed,
 		contentLayoutNav: AppContentLayoutNav.Vertical,
