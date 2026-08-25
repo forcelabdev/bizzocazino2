@@ -9,7 +9,10 @@ import { breakpointsVuetify } from "@vueuse/core";
 export const config = {
 	app: {
 		title: "Bizzocazino",
-		logo: h("img", { src: "/src/assets/logo.svg" }),
+		logo: h("img", {
+			src: "/src/assets/logo.svg",
+			style: { width: "28px", height: "28px" },
+		}),
 
 		// logo: () => h('img', { src: 'assets/colored-logo.png' }, null),
 		contentWidth: ref(ContentWidth.Boxed),
