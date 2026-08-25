@@ -3885,7 +3885,9 @@ router.get("/games", checkPermission("games.read"), async (req, res) => {
 
 		if (search) filter.game_name = { $regex: search, $options: "i" };
 		if (provider) filter.provider_code = provider;
-		if (category) filter.category = category;
+		// Kategori hem yeni `categories` dizisinde hem eski tekil `category`
+		// alanında tutulabiliyor; ikisinden birinde eşleşen oyunlar dönmeli.
+		if (category) filter.$or = [{ categories: category }, { category }];
 		if (game_type) filter.game_type = game_type;
 		if (distribution) filter.distribution = distribution;
 
@@ -4146,12 +4148,42 @@ router.delete("/games/:id", checkPermission("games.delete"), async (req, res) =>
 
 router.get("/games/meta", checkPermission("games.read"), async (req, res) => {
 	try {
-		const categories = await Game.distinct("category");
-		const providerCodes = await Game.distinct("provider_code");
+		// Oyunlar kategorileri `categories` dizisinde tutuyor; `category` ise
+		// eski (legacy) tekil alan. İkisini de topla ki filtre listesi eksik kalmasın.
+		const [arrayCategories, legacyCategories, providerCodes, categoryDocs] =
+			await Promise.all([
+				Game.distinct("categories"),
+				Game.distinct("category"),
+				Game.distinct("provider_code"),
+				Category.find().select("name slug").lean(),
+			]);
+
+		const nameBySlug = new Map(
+			categoryDocs
+				.filter((c) => c && c.slug)
+				.map((c) => [String(c.slug), c.name || String(c.slug)]),
+		);
+
+		const slugs = [
+			...new Set(
+				[
+					...arrayCategories,
+					...legacyCategories,
+					...categoryDocs.map((c) => c && c.slug),
+				]
+					.filter(Boolean)
+					.map(String),
+			),
+		].sort((a, b) =>
+			(nameBySlug.get(a) || a).localeCompare(nameBySlug.get(b) || b, "tr"),
+		);
 
 		res.status(200).json({
 			success: true,
-			categories: categories.filter(Boolean),
+			categories: slugs.map((slug) => ({
+				title: nameBySlug.get(slug) || slug,
+				value: slug,
+			})),
 			providerCodes: providerCodes.filter(Boolean),
 		});
 	} catch (error) {
@@ -4892,7 +4924,7 @@ const PROMO_VALIDATION_MESSAGES = {
 	INVALID_PROMO: "Kod ve ödül tutarı zorunludur; ödül tutarı sıfırdan büyük olmalıdır.",
 	INVALID_DATE_RANGE: "Bitiş tarihi başlangıç tarihinden sonra olmalıdır.",
 	INVALID_USER_LIMIT: "Kullanıcı başı limit, toplam kullanım limitinden büyük olamaz.",
-	INVALID_WAGERING_MULTIPLIER: "Çevrim şartı açıkken çevrim katı sıfırdan büyük olmalıdır.",
+	INVALID_WAGERING_MULTIPLIER: "Çevrim şartı açıkken çevrim katı sıfırdan büy��k olmalıdır.",
 	INVALID_CONDITION_METRIC: "Geçersiz koşul metriği seçildi.",
 	INVALID_CONDITION_OPERATOR: "Geçersiz koşul operatörü seçildi.",
 	INVALID_CONDITION_VALUE: "Koşul değeri sayısal ve geçerli olmalıdır.",
@@ -10507,7 +10539,7 @@ router.post(
 
 // ════��════════════════════════════════════��═════════════════════════════════
 // Provider Ayarları (SiteSettings içinde)
-// ═════════════════════════════════════════��═════════════════════════════════
+// ═════════════════════════════════════════��══════���══════════════════════════
 
 const DEFAULT_PROVIDER_DISPLAY_NAMES = {
 	drakon: "Drakon",
@@ -10752,7 +10784,7 @@ router.put(
 	}
 );
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ═════════════════════════════════════════════════════════════════════��═════
 // E-posta Şablonları (SiteSettings içinde)
 // SMTP credential bilgileri backend/.env üzerinden okunur, sadece şablonlar
 // ve gönderici görünen ad/adres burada yönetilir.
