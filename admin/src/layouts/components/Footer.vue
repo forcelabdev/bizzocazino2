@@ -5,7 +5,7 @@ import logo from "@images/logo.svg?raw";
 <template>
 	<div class="h-100 d-flex align-center justify-space-between">
 		<span class="d-flex align-center">
-			&copy;
+			Bizzocasino &copy;
 			{{ new Date().getFullYear() }}
 			Made With
 			<span
