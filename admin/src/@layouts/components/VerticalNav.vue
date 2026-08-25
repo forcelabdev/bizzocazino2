@@ -207,10 +207,11 @@ const handleNavScroll = (evt) => {
 		line-height: 1.2;
 	}
 
+	// ℹ️ font-size, @core/scss/template/_vertical-nav.scss içindeki
+	// `.app-logo .app-title` kuralında tanımlı (daha yüksek specificity).
 	.app-title {
 		overflow: hidden;
 		min-inline-size: 0;
-		font-size: 0.85rem;
 		letter-spacing: 0;
 		text-overflow: ellipsis;
 		white-space: nowrap;
@@ -218,10 +219,18 @@ const handleNavScroll = (evt) => {
 
 	.app-site-name {
 		overflow: hidden;
-		font-size: 0.6875rem;
-		font-weight: 400;
-		letter-spacing: 0;
-		opacity: 0.7;
+		align-self: flex-start;
+		max-inline-size: 100%;
+		margin-block-start: 0.125rem;
+		border-radius: 0.25rem;
+		background-color: rgba(var(--v-theme-primary), 0.16);
+		color: rgb(var(--v-theme-primary));
+		font-size: 0.625rem;
+		font-weight: 500;
+		letter-spacing: 0.02em;
+		line-height: 1.5;
+		padding-block: 0;
+		padding-inline: 0.375rem;
 		text-overflow: ellipsis;
 		white-space: nowrap;
 	}
