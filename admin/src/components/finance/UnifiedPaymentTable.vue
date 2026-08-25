@@ -42,7 +42,7 @@ const canManageFinanceWithdraws = computed(
 const headers = [
   { title: t("finance.user"), key: "user", sortable: false },
   { title: "Payment", key: "provider", sortable: false },
-  { title: t("finance.txId"), key: "transactionId", sortable: false },
+  { title: t("finance.txId"), key: "transactionId", sortable: false, width: 180 },
   { title: t("finance.currency"), key: "currency", sortable: false },
   { title: t("finance.amount"), key: "amount", sortable: false },
   { title: t("finance.state"), key: "status", sortable: false },
@@ -656,8 +656,16 @@ const confirmReject = () => {
           </template>
 
           <template #item.transactionId="{ item }">
-            <div class="d-flex align-center">
-              <span class="me-2">{{ item.raw.transactionId || "—" }}</span>
+            <div
+              class="d-flex align-center"
+              style="max-width: 180px"
+            >
+              <span
+                v-if="item.raw.transactionId"
+                v-tooltip="item.raw.transactionId"
+                class="me-2 text-truncate"
+              >{{ item.raw.transactionId }}</span>
+              <span v-else>—</span>
               <IconBtn
                 v-if="item.raw.transactionId"
                 size="small"
