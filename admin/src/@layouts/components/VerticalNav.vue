@@ -95,12 +95,17 @@ const handleNavScroll = (evt) => {
 					</div>
 
 					<Transition name="vertical-nav-app-title">
-						<h1
+						<div
 							v-show="!hideTitleAndIcon"
-							class="app-title font-weight-bold text-capitalize leading-normal text-base"
+							class="app-title-block"
 						>
-							Forcelab BackOffice
-						</h1>
+							<h1
+								class="app-title font-weight-bold text-capitalize leading-normal"
+							>
+								Forcelab BackOffice
+							</h1>
+							<span class="app-site-name">Bizzocasino</span>
+						</div>
 					</Transition>
 				</RouterLink>
 				<!-- 👉 Vertical nav actions -->
@@ -194,11 +199,29 @@ const handleNavScroll = (evt) => {
 		align-items: center;
 	}
 
+	.app-title-block {
+		display: flex;
+		overflow: hidden;
+		flex-direction: column;
+		min-inline-size: 0;
+		line-height: 1.2;
+	}
+
 	.app-title {
 		overflow: hidden;
 		min-inline-size: 0;
 		font-size: 0.85rem;
 		letter-spacing: 0;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.app-site-name {
+		overflow: hidden;
+		font-size: 0.6875rem;
+		font-weight: 400;
+		letter-spacing: 0;
+		opacity: 0.7;
 		text-overflow: ellipsis;
 		white-space: nowrap;
 	}
