@@ -370,7 +370,12 @@ const editGame = async (game) => {
 						class="text-no-wrap"
 					>
 						<template #item.raw.banner="{ item }">
-							<VAvatar size="38" variant="tonal">
+							<VAvatar
+								size="38"
+								variant="tonal"
+								:rounded="0"
+								style="border-radius: 5px"
+							>
 								<VImg
 									:src="resolveImageUrl(item.raw.banner)"
 									alt="Banner"
