@@ -630,7 +630,7 @@ const confirmReject = () => {
                 <RouterLink
                   v-if="item.raw.user?._id"
                   :to="{ name: 'apps-user-view-id', params: { id: item.raw.user._id } }"
-                  class="font-weight-medium"
+                  class="font-weight-medium d-block"
                 >
                   {{ item.raw.user?.username || "-" }}
                 </RouterLink>
