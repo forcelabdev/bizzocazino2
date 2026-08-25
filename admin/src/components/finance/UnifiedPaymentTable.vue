@@ -627,7 +627,17 @@ const confirmReject = () => {
                 <span>{{ avatarText(item.raw.user?.username || "U") }}</span>
               </VAvatar>
               <div>
-                <div class="font-weight-medium">
+                <RouterLink
+                  v-if="item.raw.user?._id"
+                  :to="{ name: 'apps-user-view-id', params: { id: item.raw.user._id } }"
+                  class="font-weight-medium"
+                >
+                  {{ item.raw.user?.username || "-" }}
+                </RouterLink>
+                <div
+                  v-else
+                  class="font-weight-medium"
+                >
                   {{ item.raw.user?.username || "-" }}
                 </div>
                 <small>ID: {{ item.raw.user?._id || "—" }}</small>
