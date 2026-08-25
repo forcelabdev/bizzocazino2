@@ -578,17 +578,21 @@ const cancelTrialBonus = async ({ userId, reason = "admin_manual" }) => {
 };
 
 module.exports = {
-	getSettings,
-	updateSettings,
-	getPotential,
-	claim,
-	approveClaim,
-	rejectClaim,
-	getApprovedClaimsMap,
-	hasActiveTrialWageringLock,
-	checkTrialBonusWageringCompletion,
-	checkTrialBonusTargetBalance,
-	resolveTrialBonusReview,
-	cancelTrialBonus,
-	handleRealDepositCredited,
-};
+  getSettings,
+  updateSettings,
+  getPotential,
+  claim,
+  approveClaim,
+  rejectClaim,
+  getApprovedClaimsMap,
+  hasActiveTrialWageringLock,
+  checkTrialBonusWageringCompletion,
+  checkTrialBonusTargetBalance,
+  resolveTrialBonusReview,
+  cancelTrialBonus,
+  handleRealDepositCredited,
+  // Bakiye Analizi'nin "Kalan Deneme Bonus Bakiyesi" hesaplamasında
+  // (backend/services/balanceAnalysisService.js) AdminManualAdjustment
+  // kayıtlarını bu kategoriye göre filtrelemek için dışa aktarılır.
+  TRIAL_BONUS_CATEGORY: CATEGORY,
+  };

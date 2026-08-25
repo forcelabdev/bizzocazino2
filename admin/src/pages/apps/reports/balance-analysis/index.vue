@@ -389,7 +389,7 @@ onMounted(refreshAll)
     <VRow class="mb-6">
       <VCol
         cols="12"
-        md="6"
+        md="4"
       >
         <VAlert
           variant="tonal"
@@ -408,7 +408,7 @@ onMounted(refreshAll)
 
       <VCol
         cols="12"
-        md="6"
+        md="4"
       >
         <VAlert
           variant="tonal"
@@ -420,7 +420,26 @@ onMounted(refreshAll)
             <span class="text-h6 text-warning">{{ formatMoney(summary?.remainingBonusBalance) }}</span>
           </div>
           <p class="text-caption text-medium-emphasis mb-0 mt-1">
-            Başlangıç: {{ formatMoney(summary?.settings?.bonusBalanceInitial) }} · {{ formatDate(summary?.settings?.bonusBalanceOriginAt) }} tarihinden sonraki eklenen bonuslar düşülmüştür.
+            Başlangıç: {{ formatMoney(summary?.settings?.bonusBalanceInitial) }} · {{ formatDate(summary?.settings?.bonusBalanceOriginAt) }} tarihinden sonraki eklenen bonuslar düşülmüştür. Deneme bonusu tutarları buraya dahil değildir.
+          </p>
+        </VAlert>
+      </VCol>
+
+      <VCol
+        cols="12"
+        md="4"
+      >
+        <VAlert
+          variant="tonal"
+          color="info"
+          class="h-100"
+        >
+          <div class="d-flex flex-wrap align-center justify-space-between gap-2">
+            <span class="font-weight-medium">Kalan Deneme Bonus Bakiyesi</span>
+            <span class="text-h6 text-info">{{ formatMoney(summary?.remainingTrialBonusBalance) }}</span>
+          </div>
+          <p class="text-caption text-medium-emphasis mb-0 mt-1">
+            Başlangıç: {{ formatMoney(summary?.settings?.trialBonusBalanceInitial) }} · sistemden verilen deneme bonusları (Kalan Bonus Bakiyesi'nden değil) bu tutardan düşülür.
           </p>
         </VAlert>
       </VCol>
