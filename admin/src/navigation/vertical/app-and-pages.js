@@ -1,28 +1,6 @@
 export default [
   { heading: "Apps & Pages" },
 
-  // 📡 Communication
-  {
-    title: "communication.title",
-    icon: { icon: "tabler-message" },
-    action: "read",
-    subject: "communication",
-    children: [
-      {
-        title: "communication.email",
-        to: "apps-email",
-        action: "read",
-        subject: "communication",
-      },
-      {
-        title: "communication.chat",
-        to: "apps-chat",
-        action: "read",
-        subject: "communication",
-      },
-    ],
-  },
-
   // 👥 Users
   {
     title: "users.title",
