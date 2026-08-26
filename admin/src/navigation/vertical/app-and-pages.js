@@ -287,9 +287,34 @@ export default [
   {
     title: "Güvenlik Ve Risk Yönetimi",
     icon: { icon: "tabler-shield-lock" },
-    to: "apps-security",
     action: "read",
     subject: "security",
+    children: [
+      {
+        title: "İp Çakışmaları",
+        to: { name: "apps-security", query: { tab: "ip-collisions" } },
+        action: "read",
+        subject: "security",
+      },
+      {
+        title: "Sistem Ayrıntıları",
+        to: { name: "apps-security", query: { tab: "system-logs" } },
+        action: "read",
+        subject: "security",
+      },
+      {
+        title: "Log",
+        to: { name: "apps-security", query: { tab: "activity-logs" } },
+        action: "read",
+        subject: "security",
+      },
+      {
+        title: "Şüpheli Manuel Krediler",
+        to: { name: "apps-security", query: { tab: "suspicious-manual-credits" } },
+        action: "read",
+        subject: "security",
+      },
+    ],
   },
 
   { heading: "Ödeme Yöntemi Yönetimi" },

@@ -8,7 +8,8 @@ import {
 	getSuspiciousManualCredits,
 } from "@/services/securityService";
 
-const activeTab = ref("ip-collisions");
+const route = useRoute();
+const router = useRouter();
 
 const tabs = [
 	{ value: "ip-collisions", title: "İp Çakışmaları", icon: "tabler-network" },
@@ -16,6 +17,29 @@ const tabs = [
 	{ value: "activity-logs", title: "Log", icon: "tabler-list-details" },
 	{ value: "suspicious-manual-credits", title: "Şüpheli Manuel Krediler", icon: "tabler-alert-hexagon" },
 ];
+const tabValues = tabs.map((tab) => tab.value);
+
+// Sol menüden gelen ?tab= parametresi geçerliyse onu kullan, aksi halde ilk sekme
+const activeTab = ref(
+	tabValues.includes(route.query.tab) ? route.query.tab : "ip-collisions"
+);
+
+// Sol menüdeki alt maddelere tıklanınca (aynı sayfadayken de) doğru sekmeye geç
+watch(
+	() => route.query.tab,
+	(tab) => {
+		if (tab && tabValues.includes(tab) && tab !== activeTab.value) {
+			activeTab.value = tab;
+		}
+	}
+);
+
+// Sekme kullanıcı tarafından değiştirildiğinde adres çubuğunu senkronize et (paylaşılabilir link)
+watch(activeTab, (tab) => {
+	if (route.query.tab !== tab) {
+		router.replace({ query: { ...route.query, tab } });
+	}
+});
 
 const errorMessage = ref("");
 
