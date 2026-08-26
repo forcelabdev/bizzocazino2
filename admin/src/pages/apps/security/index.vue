@@ -34,12 +34,18 @@ watch(
 	}
 );
 
-// Sekme kullanıcı tarafından değiştirildiğinde adres çubuğunu senkronize et (paylaşılabilir link)
-watch(activeTab, (tab) => {
-	if (route.query.tab !== tab) {
-		router.replace({ query: { ...route.query, tab } });
-	}
-});
+// Sekme kullanıcı tarafından değiştirildiğinde adres çubuğunu senkronize et (paylaşılabilir link).
+// `immediate: true` ile sayfa ?tab= olmadan ilk açıldığında da varsayılan sekme
+// URL'e yazılır — aksi halde sol menüdeki hiçbir alt öğe "aktif" olarak eşleşmez.
+watch(
+	activeTab,
+	(tab) => {
+		if (route.query.tab !== tab) {
+			router.replace({ query: { ...route.query, tab } });
+		}
+	},
+	{ immediate: true }
+);
 
 const errorMessage = ref("");
 

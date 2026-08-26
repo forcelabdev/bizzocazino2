@@ -48,10 +48,24 @@ export const isNavLinkActive = (link, router) => {
   const resolveRoutedName = resolveNavLinkRouteName(link, router)
   if (!resolveRoutedName)
     return false
-  
-  return matchedRoutes.some(route => {
+
+  const nameMatches = matchedRoutes.some(route => {
     return route.name === resolveRoutedName || route.meta.navActiveLink === resolveRoutedName
   })
+
+  if (!nameMatches)
+    return false
+
+  // Aynı sayfaya (route name) birden fazla nav öğesi farklı query (örn. ?tab=)
+  // ile bağlanmışsa, sadece query'si de mevcut route'la eşleşen öğe aktif sayılır.
+  const linkQuery = typeof link.to === 'object' && link.to !== null ? link.to.query : null
+  if (linkQuery) {
+    const currentQuery = router.currentRoute.value.query
+
+    return Object.keys(linkQuery).every(key => String(currentQuery[key] ?? '') === String(linkQuery[key]))
+  }
+
+  return true
 }
 
 /**
