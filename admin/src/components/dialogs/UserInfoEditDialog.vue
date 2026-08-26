@@ -2,6 +2,7 @@
 import axios from "@axios"
 import socket from "@/libs/socket"
 import { useI18n } from "vue-i18n"
+import { usePermissionStore } from "@/stores/permissionStore"
 
 const props = defineProps({
   userData: {
@@ -17,6 +18,7 @@ const props = defineProps({
 const emit = defineEmits(["submit", "update:isDialogVisible"])
 
 const { t } = useI18n()
+const permissionStore = usePermissionStore()
 
 const cloneUserData = value => structuredClone(toRaw(value || {}))
 
@@ -25,6 +27,12 @@ const userData = ref(cloneUserData(props.userData))
 const activeTab = ref("general")
 const currentAdminData = JSON.parse(localStorage.getItem("userData") || "{}")
 const isSuperAdmin = computed(() => currentAdminData.isSuperAdmin === true)
+
+// Alan Kısıtlaması (Field Restriction) — bkz. backend/config/fieldRestrictionRegistry.js
+// Rolüne belirli alanlar kapatılmış bir admin, "Genel" sekmesindeki bu alanları
+// göndermeden önce zaten göremez/değiştiremez. Backend'de de aynı kontrol
+// zorunlu olarak tekrarlanır (bkz. PUT /admin/users/:id).
+const isFieldRestricted = key => permissionStore.isFieldRestricted("users", key)
 
 const createEmptyBalanceAction = () => ({
   action: "add",
@@ -406,6 +414,10 @@ const updateBonusPreview = () => {
                 <AppTextField
                   v-model="userData.name"
                   :label="t('fields.fullName')"
+                  :disabled="isFieldRestricted('name')"
+                  :append-inner-icon="isFieldRestricted('name') ? 'tabler-lock' : undefined"
+                  :hint="isFieldRestricted('name') ? t('fields.restrictedByRole') : undefined"
+                  :persistent-hint="isFieldRestricted('name')"
                 />
               </VCol>
               <VCol
@@ -415,6 +427,10 @@ const updateBonusPreview = () => {
                 <AppTextField
                   v-model="userData.username"
                   :label="t('fields.username')"
+                  :disabled="isFieldRestricted('username')"
+                  :append-inner-icon="isFieldRestricted('username') ? 'tabler-lock' : undefined"
+                  :hint="isFieldRestricted('username') ? t('fields.restrictedByRole') : undefined"
+                  :persistent-hint="isFieldRestricted('username')"
                 />
               </VCol>
               <VCol
@@ -424,6 +440,10 @@ const updateBonusPreview = () => {
                 <AppTextField
                   v-model="userData.local.email"
                   :label="t('fields.email')"
+                  :disabled="isFieldRestricted('email')"
+                  :append-inner-icon="isFieldRestricted('email') ? 'tabler-lock' : undefined"
+                  :hint="isFieldRestricted('email') ? t('fields.restrictedByRole') : undefined"
+                  :persistent-hint="isFieldRestricted('email')"
                 />
               </VCol>
               <VCol
@@ -433,6 +453,10 @@ const updateBonusPreview = () => {
                 <AppTextField
                   v-model="userData.phone"
                   :label="t('fields.phone')"
+                  :disabled="isFieldRestricted('phone')"
+                  :append-inner-icon="isFieldRestricted('phone') ? 'tabler-lock' : undefined"
+                  :hint="isFieldRestricted('phone') ? t('fields.restrictedByRole') : undefined"
+                  :persistent-hint="isFieldRestricted('phone')"
                 />
               </VCol>
               <VCol
@@ -448,6 +472,9 @@ const updateBonusPreview = () => {
                     }))
                   "
                   :label="t('fields.fiatCurrency')"
+                  :disabled="isFieldRestricted('fiatCurrency')"
+                  :hint="isFieldRestricted('fiatCurrency') ? t('fields.restrictedByRole') : undefined"
+                  :persistent-hint="isFieldRestricted('fiatCurrency')"
                 />
               </VCol>
               <VCol

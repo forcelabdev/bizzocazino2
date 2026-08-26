@@ -149,6 +149,11 @@ const createAdminSessionPayload = async ({ userId }) => {
 						isSuperAdmin: user.adminRole.isSuperAdmin,
 						color: user.adminRole.color,
 						icon: user.adminRole.icon,
+						// Alan Kısıtlaması (Field Restriction) — bkz.
+						// backend/config/fieldRestrictionRegistry.js. Frontend
+						// permissionStore.role üzerinden bunu okuyup ilgili
+						// formlardaki alanları disable eder.
+						restrictedFields: user.adminRole.restrictedFields || [],
 				  }
 				: null,
 			isSuperAdmin,
