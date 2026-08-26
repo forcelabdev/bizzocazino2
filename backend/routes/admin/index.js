@@ -846,41 +846,17 @@ router.put("/users/:id", checkPermission("users.update"), async (req, res) => {
 			user.currency.fiatCurrency = updates.currency.fiatCurrency;
 		}
 
-		// Wallet balance update
-		if (updates.walletUpdate) {
-			const { coinType, chain, type, amount } = updates.walletUpdate;
-			const wallet = user.wallets.find(
-				(w) =>
-					w.coinType === coinType &&
-					w.chain === chain &&
-					w.type === type,
-			);
-			if (wallet) {
-				wallet.balance = Math.max(0, wallet.balance + amount);
-				user.markModified("wallets");
-			}
-		}
-
-		if (Array.isArray(updates.walletUpdates)) {
-			updates.walletUpdates.forEach((walletUpdate) => {
-				const { coinType, chain, type, amount } = walletUpdate || {};
-				if (!coinType || !chain || !type || !Number.isFinite(Number(amount))) {
-					return;
-				}
-
-				const wallet = user.wallets.find(
-					(w) =>
-						w.coinType === coinType &&
-						w.chain === chain &&
-						w.type === type,
-				);
-
-				if (!wallet) return;
-
-				wallet.balance = Math.max(0, Number(wallet.balance || 0) + Number(amount));
+		// 🔐 Wallet balance changes are NOT allowed through this generic profile
+		// update endpoint. Any balance change must go through the audited
+		// POST /users/:id/manual-adjustments endpoint (finance.manualAdjustments.manage),
+		// which records actor, amount, category, and before/after balance.
+		// This prevents un-logged balance edits via direct API calls (e.g. Postman).
+		if (updates.walletUpdate || updates.walletUpdates) {
+			return res.status(400).json({
+				success: false,
+				message:
+					"Bakiye değişiklikleri bu endpoint üzerinden yapılamaz. Lütfen manuel bakiye işlemi ekranını kullanın.",
 			});
-
-			user.markModified("wallets");
 		}
 
 		// Diğer alanlar
