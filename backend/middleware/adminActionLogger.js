@@ -4,11 +4,28 @@ const { redactSensitiveData } = require("../utils/redact");
 
 const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
+// Yetki/rol/admin hesabı ve bakiye değişiklikleri: güvenilir bir personelin
+// suistimali genelde önce buradan başlar (kendine/başkasına gizlice yetki
+// verme, yeni admin oluşturma, manuel bakiye ekleme). Bu istekler
+// "Sistem Ayrıntıları" ekranında "Kritik" olarak öne çıkarılır.
+const CRITICAL_PATH_PATTERNS = [
+	/\/roles(\/|$)/i,
+	/\/permissions(\/|$)/i,
+	/\/assign-role/i,
+	/\/manual-adjustments/i,
+	/\/admin-role/i,
+];
+
 const deriveResource = (req) => {
 	// e.g. "/admin/users/123" -> "users" (skip the /admin prefix + id segment)
 	const segments = req.path.split("/").filter(Boolean);
 	return segments[0] || "";
 };
+
+const deriveSeverity = (req) =>
+	CRITICAL_PATH_PATTERNS.some((pattern) => pattern.test(req.originalUrl))
+		? "critical"
+		: "normal";
 
 /**
  * Records every state-changing (POST/PUT/PATCH/DELETE) admin panel request
@@ -49,6 +66,7 @@ const adminActionLogger = (req, res, next) => {
 				? "[multipart/form-data body omitted]"
 				: redactSensitiveData(req.body),
 			blocked: false,
+			severity: deriveSeverity(req),
 			durationMs: Date.now() - startedAt,
 		}).catch((err) => {
 			console.error("adminActionLogger log yazma hatası:", err.message);

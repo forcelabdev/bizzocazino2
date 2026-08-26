@@ -80,6 +80,15 @@ const adminActionLogSchema = new mongoose.Schema(
 			default: false,
 			index: true,
 		},
+		// "critical" = yetki/rol/admin hesabı değişikliği veya finansal işlem —
+		// güvendiğiniz personelin yetki suistimali genelde önce buradan başlar
+		// (kendine/başkasına gizlice yetki verme, yeni admin oluşturma vb.).
+		severity: {
+			type: String,
+			enum: ["normal", "critical"],
+			default: "normal",
+			index: true,
+		},
 		blockReason: {
 			type: String,
 			default: "",

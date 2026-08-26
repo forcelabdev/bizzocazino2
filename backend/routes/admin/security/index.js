@@ -120,6 +120,7 @@ router.get("/system-logs", checkPermission("security.read"), async (req, res) =>
 			method = "",
 			resource = "",
 			blocked,
+			severity = "",
 			dateFrom,
 			dateTo,
 		} = req.query;
@@ -132,6 +133,7 @@ router.get("/system-logs", checkPermission("security.read"), async (req, res) =>
 		if (resource) query.resource = { $regex: String(resource), $options: "i" };
 		if (blocked === "true") query.blocked = true;
 		if (blocked === "false") query.blocked = false;
+		if (severity === "critical") query.severity = "critical";
 
 		if (actor) {
 			const regex = { $regex: String(actor), $options: "i" };

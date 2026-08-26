@@ -1,5 +1,6 @@
 <script setup>
 import { ref, onMounted, watch } from "vue";
+import { VDataTableServer } from "vuetify/labs/VDataTable";
 import {
 	getIpCollisions,
 	getSystemLogs,
@@ -57,7 +58,7 @@ const systemLogs = ref([]);
 const systemLogsLoading = ref(false);
 const systemLogsPage = ref(1);
 const systemLogsTotalPages = ref(1);
-const systemLogFilters = ref({ actor: "", method: "", resource: "", blocked: "" });
+const systemLogFilters = ref({ actor: "", method: "", resource: "", blocked: "", severity: "" });
 
 const systemLogHeaders = [
 	{ title: "Tarih", key: "createdAt", width: 160 },
@@ -66,6 +67,7 @@ const systemLogHeaders = [
 	{ title: "Kaynak", key: "resource", width: 140 },
 	{ title: "Durum", key: "statusCode", width: 90 },
 	{ title: "IP", key: "ip", width: 130 },
+	{ title: "Önem", key: "severity", width: 100 },
 	{ title: "Bloklandı", key: "blocked", width: 110 },
 ];
 
@@ -207,7 +209,7 @@ const formatDate = (value) => (value ? new Date(value).toLocaleString("tr-TR") :
 						<template #item.members="{ item }">
 							<div class="d-flex flex-wrap gap-1">
 								<VChip
-									v-for="member in item.members"
+									v-for="member in item.raw.members"
 									:key="member.id"
 									size="small"
 									:color="member.isBanned ? 'error' : 'default'"
@@ -218,11 +220,11 @@ const formatDate = (value) => (value ? new Date(value).toLocaleString("tr-TR") :
 							</div>
 						</template>
 						<template #item.lastSeenAt="{ item }">
-							{{ formatDate(item.lastSeenAt) }}
+							{{ formatDate(item.raw.lastSeenAt) }}
 						</template>
 						<template #item.memberCount="{ item }">
 							<VChip color="warning" variant="tonal" size="small">
-								{{ item.memberCount }}
+								{{ item.raw.memberCount }}
 							</VChip>
 						</template>
 					</VDataTableServer>
@@ -243,7 +245,8 @@ const formatDate = (value) => (value ? new Date(value).toLocaleString("tr-TR") :
 						Admin panelinden yapılan tüm veri değiştiren (ekleme/güncelleme/silme)
 						işlemler burada kayıtlıdır. "Bloklandı" olarak işaretlenenler, geçerli bir
 						admin oturumuyla ama panelin dışından (Postman/fetch/script) gönderilip
-						reddedilen isteklerdir.
+						reddedilen isteklerdir. "Kritik" işaretli kayıtlar, yetki/rol/admin hesabı
+						değişikliği veya manuel bakiye işlemi gibi hassas aksiyonları gösterir.
 					</VAlert>
 					<VRow class="mb-4" align="center">
 						<VCol cols="12" md="3">
@@ -280,6 +283,14 @@ const formatDate = (value) => (value ? new Date(value).toLocaleString("tr-TR") :
 							/>
 						</VCol>
 						<VCol cols="12" md="2">
+							<VSelect
+								v-model="systemLogFilters.severity"
+								:items="[{ title: 'Tümü', value: '' }, { title: 'Sadece kritik', value: 'critical' }]"
+								label="Önem"
+								density="compact"
+							/>
+						</VCol>
+						<VCol cols="12" md="2">
 							<VBtn color="primary" :loading="systemLogsLoading" block @click="fetchSystemLogs">
 								Filtrele
 							</VBtn>
@@ -294,25 +305,32 @@ const formatDate = (value) => (value ? new Date(value).toLocaleString("tr-TR") :
 						hide-default-footer
 					>
 						<template #item.createdAt="{ item }">
-							{{ formatDate(item.createdAt) }}
+							{{ formatDate(item.raw.createdAt) }}
 						</template>
 						<template #item.actorSnapshot="{ item }">
 							<div>
-								<div class="font-weight-medium">{{ item.actorSnapshot?.username || "-" }}</div>
-								<div class="text-caption text-medium-emphasis">{{ item.actorSnapshot?.email }}</div>
+								<div class="font-weight-medium">{{ item.raw.actorSnapshot?.username || "-" }}</div>
+								<div class="text-caption text-medium-emphasis">{{ item.raw.actorSnapshot?.email }}</div>
 							</div>
 						</template>
 						<template #item.statusCode="{ item }">
 							<VChip
 								size="small"
-								:color="item.statusCode >= 400 ? 'error' : 'success'"
+								:color="item.raw.statusCode >= 400 ? 'error' : 'success'"
 								variant="tonal"
 							>
-								{{ item.statusCode }}
+								{{ item.raw.statusCode }}
 							</VChip>
 						</template>
+						<template #item.severity="{ item }">
+							<VChip v-if="item.raw.severity === 'critical'" size="small" color="warning" variant="tonal">
+								<VIcon start icon="tabler-alert-triangle" size="14" />
+								Kritik
+							</VChip>
+							<span v-else class="text-medium-emphasis">-</span>
+						</template>
 						<template #item.blocked="{ item }">
-							<VChip v-if="item.blocked" size="small" color="error" variant="elevated">
+							<VChip v-if="item.raw.blocked" size="small" color="error" variant="elevated">
 								<VIcon start icon="tabler-shield-x" size="14" />
 								Bloklandı
 							</VChip>

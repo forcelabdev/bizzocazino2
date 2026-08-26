@@ -1802,8 +1802,9 @@
 			"communication": "İletişim",
 			"reports": "Raporlar",
 			"controlGame": "ControlGame",
-			"roles": "Roller"
-		},
+				"roles": "Roller",
+				"security": "Güvenlik"
+			},
 		"actionLabels": {
 			"read": "Görüntüle",
 			"create": "Oluştur",

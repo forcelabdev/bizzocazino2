@@ -1409,9 +1409,10 @@
 			"notice": "Notices",
 			"communication": "Communication",
 			"reports": "Reports",
-			"controlGame": "ControlGame",
-			"roles": "Roles"
-		},
+  "controlGame": "ControlGame",
+  "roles": "Roles",
+  "security": "Security"
+  },
 		"actionLabels": {
 			"read": "View",
 			"create": "Create",

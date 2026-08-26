@@ -82,6 +82,7 @@ const adminOriginGuard = async (req, res, next) => {
 		origin: requestOrigin || "(none)",
 		blocked: true,
 		blockReason: "origin_mismatch_or_missing",
+		severity: "critical",
 	}).catch((err) => {
 		console.error("adminOriginGuard log yazma hatası:", err.message);
 	});
