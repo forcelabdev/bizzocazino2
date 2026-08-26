@@ -21,10 +21,10 @@ const errorMessage = ref("");
 // İp Çakışmaları
 // ─────────────────────────────────────────────────────────
 const collisions = ref([]);
+const collisionsTotal = ref(0);
 const collisionsLoading = ref(false);
 const collisionsSearch = ref("");
-const collisionsPage = ref(1);
-const collisionsTotalPages = ref(1);
+const collisionsOptions = ref({ page: 1, itemsPerPage: 20 });
 
 const collisionHeaders = [
 	{ title: "IP Adresi", key: "ip" },
@@ -38,12 +38,12 @@ const fetchCollisions = async () => {
 	errorMessage.value = "";
 	try {
 		const res = await getIpCollisions({
-			page: collisionsPage.value,
-			limit: 20,
+			page: collisionsOptions.value.page,
+			limit: collisionsOptions.value.itemsPerPage,
 			search: collisionsSearch.value,
 		});
 		collisions.value = res.data || [];
-		collisionsTotalPages.value = res.pagination?.totalPages || 1;
+		collisionsTotal.value = res.pagination?.total || collisions.value.length;
 	} catch (err) {
 		errorMessage.value = err?.response?.data?.message || "IP çakışmaları alınamadı.";
 	} finally {
@@ -51,13 +51,18 @@ const fetchCollisions = async () => {
 	}
 };
 
+watch(
+	[() => collisionsOptions.value.page, () => collisionsOptions.value.itemsPerPage],
+	fetchCollisions,
+);
+
 // ─────────────────────────────────────────────────────────
 // Sistem Ayrıntıları (admin denetim logu)
 // ─────────────────────────────────────────────────────────
 const systemLogs = ref([]);
+const systemLogsTotal = ref(0);
 const systemLogsLoading = ref(false);
-const systemLogsPage = ref(1);
-const systemLogsTotalPages = ref(1);
+const systemLogsOptions = ref({ page: 1, itemsPerPage: 30 });
 const systemLogFilters = ref({ actor: "", method: "", resource: "", blocked: "", severity: "" });
 
 const systemLogHeaders = [
@@ -76,12 +81,12 @@ const fetchSystemLogs = async () => {
 	errorMessage.value = "";
 	try {
 		const res = await getSystemLogs({
-			page: systemLogsPage.value,
-			limit: 30,
+			page: systemLogsOptions.value.page,
+			limit: systemLogsOptions.value.itemsPerPage,
 			...systemLogFilters.value,
 		});
 		systemLogs.value = res.data || [];
-		systemLogsTotalPages.value = res.pagination?.totalPages || 1;
+		systemLogsTotal.value = res.pagination?.total || systemLogs.value.length;
 	} catch (err) {
 		errorMessage.value = err?.response?.data?.message || "Sistem logları alınamadı.";
 	} finally {
@@ -89,13 +94,23 @@ const fetchSystemLogs = async () => {
 	}
 };
 
+watch(
+	[() => systemLogsOptions.value.page, () => systemLogsOptions.value.itemsPerPage],
+	fetchSystemLogs,
+);
+
+const applySystemLogFilters = () => {
+	systemLogsOptions.value.page = 1;
+	fetchSystemLogs();
+};
+
 // ─────────────────────────────────────────────────────────
 // Log (oyuncu aktivite logu)
 // ─────────────────────────────────────────────────────────
 const activityLogs = ref([]);
+const activityLogsTotal = ref(0);
 const activityLogsLoading = ref(false);
-const activityLogsPage = ref(1);
-const activityLogsTotalPages = ref(1);
+const activityLogsOptions = ref({ page: 1, itemsPerPage: 30 });
 const activityFilters = ref({ search: "", actionType: "" });
 
 const activityActionTypes = [
@@ -120,17 +135,32 @@ const fetchActivityLogs = async () => {
 	errorMessage.value = "";
 	try {
 		const res = await getActivityLogs({
-			page: activityLogsPage.value,
-			limit: 30,
+			page: activityLogsOptions.value.page,
+			limit: activityLogsOptions.value.itemsPerPage,
 			...activityFilters.value,
 		});
 		activityLogs.value = res.data || [];
-		activityLogsTotalPages.value = res.pagination?.totalPages || 1;
+		activityLogsTotal.value = res.pagination?.total || activityLogs.value.length;
 	} catch (err) {
 		errorMessage.value = err?.response?.data?.message || "Aktivite logları alınamadı.";
 	} finally {
 		activityLogsLoading.value = false;
 	}
+};
+
+watch(
+	[() => activityLogsOptions.value.page, () => activityLogsOptions.value.itemsPerPage],
+	fetchActivityLogs,
+);
+
+const applyActivityFilters = () => {
+	activityLogsOptions.value.page = 1;
+	fetchActivityLogs();
+};
+
+const applyCollisionsSearch = () => {
+	collisionsOptions.value.page = 1;
+	fetchCollisions();
 };
 
 watch(activeTab, (tab) => {
@@ -189,22 +219,23 @@ const formatDate = (value) => (value ? new Date(value).toLocaleString("tr-TR") :
 								density="compact"
 								clearable
 								prepend-inner-icon="tabler-search"
-								@keyup.enter="fetchCollisions"
+								@keyup.enter="applyCollisionsSearch"
 							/>
 						</VCol>
 						<VCol cols="12" md="2">
-							<VBtn color="primary" :loading="collisionsLoading" block @click="fetchCollisions">
+							<VBtn color="primary" :loading="collisionsLoading" block @click="applyCollisionsSearch">
 								Ara
 							</VBtn>
 						</VCol>
 					</VRow>
 
 					<VDataTableServer
+						v-model:page="collisionsOptions.page"
+						v-model:items-per-page="collisionsOptions.itemsPerPage"
 						:headers="collisionHeaders"
 						:items="collisions"
-						:items-length="collisions.length"
+						:items-length="collisionsTotal"
 						:loading="collisionsLoading"
-						hide-default-footer
 					>
 						<template #item.members="{ item }">
 							<div class="d-flex flex-wrap gap-1">
@@ -228,15 +259,6 @@ const formatDate = (value) => (value ? new Date(value).toLocaleString("tr-TR") :
 							</VChip>
 						</template>
 					</VDataTableServer>
-
-					<div class="d-flex justify-center mt-4">
-						<VPagination
-							v-model="collisionsPage"
-							:length="collisionsTotalPages"
-							density="compact"
-							@update:model-value="fetchCollisions"
-						/>
-					</div>
 				</div>
 
 				<!-- Sistem Ayrıntıları -->
@@ -291,18 +313,19 @@ const formatDate = (value) => (value ? new Date(value).toLocaleString("tr-TR") :
 							/>
 						</VCol>
 						<VCol cols="12" md="2">
-							<VBtn color="primary" :loading="systemLogsLoading" block @click="fetchSystemLogs">
+							<VBtn color="primary" :loading="systemLogsLoading" block @click="applySystemLogFilters">
 								Filtrele
 							</VBtn>
 						</VCol>
 					</VRow>
 
 					<VDataTableServer
+						v-model:page="systemLogsOptions.page"
+						v-model:items-per-page="systemLogsOptions.itemsPerPage"
 						:headers="systemLogHeaders"
 						:items="systemLogs"
-						:items-length="systemLogs.length"
+						:items-length="systemLogsTotal"
 						:loading="systemLogsLoading"
-						hide-default-footer
 					>
 						<template #item.createdAt="{ item }">
 							{{ formatDate(item.raw.createdAt) }}
@@ -337,15 +360,6 @@ const formatDate = (value) => (value ? new Date(value).toLocaleString("tr-TR") :
 							<span v-else class="text-medium-emphasis">-</span>
 						</template>
 					</VDataTableServer>
-
-					<div class="d-flex justify-center mt-4">
-						<VPagination
-							v-model="systemLogsPage"
-							:length="systemLogsTotalPages"
-							density="compact"
-							@update:model-value="fetchSystemLogs"
-						/>
-					</div>
 				</div>
 
 				<!-- Log (oyuncu aktivite logu) -->
@@ -372,18 +386,19 @@ const formatDate = (value) => (value ? new Date(value).toLocaleString("tr-TR") :
 							/>
 						</VCol>
 						<VCol cols="12" md="2">
-							<VBtn color="primary" :loading="activityLogsLoading" block @click="fetchActivityLogs">
+							<VBtn color="primary" :loading="activityLogsLoading" block @click="applyActivityFilters">
 								Filtrele
 							</VBtn>
 						</VCol>
 					</VRow>
 
 					<VDataTableServer
+						v-model:page="activityLogsOptions.page"
+						v-model:items-per-page="activityLogsOptions.itemsPerPage"
 						:headers="activityHeaders"
 						:items="activityLogs"
-						:items-length="activityLogs.length"
+						:items-length="activityLogsTotal"
 						:loading="activityLogsLoading"
-						hide-default-footer
 					>
 						<template #item.timestamp="{ item }">
 							{{ formatDate(item.raw.timestamp) }}
@@ -398,15 +413,6 @@ const formatDate = (value) => (value ? new Date(value).toLocaleString("tr-TR") :
 							<span class="text-caption">{{ item.raw.metadata?.userAgent || "-" }}</span>
 						</template>
 					</VDataTableServer>
-
-					<div class="d-flex justify-center mt-4">
-						<VPagination
-							v-model="activityLogsPage"
-							:length="activityLogsTotalPages"
-							density="compact"
-							@update:model-value="fetchActivityLogs"
-						/>
-					</div>
 				</div>
 			</VCardText>
 		</VCard>
