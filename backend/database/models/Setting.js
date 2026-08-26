@@ -2,7 +2,7 @@ const mongoose = require("mongoose");
 
 const settingSchema = new mongoose.Schema({
 	general: {
-		siteName: { type: String, default: "RivoBit" },
+		siteName: { type: String, default: "Casino" },
 		logo: { type: String },
 		favicon: { type: String },
 		supportLink: { type: String },
@@ -51,7 +51,7 @@ const settingSchema = new mongoose.Schema({
 			],
 			messageTemplate: {
 				type: String,
-				default: "Login to RivoBit at {timestamp}",
+				default: "Login at {timestamp}",
 			},
 		},
 		jwt: {

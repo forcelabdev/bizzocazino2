@@ -75,23 +75,46 @@ async function updateWalletBalance(user, wallet, amount, options = {}) {
 	const { emitSocket = true, session = null } = options;
 
 	if (!user || !wallet) return false;
-	
-	// Find wallet index for atomic update
-	const walletIndex = user.wallets.findIndex(
-		(w) => w.coinType === wallet.coinType && w.chain === wallet.chain && w.type === wallet.type
-	);
-	
-	if (walletIndex === -1) return false;
+
+	const { coinType, chain, type } = wallet;
+	if (!coinType || !chain || !type) return false;
 
 	try {
-		const updatedUser = await User.findOneAndUpdate(
-			{ _id: user._id },
-			{ $inc: { [`wallets.${walletIndex}.balance`]: amount } },
+		// 1) Normal yol: cüzdan zaten dizide varsa $elemMatch + positional "$"
+		// ile ATOMİK artır. Not: Bilerek in-memory `user.wallets` üzerinden
+		// index bulup `wallets.<index>.balance` ile hedeflemiyoruz — bazı
+		// (özellikle eski/legacy) kullanıcı kayıtlarında `wallets` alanı DB'de
+		// hiç mevcut değil ve bu durumda in-memory dizi normalize/varsayılan
+		// değerlerle doldurulmuş olsa bile gerçek DB dokümanıyla eşleşmeyip
+		// index bulunamıyor, fonksiyon SESSİZCE `false` dönüyor ve promosyon
+		// kodu/bonus/admin ayarlaması gibi çağıranlar bunu fark etmeden
+		// "başarılı" yanıt döndürüyordu (bkz. bakiye eklenmeme bug'ı).
+		let updatedUser = await User.findOneAndUpdate(
+			{ _id: user._id, wallets: { $elemMatch: { coinType, chain, type } } },
+			{ $inc: { "wallets.$.balance": amount } },
 			{ new: true, session }
 		);
 
+		// 2) Cüzdan hiç yoksa (legacy kayıt / wallets dizisi eksik ya da bu
+		// coinType-chain-type kombinasyonu hiç oluşturulmamış) — sessizce
+		// başarısız OLMADAN cüzdanı doğru başlangıç bakiyesiyle birlikte
+		// $push ile oluştur. `$not: { $elemMatch }` filtresi, eşzamanlı iki
+		// isteğin aynı cüzdanı iki kez oluşturmasını (duplicate) önler.
 		if (!updatedUser) {
-			console.error(`updateWalletBalance: User ${user._id} not found`);
+			updatedUser = await User.findOneAndUpdate(
+				{
+					_id: user._id,
+					wallets: { $not: { $elemMatch: { coinType, chain, type } } },
+				},
+				{ $push: { wallets: { coinType, chain, type, balance: amount } } },
+				{ new: true, session }
+			);
+		}
+
+		if (!updatedUser) {
+			console.error(
+				`updateWalletBalance: User ${user._id} not found or wallet race condition`
+			);
 			return false;
 		}
 
@@ -99,7 +122,10 @@ async function updateWalletBalance(user, wallet, amount, options = {}) {
 		user.wallets = updatedUser.wallets;
 		user.__v = updatedUser.__v;
 
-		const newBalance = updatedUser.wallets[walletIndex]?.balance || 0;
+		const updatedWallet = updatedUser.wallets.find(
+			(w) => w.coinType === coinType && w.chain === chain && w.type === type
+		);
+		const newBalance = updatedWallet?.balance || 0;
 
 		if (emitSocket && user._id) emitUserBalance(null, updatedUser);
 

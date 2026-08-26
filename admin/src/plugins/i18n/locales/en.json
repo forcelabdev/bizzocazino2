@@ -429,6 +429,7 @@
 		"email": "Email",
 		"phone": "Phone",
 		"fiatCurrency": "Fiat Currency",
+		"restrictedByRole": "This field is restricted by your role",
 		"rank": "Rank",
 		"coin": "Coin",
 		"chain": "Chain",
@@ -1409,9 +1410,10 @@
 			"notice": "Notices",
 			"communication": "Communication",
 			"reports": "Reports",
-			"controlGame": "ControlGame",
-			"roles": "Roles"
-		},
+  "controlGame": "ControlGame",
+  "roles": "Roles",
+  "security": "Security"
+  },
 		"actionLabels": {
 			"read": "View",
 			"create": "Create",

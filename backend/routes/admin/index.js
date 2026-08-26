@@ -216,9 +216,18 @@ const {
 	checkPermission,
 	hasPermission,
 } = require("../../middleware/permission");
+const { adminOriginGuard } = require("../../middleware/adminOriginGuard");
+const { adminActionLogger } = require("../../middleware/adminActionLogger");
 
 // 🔐 All admin endpoints require an admin JWT
 router.use(authenticateAdmin);
+// 🔐 Reject + log state-changing requests that didn't come from the admin
+// panel itself (e.g. a valid token replayed via Postman/curl/fetch script).
+router.use(adminOriginGuard);
+// 🧾 Record every state-changing request that passed the checks above, so
+// "who did what, from where, when" is always available without relying on
+// any individual route to remember to log it.
+router.use(adminActionLogger);
 const {
 	getActiveWallet,
 	updateUserBalance,
@@ -846,41 +855,17 @@ router.put("/users/:id", checkPermission("users.update"), async (req, res) => {
 			user.currency.fiatCurrency = updates.currency.fiatCurrency;
 		}
 
-		// Wallet balance update
-		if (updates.walletUpdate) {
-			const { coinType, chain, type, amount } = updates.walletUpdate;
-			const wallet = user.wallets.find(
-				(w) =>
-					w.coinType === coinType &&
-					w.chain === chain &&
-					w.type === type,
-			);
-			if (wallet) {
-				wallet.balance = Math.max(0, wallet.balance + amount);
-				user.markModified("wallets");
-			}
-		}
-
-		if (Array.isArray(updates.walletUpdates)) {
-			updates.walletUpdates.forEach((walletUpdate) => {
-				const { coinType, chain, type, amount } = walletUpdate || {};
-				if (!coinType || !chain || !type || !Number.isFinite(Number(amount))) {
-					return;
-				}
-
-				const wallet = user.wallets.find(
-					(w) =>
-						w.coinType === coinType &&
-						w.chain === chain &&
-						w.type === type,
-				);
-
-				if (!wallet) return;
-
-				wallet.balance = Math.max(0, Number(wallet.balance || 0) + Number(amount));
+		// 🔐 Wallet balance changes are NOT allowed through this generic profile
+		// update endpoint. Any balance change must go through the audited
+		// POST /users/:id/manual-adjustments endpoint (finance.manualAdjustments.manage),
+		// which records actor, amount, category, and before/after balance.
+		// This prevents un-logged balance edits via direct API calls (e.g. Postman).
+		if (updates.walletUpdate || updates.walletUpdates) {
+			return res.status(400).json({
+				success: false,
+				message:
+					"Bakiye değişiklikleri bu endpoint üzerinden yapılamaz. Lütfen manuel bakiye işlemi ekranını kullanın.",
 			});
-
-			user.markModified("wallets");
 		}
 
 		// Diğer alanlar
@@ -2652,6 +2637,15 @@ router.post(
 	trialBonusController.resolveReview,
 );
 
+// Deneme Bonusu — Manuel İptal: admin, bonus çevrim/hedef bakiye aşamasında
+// olsun veya inceleme kilidinde olsun, HER an bu endpoint ile deneme
+// bonusunu "İptal Edildi" olarak sonlandırabilir (otomatik onay beklemez).
+router.post(
+	"/users/:id/trial-bonus/cancel",
+	checkPermission("finance.trialBonus.manage"),
+	trialBonusController.cancelTrialBonus,
+);
+
 // CRM Raporu (yatırım aralığı, alınan/eklenen bonus, bakiye kırılımı)
 router.get(
 	"/crm-report/summary",
@@ -3876,7 +3870,9 @@ router.get("/games", checkPermission("games.read"), async (req, res) => {
 
 		if (search) filter.game_name = { $regex: search, $options: "i" };
 		if (provider) filter.provider_code = provider;
-		if (category) filter.category = category;
+		// Kategori hem yeni `categories` dizisinde hem eski tekil `category`
+		// alanında tutulabiliyor; ikisinden birinde eşleşen oyunlar dönmeli.
+		if (category) filter.$or = [{ categories: category }, { category }];
 		if (game_type) filter.game_type = game_type;
 		if (distribution) filter.distribution = distribution;
 
@@ -4137,12 +4133,42 @@ router.delete("/games/:id", checkPermission("games.delete"), async (req, res) =>
 
 router.get("/games/meta", checkPermission("games.read"), async (req, res) => {
 	try {
-		const categories = await Game.distinct("category");
-		const providerCodes = await Game.distinct("provider_code");
+		// Oyunlar kategorileri `categories` dizisinde tutuyor; `category` ise
+		// eski (legacy) tekil alan. İkisini de topla ki filtre listesi eksik kalmasın.
+		const [arrayCategories, legacyCategories, providerCodes, categoryDocs] =
+			await Promise.all([
+				Game.distinct("categories"),
+				Game.distinct("category"),
+				Game.distinct("provider_code"),
+				Category.find().select("name slug").lean(),
+			]);
+
+		const nameBySlug = new Map(
+			categoryDocs
+				.filter((c) => c && c.slug)
+				.map((c) => [String(c.slug), c.name || String(c.slug)]),
+		);
+
+		const slugs = [
+			...new Set(
+				[
+					...arrayCategories,
+					...legacyCategories,
+					...categoryDocs.map((c) => c && c.slug),
+				]
+					.filter(Boolean)
+					.map(String),
+			),
+		].sort((a, b) =>
+			(nameBySlug.get(a) || a).localeCompare(nameBySlug.get(b) || b, "tr"),
+		);
 
 		res.status(200).json({
 			success: true,
-			categories: categories.filter(Boolean),
+			categories: slugs.map((slug) => ({
+				title: nameBySlug.get(slug) || slug,
+				value: slug,
+			})),
 			providerCodes: providerCodes.filter(Boolean),
 		});
 	} catch (error) {
@@ -4858,16 +4884,32 @@ const normalizePromoPayload = (body = {}) => {
 	};
 };
 
+// Toplu Bonus Yükle ekranındaki affiliate kodu listesiyle AYNI kaynağı
+// kullanır (bkz. listAffiliateCodes) — gerçekte kullanılan (redeemedCode)
+// kodlar da dahil olur, sadece kendi affiliates.code'u set edilmiş
+// kullanıcılarla sınırlı kalmaz.
 router.get("/promocodes/affiliate-options", checkPermission("finance.promo.read"), async (req, res) => {
-	const users = await User.find({ "affiliates.code": { $exists: true, $nin: [null, ""] } }).select("username affiliates.code").sort({ username: 1 }).lean();
-	res.json({ success: true, data: users.map(user => ({ code: user.affiliates.code, title: `${user.username} (${user.affiliates.code})` })) });
+	try {
+		const codes = await listAffiliateCodes();
+
+		res.json({
+			success: true,
+			data: codes.map(({ code, ownerUsername, referredCount }) => ({
+				code,
+				title: `${code}${ownerUsername ? ` — ${ownerUsername}` : ""} (${referredCount} üye)`,
+			})),
+		});
+	} catch (error) {
+		console.error("Promo affiliate option list error:", error);
+		res.status(500).json({ success: false, message: "Sunucu hatası." });
+	}
 });
 
 const PROMO_VALIDATION_MESSAGES = {
 	INVALID_PROMO: "Kod ve ödül tutarı zorunludur; ödül tutarı sıfırdan büyük olmalıdır.",
 	INVALID_DATE_RANGE: "Bitiş tarihi başlangıç tarihinden sonra olmalıdır.",
 	INVALID_USER_LIMIT: "Kullanıcı başı limit, toplam kullanım limitinden büyük olamaz.",
-	INVALID_WAGERING_MULTIPLIER: "Çevrim şartı açıkken çevrim katı sıfırdan büyük olmalıdır.",
+	INVALID_WAGERING_MULTIPLIER: "Çevrim şartı açıkken çevrim katı sıfırdan büy��k olmalıdır.",
 	INVALID_CONDITION_METRIC: "Geçersiz koşul metriği seçildi.",
 	INVALID_CONDITION_OPERATOR: "Geçersiz koşul operatörü seçildi.",
 	INVALID_CONDITION_VALUE: "Koşul değeri sayısal ve geçerli olmalıdır.",
@@ -8544,7 +8586,7 @@ router.get(
 			if (!mongoose.Types.ObjectId.isValid(id)) {
 				return res
 					.status(400)
-					.json({ success: false, message: "Geçersiz kullanıcı ID" });
+					.json({ success: false, message: "Geçersiz kullan��cı ID" });
 			}
 
 			const {
@@ -10121,7 +10163,7 @@ router.put(
 				message: "Custom JavaScript başarıyla güncellendi.",
 			});
 		} catch (error) {
-			console.error("Custom JS güncellenirken hata:", error);
+			console.error("Custom JS g��ncellenirken hata:", error);
 			res.status(500).json({
 				success: false,
 				error: "Custom JavaScript güncellenirken bir hata oluştu.",
@@ -10155,7 +10197,7 @@ router.put(
 	},
 );
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ═════════════════════════════════════════════════════════════════���═════════
 // 📁 FILE MANAGER ENDPOINTS
 // ════════════════════════════════════════════════════════════════════��══════
 
@@ -10482,7 +10524,7 @@ router.post(
 
 // ════��════════════════════════════════════��═════════════════════════════════
 // Provider Ayarları (SiteSettings içinde)
-// ═════════════════════════════════════════��═════════════════════════════════
+// ═════════════════════════════════════════��══════���══════════════════════════
 
 const DEFAULT_PROVIDER_DISPLAY_NAMES = {
 	drakon: "Drakon",
@@ -10623,7 +10665,7 @@ router.put(
 	},
 );
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ═════════════��═════════════════════════════════════════════════════════════
 // SMS OTP Ayarları (SiteSettings içinde)
 // ════════════════════════════════════��═��══════════════════════════════���═════
 
@@ -10727,7 +10769,7 @@ router.put(
 	}
 );
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ═════════════════════════════════════════════════════════════════════��═════
 // E-posta Şablonları (SiteSettings içinde)
 // SMTP credential bilgileri backend/.env üzerinden okunur, sadece şablonlar
 // ve gönderici görünen ad/adres burada yönetilir.
@@ -11065,7 +11107,7 @@ router.put(
 	},
 );
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ═════════════════════════════════���═════════════════════════════════════════
 // Forcelab Finance Admin Endpoints
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -12250,5 +12292,9 @@ router.post("/notifications/read-all", async (req, res) => {
 		res.status(500).json({ success: false, message: "Bildirimler güncellenemedi." });
 	}
 });
+
+// 🔐 Güvenlik Ve Risk Yönetimi: IP çakışmaları, sistem/admin denetim logu,
+// oyuncu aktivite logu
+router.use("/security", require("./security/index"));
 
 module.exports = router;

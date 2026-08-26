@@ -176,6 +176,28 @@ export const usePermissionStore = defineStore("permission", () => {
 	};
 
 	/**
+	 * Alan Kısıtlaması (Field Restriction) kontrolü.
+	 *
+	 * Sayfa/aksiyon yetkisi yeterli olsa bile, bu admin'in rolü belirli bir
+	 * alanı (örn. "users.phone") düzenlemesini kapatmış olabilir. Bu, sayfa
+	 * bazlı `can()` kontrolünden BAĞIMSIZ, forma özel ince bir kısıtlamadır
+	 * (bkz. backend/config/fieldRestrictionRegistry.js).
+	 *
+	 * Süper adminler ve legacy (adminRole atanmamış) adminler için her zaman
+	 * `false` döner — kısıtlamalardan muaftırlar.
+	 *
+	 * @param {string} resource - Kaynak adı, örn. "users"
+	 * @param {string} key - Alan anahtarı, örn. "phone"
+	 * @returns {boolean}
+	 */
+	const isFieldRestricted = (resource, key) => {
+		if (isSuperAdmin.value) return false;
+
+		const restrictedFields = role.value?.restrictedFields || [];
+		return restrictedFields.includes(`${resource}.${key}`);
+	};
+
+	/**
 	 * CASL formatında ability al
 	 */
 	const getAbilities = () => {
@@ -240,6 +262,7 @@ export const usePermissionStore = defineStore("permission", () => {
 		canAny,
 		canAll,
 		canAccessResource,
+		isFieldRestricted,
 		getAbilities,
 	};
 });

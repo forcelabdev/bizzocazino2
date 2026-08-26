@@ -63,6 +63,20 @@ export const deleteRole = async (id) => {
 };
 
 // =====================================================
+// FIELD RESTRICTIONS (Alan Kısıtlamaları)
+// =====================================================
+
+/**
+ * Alan Kısıtlaması kataloğunu getir.
+ * Her kaynak (örn. "users") için, o kaynağın formundaki tekil alanları
+ * (Ad Soyad, Telefon, vb.) ve bunların kısıtlama kodlarını döner.
+ */
+export const getFieldRestrictionsRegistry = async () => {
+	const { data } = await axios.get("/admin/roles/field-restrictions-registry");
+	return data;
+};
+
+// =====================================================
 // USER ROLE ASSIGNMENT
 // =====================================================
 
@@ -102,6 +116,9 @@ export default {
 	createRole,
 	updateRole,
 	deleteRole,
+
+	// Field Restrictions
+	getFieldRestrictionsRegistry,
 
 	// User Role
 	assignRoleToUser,

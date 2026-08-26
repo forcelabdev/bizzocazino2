@@ -8,10 +8,10 @@ import { breakpointsVuetify } from "@vueuse/core";
 
 export const config = {
 	app: {
-		title: "Bizzocazino",
-		logo: h("img", { src: "/src/assets/logo.svg" }),
-
-		// logo: () => h('img', { src: 'assets/colored-logo.png' }, null),
+		title: "Bizzocasino",
+		// ℹ️ Default fallback logo. The actual logo used at runtime comes from
+		// `themeConfig.js` (`app.logo`), which overrides this value via `createLayouts`.
+		logo: h("div", { style: { width: "28px", height: "28px" } }),
 		contentWidth: ref(ContentWidth.Boxed),
 		contentLayoutNav: ref(AppContentLayoutNav.Vertical),
 		overlayNavFromBreakpoint: breakpointsVuetify.md,

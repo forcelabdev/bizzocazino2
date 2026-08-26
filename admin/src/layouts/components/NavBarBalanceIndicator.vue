@@ -16,6 +16,7 @@ const canViewBalanceAnalysis = computed(() => {
 
 const remainingAgentBalance = ref(null)
 const remainingBonusBalance = ref(null)
+const remainingTrialBonusBalance = ref(null)
 const loading = ref(false)
 
 const formatMoney = value => {
@@ -34,6 +35,7 @@ const fetchSummary = async () => {
 
 		remainingAgentBalance.value = res.data?.data?.remainingAgentBalance ?? 0
 		remainingBonusBalance.value = res.data?.data?.remainingBonusBalance ?? 0
+		remainingTrialBonusBalance.value = res.data?.data?.remainingTrialBonusBalance ?? 0
 	} catch (error) {
 		console.error("Navbar kalan bakiye özeti alınamadı:", error)
 	} finally {
@@ -89,6 +91,22 @@ onBeforeUnmount(() => {
 			</template>
 			Kalan Bonus Bakiyesi
 		</VTooltip>
+
+		<VTooltip location="bottom">
+			<template #activator="{ props }">
+				<div
+					v-bind="props"
+					class="balance-pill balance-pill--trial d-flex align-center gap-x-2 rounded px-3 py-1"
+				>
+					<VIcon size="20" icon="tabler-flask" />
+					<div class="d-flex flex-column leading-none">
+						<span class="text-sm font-weight-medium text-mono">{{ formatMoney(remainingTrialBonusBalance) }}</span>
+						<span class="text-xs text-disabled">Kalan Deneme Bonusu</span>
+					</div>
+				</div>
+			</template>
+			Kalan Deneme Bonus Bakiyesi
+		</VTooltip>
 	</div>
 </template>
 
@@ -108,6 +126,10 @@ onBeforeUnmount(() => {
 
 .balance-pill--bonus {
 	border-color: rgba(var(--v-theme-warning), 0.35);
+}
+
+.balance-pill--trial {
+	border-color: rgba(var(--v-theme-info), 0.35);
 }
 
 .text-mono {

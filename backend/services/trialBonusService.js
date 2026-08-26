@@ -12,6 +12,7 @@ const {
 	evaluateBonusLock,
 	triggerTrialBonusReviewLock,
 	resolveTrialBonusReviewLock,
+	cancelTrialBonusLock,
 	forfeitTrialWageringLockOnDeposit,
 } = require("../utils/bonusLock");
 const { sumUserBetsSince } = require("../utils/userBetActivity");
@@ -80,6 +81,20 @@ const getUserBalance = (user) => {
  * @returns {Promise<{ eligible: boolean, reason?: string, message?: string }>}
  */
 const checkClaimEligibility = async (user, settings) => {
+	// GÜVENLİK: bu kullanıcı için daha önce sonlanmış (tamamlanmış VEYA iptal
+	// edilmiş) bir Deneme Bonusu kaydı varsa, bir daha talep edemez. Bu kontrol
+	// `existingClaim` (TrialBonusClaim status: pending/approved) kontrolünden
+	// BAĞIMSIZ ve ona ek bir güvenlik katmanıdır — çünkü `trialBonusHistory`
+	// hiçbir zaman silinmez/değişmez, kalıcı bir kayıttır.
+	if (Array.isArray(user.trialBonusHistory) && user.trialBonusHistory.length > 0) {
+		return {
+			eligible: false,
+			reason: "HAS_TRIAL_BONUS_HISTORY",
+			message:
+				"Deneme bonusunu daha önce kullandığınız için tekrar talep edemezsiniz.",
+		};
+	}
+
 	if (settings.registrationCutoffEnabled && settings.registeredAfter) {
 		const cutoff = new Date(settings.registeredAfter);
 		const registeredAt = new Date(user.createdAt);
@@ -185,6 +200,7 @@ const claim = async (userId) => {
 	const eligibilityCheck = await checkClaimEligibility(user, settings);
 	if (!eligibilityCheck.eligible) {
 		const err = new Error(eligibilityCheck.reason || "NOT_ELIGIBLE");
+		err.code = eligibilityCheck.reason || "NOT_ELIGIBLE";
 		err.message = eligibilityCheck.message || err.message;
 		throw err;
 	}
@@ -387,23 +403,35 @@ const getApprovedClaimsMap = async (userIds = []) => {
 };
 
 /**
- * Kullanıcının deneme bonusundan kalan bir çevrim (wagering) şartı hâlâ
- * aktif mi diye bakar. Betinovi oyun başlatma akışında (game_launch),
- * true dönerse kullanıcı RTP override YERİNE ayrı bir Betinovi agent'ına
+ * Kullanıcının HÂLÂ SONLANMAMIŞ bir Deneme Bonusu kaydı olup olmadığına
+ * bakar. Betinovi oyun başlatma akışında (game_launch), true dönerse
+ * kullanıcı RTP override YERİNE ayrı bir Betinovi agent'ına
  * (BETINOVI_AGENT_CODE_2 / BETINOVI_AGENT_TOKEN_2 / BETINOVI_API_ENDPOINT_2
- * — "bizzodeneme") yönlendirilir. Çevrim tamamlandığı anda evaluateBonusLock
- * kilidi otomatik kapatır ve burası false dönmeye başlar; kullanıcı bir
- * dahaki oyun açılışında otomatik olarak normal (bizzocasinoyeni) agent'a
- * geri döner.
+ * — "bizzodeneme") yönlendirilir.
+ *
+ * GÜVENLİK NOTU: `evaluateBonusLock`'un `type === "wagering"` kontrolüne
+ * dayanmaz — çünkü Çevrim Katsayısı 0 (kapalı) ayarlandığında
+ * `applyWageringLock` HİÇBİR çevrim kilidi kurmaz (bkz. bonusLock.js:
+ * `wageringRequired <= 0` ise `null` döner) ve `evaluateBonusLock` bu
+ * durumda asla `"wagering"` tipini döndürmez — Hedef Bakiye tek başına
+ * aktif olsa bile. Bunun yerine doğrudan `user.bonusLock` üzerindeki tek
+ * doğruluk kaynağına bakılır: kilit bu deneme bonusuna aitse (`source`) ve
+ * henüz sonlanmamışsa (`completedAt` yok — ne tamamlanmış ne iptal
+ * edilmiş), çevrim şartı olsun olmasın, hedef bakiye takibi sürüyor olsun
+ * ya da inceleme kilidinde olsun, kullanıcı "bizzodeneme" agent'ında
+ * kalmalıdır. Kilit sonlandığı (çevrim/hedef bakiye tamamlanıp admin
+ * inceleyip açtığında VEYA iptal edildiğinde) anda `completedAt` set
+ * edilir ve burası otomatik olarak false dönmeye başlar; kullanıcı bir
+ * dahaki oyun açılışında normal (bizzocasinoyeni) agent'a geri döner.
  */
 const hasActiveTrialWageringLock = async (user) => {
 	if (!user) return false;
 
-	const lockStatus = await evaluateBonusLock(user);
-	if (!lockStatus.active) return false;
-	if (lockStatus.type !== "wagering") return false;
+	const lock = user.bonusLock;
+	if (!lock || lock.source !== SOURCE) return false;
+	if (lock.completedAt) return false;
 
-	return lockStatus.source === SOURCE;
+	return true;
 };
 
 /**
@@ -442,16 +470,41 @@ const checkTrialBonusWageringCompletion = async (userId) => {
  * (bet, kazanç, bonus kredisi, admin ayarı — hepsi) çağrılır. Kullanıcının
  * deneme bonusu hedef bakiyesi varsa ve yeni bakiye o hedefe ulaştıysa/
  * geçtiyse inceleme kilidini tetikler. Aksi halde hemen çıkar.
+ *
+ * AYRICA doğrudan sağlayıcı callback route'larından (betinoviApi.js/
+ * goldApi.js) da çağrılır — bunlar bakiyeyi `wallet.js`'i ATLAYARAK ham
+ * `findOneAndUpdate({ $inc: { "wallets.$[elem].balance": ... } })` ile
+ * güncelledikleri için `updateWalletBalance` hook'undan hiç geçmezler.
+ *
+ * GÜVENLİK: Bu yüzden `user` parametresine (2. argüman `newBalance` hariç)
+ * ASLA güvenmiyoruz — çağıran taraf genellikle `.select("wallets currency")`
+ * gibi KISITLI bir projeksiyonla belge döndürür ve bu durumda
+ * `user.bonusLock` her zaman `undefined` gelir, kontrol de sessizce
+ * atlanırdı (tam olarak Çevrim Katsayısı=0 + Hedef Bakiye senaryosunda
+ * yaşanan bug). Bu yüzden burada HER ZAMAN kendi taze/tam kullanıcı
+ * dokümanımızı `userId` ile çekiyoruz.
  */
-const checkTrialBonusTargetBalance = async (user, newBalance) => {
-	if (!user) return;
+const checkTrialBonusTargetBalance = async (userOrId, newBalance) => {
+	const userId = userOrId?._id || userOrId;
+	if (!userId) return;
 
-	const lock = user.bonusLock;
+	const freshUser = await User.findById(userId);
+	if (!freshUser) return;
+
+	const lock = freshUser.bonusLock;
+	if (!lock || lock.source !== SOURCE || lock.completedAt) return;
+
+	// OTOMATİK İPTAL: bakiye tam 0 TL'ye düştüyse, kilit hangi aşamada
+	// olursa olsun (çevrim/hedef bakiye sürerken VEYA inceleme kilidindeyken)
+	// deneme bonusunu anında "İptal Edildi" olarak sonlandır ve betAccess
+	// kilidini aç. Hedef bakiye kontrolünün ÖNÜNE geçer.
+	if (Number(newBalance) <= 0) {
+		await cancelTrialBonusLock(freshUser, "zero_balance");
+		return;
+	}
+
 	if (
-		!lock ||
-		lock.source !== SOURCE ||
 		lock.reviewRequired ||
-		lock.completedAt ||
 		!lock.targetBalanceAmount ||
 		lock.targetBalanceAmount <= 0
 	) {
@@ -459,10 +512,6 @@ const checkTrialBonusTargetBalance = async (user, newBalance) => {
 	}
 
 	if (Number(newBalance) >= Number(lock.targetBalanceAmount)) {
-		// `user` çağıran taraftan gelen doküman güncel olmayabilir; en
-		// güncel bonusLock durumunu almak için tekrar yükle.
-		const freshUser = await User.findById(user._id);
-		if (!freshUser || freshUser.bonusLock?.reviewRequired) return;
 		await triggerTrialBonusReviewLock(freshUser, "target_balance_reached");
 	}
 };
@@ -505,17 +554,45 @@ const resolveTrialBonusReview = async ({ userId }) => {
 	return user;
 };
 
-module.exports = {
-	getSettings,
-	updateSettings,
-	getPotential,
-	claim,
-	approveClaim,
-	rejectClaim,
-	getApprovedClaimsMap,
-	hasActiveTrialWageringLock,
-	checkTrialBonusWageringCompletion,
-	checkTrialBonusTargetBalance,
-	resolveTrialBonusReview,
-	handleRealDepositCredited,
+/**
+ * Admin panelinden "Deneme Bonusunu İptal Et" aksiyonu tarafından çağrılır.
+ * Deneme bonusu aktif olduğu HER aşamada (çevrim/hedef bakiye sürerken VEYA
+ * inceleme kilidindeyken) çalışır — `resolveTrialBonusReview`'ın aksine
+ * `reviewRequired` beklemez. Kullanıcı bir dahaki oyun açılışında normal
+ * (varsayılan) agent'a döner ve betAccess kilidi (varsa) hemen açılır.
+ */
+const cancelTrialBonus = async ({ userId, reason = "admin_manual" }) => {
+	const user = await User.findById(userId);
+	if (!user) throw new Error("USER_NOT_FOUND");
+	if (!user.bonusLock || user.bonusLock.source !== SOURCE) {
+		throw new Error("NO_ACTIVE_TRIAL_BONUS");
+	}
+	if (user.bonusLock.completedAt) {
+		throw new Error("NO_ACTIVE_TRIAL_BONUS");
+	}
+
+	const cancelled = await cancelTrialBonusLock(user, reason);
+	if (!cancelled) throw new Error("NO_ACTIVE_TRIAL_BONUS");
+
+	return user;
 };
+
+module.exports = {
+  getSettings,
+  updateSettings,
+  getPotential,
+  claim,
+  approveClaim,
+  rejectClaim,
+  getApprovedClaimsMap,
+  hasActiveTrialWageringLock,
+  checkTrialBonusWageringCompletion,
+  checkTrialBonusTargetBalance,
+  resolveTrialBonusReview,
+  cancelTrialBonus,
+  handleRealDepositCredited,
+  // Bakiye Analizi'nin "Kalan Deneme Bonus Bakiyesi" hesaplamasında
+  // (backend/services/balanceAnalysisService.js) AdminManualAdjustment
+  // kayıtlarını bu kategoriye göre filtrelemek için dışa aktarılır.
+  TRIAL_BONUS_CATEGORY: CATEGORY,
+  };

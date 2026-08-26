@@ -90,15 +90,25 @@ const handleNavScroll = (evt) => {
 					to="/"
 					class="app-logo d-flex align-center gap-x-3 app-title-wrapper"
 				>
-					<VNodeRenderer :nodes="config.app.logo" />
+					<div class="app-logo-icon flex-shrink-0">
+						<VNodeRenderer :nodes="config.app.logo" />
+					</div>
 
 					<Transition name="vertical-nav-app-title">
-						<h1
+						<div
 							v-show="!hideTitleAndIcon"
-							class="app-title font-weight-bold text-capitalize leading-normal text-xl"
+							class="app-title-block"
 						>
-							Bizzocazino
-						</h1>
+							<h1
+								class="app-title font-weight-bold text-capitalize leading-normal"
+							>
+								Forcelab BackOffice
+							</h1>
+							<div class="app-meta-row">
+								<span class="app-site-name">Bizzocasino</span>
+								<span class="app-project-no">Proje No: 3</span>
+							</div>
+						</div>
 					</Transition>
 				</RouterLink>
 				<!-- 👉 Vertical nav actions -->
@@ -182,7 +192,65 @@ const handleNavScroll = (evt) => {
 	}
 
 	.app-title-wrapper {
+		min-inline-size: 0;
 		margin-inline-end: auto;
+	}
+
+	.app-logo-icon {
+		display: flex;
+		flex-shrink: 0;
+		align-items: center;
+	}
+
+	.app-title-block {
+		display: flex;
+		overflow: hidden;
+		flex-direction: column;
+		min-inline-size: 0;
+		line-height: 1.2;
+	}
+
+	// ℹ️ font-size, @core/scss/template/_vertical-nav.scss içindeki
+	// `.app-logo .app-title` kuralında tanımlı (daha yüksek specificity).
+	.app-title {
+		overflow: hidden;
+		min-inline-size: 0;
+		letter-spacing: 0;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.app-meta-row {
+		display: flex;
+		overflow: hidden;
+		align-items: center;
+		gap: 0.25rem;
+		margin-block-start: 0.125rem;
+	}
+
+	.app-site-name,
+	.app-project-no {
+		overflow: hidden;
+		border-radius: 0.5rem;
+		font-size: 0.625rem;
+		font-weight: 500;
+		letter-spacing: 0.02em;
+		line-height: 1.6;
+		padding-block: 0;
+		padding-inline: 0.375rem;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.app-site-name {
+		background-color: rgba(var(--v-theme-primary), 0.16);
+		color: rgb(var(--v-theme-primary));
+	}
+
+	.app-project-no {
+		flex-shrink: 0;
+		background-color: rgba(var(--v-theme-on-surface), 0.08);
+		color: rgba(var(--v-theme-on-surface), 0.7);
 	}
 
 	.nav-items {

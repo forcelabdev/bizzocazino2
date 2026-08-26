@@ -14,12 +14,12 @@ const TelegramSettingsSchema = new mongoose.Schema({
   // Casino linki yanıtı
   casino_link_message: {
     type: String,
-    default: '🌐 https://rivo.games adresinden hemen giriş yapabilirsin.'
+    default: '🌐 https://sizin-alan-adiniz.com adresinden hemen giriş yapabilirsin.'
   },
   // Başlangıç mesajı
   start_message: {
     type: String,
-    default: '🎰 Merhaba! Rivo Casino Telegram botuna hoş geldin.\n\nBuradan canlı destek alabilir, kampanyaları görebilir veya özel linklere ulaşabilirsin.'
+    default: '🎰 Merhaba! Casino Telegram botuna hoş geldin.\n\nBuradan canlı destek alabilir, kampanyaları görebilir veya özel linklere ulaşabilirsin.'
   },
   updated_at: {
     type: Date,

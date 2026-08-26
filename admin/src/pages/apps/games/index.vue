@@ -14,6 +14,7 @@ const selectedDistribution = ref();
 const totalGames = ref(0);
 const games = ref([]);
 const categoryOptions = ref([]);
+const editCategoryOptions = ref([]);
 const providerOptions = ref([]);
 const router = useRouter();
 const BASE_URL = import.meta.env.VITE_API_BASE_URL;
@@ -192,13 +193,13 @@ const editGame = async (game) => {
 
 	try {
 		const res = await axios.get("/admin/categories");
-		categoryOptions.value = res.data.data.map((cat) => ({
+		editCategoryOptions.value = res.data.data.map((cat) => ({
 			title: cat.name,
 			value: cat.slug,
 		}));
 	} catch (err) {
 		console.error("Kategori listesi alınamadı:", err);
-		categoryOptions.value = [];
+		editCategoryOptions.value = [];
 	}
 };
 </script>
@@ -286,6 +287,8 @@ const editGame = async (game) => {
 									v-model="selectedCategory"
 									label="Select Category"
 									:items="categoryOptions"
+									item-title="title"
+									item-value="value"
 									clearable
 									clear-icon="tabler-x"
 								/>
@@ -370,7 +373,12 @@ const editGame = async (game) => {
 						class="text-no-wrap"
 					>
 						<template #item.raw.banner="{ item }">
-							<VAvatar size="38" variant="tonal">
+							<VAvatar
+								size="38"
+								variant="tonal"
+								:rounded="0"
+								style="border-radius: 5px"
+							>
 								<VImg
 									:src="resolveImageUrl(item.raw.banner)"
 									alt="Banner"
@@ -582,7 +590,7 @@ const editGame = async (game) => {
 										<AppSelect
 											v-model="gameToEdit.categories"
 											label="Categories"
-											:items="categoryOptions"
+											:items="editCategoryOptions"
 											multiple
 											chips
 											closable-chips

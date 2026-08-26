@@ -119,7 +119,7 @@ onMounted(fetchData)
           <VCol cols="12" md="6"><VSwitch v-model="promoToEdit.isActive" label="Promosyon kodu aktif" color="primary" /></VCol>
           <VCol cols="12" md="6"><AppTextField v-model="promoToEdit.startsAt" label="Başlangıç tarihi" type="datetime-local" /></VCol>
           <VCol cols="12" md="6"><AppTextField v-model="promoToEdit.expiresAt" label="Bitiş tarihi" type="datetime-local" /></VCol>
-          <VCol cols="12"><VAutocomplete v-model="promoToEdit.affiliateCodes" :items="affiliateOptions" item-title="title" item-value="code" label="İzin verilen affiliate kodları" hint="Boş bırakılırsa tüm üyeler kullanabilir." persistent-hint multiple chips closable-chips clearable /></VCol>
+          <VCol cols="12"><VAutocomplete v-model="promoToEdit.affiliateCodes" :items="affiliateOptions" item-title="title" item-value="code" label="İzin verilen affiliate kodları" hint="Boş bırakılırsa tüm üyeler kullanabilir." persistent-hint multiple chips closable-chips clearable :menu-props="{ maxHeight: 300 }" /></VCol>
           <VCol cols="12" md="6"><AppTextField v-model="promoToEdit.redeemptionsMax" label="Toplam kullanım limiti (0 = sınırsız)" type="number" min="0" /></VCol>
           <VCol cols="12" md="6"><AppTextField v-model="promoToEdit.perUserLimit" label="Kullanıcı başı limit" type="number" min="1" /></VCol>
           <VCol cols="12"><AppTextField v-model="promoToEdit.minLastDeposit" label="Minimum son onaylı yatırım (₺)" hint="0 girilirse yatırım şartı uygulanmaz." persistent-hint type="number" min="0" /></VCol>

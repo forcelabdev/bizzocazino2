@@ -315,6 +315,33 @@ const triggerTrialBonusReviewLock = async (user, reason, { session } = {}) => {
 };
 
 /**
+ * Sonlanan (tamamlanan veya iptal edilen) bir Deneme Bonusu kilidinin anlık
+ * görüntüsünü `user.trialBonusHistory` dizisine ekler. `user.save()`
+ * çağrısını YAPMAZ — çağıran fonksiyon zaten kendi `save()` işlemini
+ * yapacağı için sadece bellekteki dokümana `push` uygular.
+ *
+ * @param {object} user - Mongoose User dokümanı.
+ * @param {"completed"|"cancelled"} outcome
+ * @param {string} reason
+ */
+const pushTrialBonusHistory = (user, outcome, reason) => {
+	const lock = user?.bonusLock;
+	if (!user || !lock) return;
+
+	user.trialBonusHistory = user.trialBonusHistory || [];
+	user.trialBonusHistory.push({
+		claimId: lock.claimId || null,
+		bonusAmount: lock.bonusAmount || 0,
+		wageringRequired: lock.wageringRequired || 0,
+		targetBalanceAmount: lock.targetBalanceAmount || 0,
+		outcome,
+		reason: reason || "",
+		startedAt: lock.wageringSince || null,
+		endedAt: new Date(),
+	});
+};
+
+/**
  * Admin panelinden "İncelemeyi Tamamla ve Kilidi Aç" aksiyonu tarafından
  * çağrılır. Sadece `betAccess.reason === "trial_bonus_review"` ise
  * betAccess kilidini temizler — başka bir sebeple (admin manuel engeli vb.)
@@ -323,8 +350,11 @@ const triggerTrialBonusReviewLock = async (user, reason, { session } = {}) => {
 const resolveTrialBonusReviewLock = async (user) => {
 	if (!user || !user.bonusLock?.reviewRequired) return false;
 
+	pushTrialBonusHistory(user, "completed", user.bonusLock.reviewReason || "");
+
 	user.bonusLock.reviewRequired = false;
 	user.bonusLock.completedAt = new Date();
+	user.bonusLock.outcome = "completed";
 
 	if (user.betAccess?.reason === "trial_bonus_review") {
 		user.betAccess.blocked = false;
@@ -333,6 +363,61 @@ const resolveTrialBonusReviewLock = async (user) => {
 	}
 
 	await user.save();
+	return true;
+};
+
+/**
+ * Deneme Bonusunu HER durumda (çevrim sürerken, hedef bakiye ilerlerken
+ * veya inceleme kilidindeyken) anında sonlandırır: "İptal Edildi" olarak
+ * işaretler, `betAccess` kilidini açar (varsa) ve kullanıcı bir dahaki oyun
+ * açılışında normal (varsayılan) agent'a döner. Admin panelindeki manuel
+ * "Deneme Bonusunu İptal Et" butonu ve bakiye tam 0 TL'ye düştüğünde
+ * otomatik tetiklenen kısayol tarafından çağrılır.
+ *
+ * @param {object} user - Mongoose User dokümanı (kaydedilebilir olmalı).
+ * @param {"admin_manual"|"zero_balance"|"real_deposit"} reason
+ * @returns {Promise<boolean>} kilit gerçekten sonlandırıldıysa true
+ */
+const cancelTrialBonusLock = async (user, reason) => {
+	const lock = user?.bonusLock;
+	if (!lock || lock.source !== "trial_bonus") return false;
+	if (lock.completedAt) return false; // zaten sonlanmış (tamamlanmış/iptal edilmiş)
+
+	pushTrialBonusHistory(user, "cancelled", reason);
+
+	user.bonusLock.reviewRequired = false;
+	user.bonusLock.wageringRequired = 0;
+	user.bonusLock.targetBalanceAmount = 0;
+	user.bonusLock.blockedUntil = null;
+	user.bonusLock.completedAt = new Date();
+	user.bonusLock.outcome = "cancelled";
+	user.bonusLock.cancelledReason = reason || "admin_manual";
+	user.bonusLock.cancelledAt = new Date();
+
+	if (user.betAccess?.reason === "trial_bonus_review") {
+		user.betAccess.blocked = false;
+		user.betAccess.reason = "";
+		user.betAccess.updatedAt = new Date();
+	}
+
+	await user.save();
+
+	// GÜVENLİK: kullanıcı o an "bizzodeneme" (trial) agent'ı üzerinden AÇIK
+	// bir oyun oturumundaysa bile, sitedeki aktif bağlantısını hemen keserek
+	// bir dahaki game_launch çağrısının doğru (varsayılan) agent'a
+	// yönlenmesini garantiye al. Fire-and-forget: bağlantı sinyali
+	// başarısız olsa da kilidin kendisi zaten veritabanında iptal edilmiş.
+	try {
+		const { getIO } = require("./io");
+		const { notifyAndKickUserForTrialBonusCancelled } = require("./trialBonusReviewKick");
+		const io = getIO();
+		notifyAndKickUserForTrialBonusCancelled(io, user._id, reason).catch((err) =>
+			console.error("❌ cancelTrialBonusLock → soket bildirimi hatası:", err.message)
+		);
+	} catch (err) {
+		console.error("❌ cancelTrialBonusLock → soket bildirimi kurulamadı:", err.message);
+	}
+
 	return true;
 };
 
@@ -358,13 +443,34 @@ const forfeitTrialWageringLockOnDeposit = async (user) => {
 	if (lock.reviewRequired || lock.completedAt) return false;
 	if (!lock.wageringRequired || lock.wageringRequired <= 0) return false;
 
+	pushTrialBonusHistory(user, "cancelled", "real_deposit");
+
 	await User.findByIdAndUpdate(user._id, {
 		$set: {
 			"bonusLock.completedAt": new Date(),
 			"bonusLock.targetBalanceAmount": 0,
 			"bonusLock.forfeitedReason": "real_deposit",
+			"bonusLock.outcome": "cancelled",
+			"bonusLock.cancelledReason": "real_deposit",
+			"bonusLock.cancelledAt": new Date(),
+			trialBonusHistory: user.trialBonusHistory,
 		},
 	});
+
+	// GÜVENLİK: gerçek yatırım nedeniyle deneme bonusu kilidi sonlandırıldı —
+	// kullanıcı hâlâ "bizzodeneme" agent'ı üzerinden AÇIK bir oyun
+	// oturumundaysa bile aktif bağlantısını hemen keser, bir dahaki
+	// game_launch çağrısı doğru (varsayılan) agent'a yönlensin.
+	try {
+		const { getIO } = require("./io");
+		const { notifyAndKickUserForTrialBonusCancelled } = require("./trialBonusReviewKick");
+		const io = getIO();
+		notifyAndKickUserForTrialBonusCancelled(io, user._id, "real_deposit").catch((err) =>
+			console.error("❌ forfeitTrialWageringLockOnDeposit → soket bildirimi hatası:", err.message)
+		);
+	} catch (err) {
+		console.error("❌ forfeitTrialWageringLockOnDeposit → soket bildirimi kurulamadı:", err.message);
+	}
 
 	return true;
 };
@@ -378,5 +484,6 @@ module.exports = {
 	assertWithdrawalNotBlocked,
 	triggerTrialBonusReviewLock,
 	resolveTrialBonusReviewLock,
+	cancelTrialBonusLock,
 	forfeitTrialWageringLockOnDeposit,
 };

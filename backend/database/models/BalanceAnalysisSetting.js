@@ -32,6 +32,19 @@ const balanceAnalysisSettingSchema = new mongoose.Schema(
 			default: 3797200,
 			min: 0,
 		},
+		// "Kalan Deneme Bonus Bakiyesi" — deneme bonusu (trial bonus) olarak
+		// verilen tutarlar artık genel "Kalan Bonus Bakiyesi"nden değil, bu
+		// ayrı havuzdan düşülür. originAt boş (null) bırakılırsa, o kategoriye
+		// ait TÜM zamanların toplamı düşülür (tarih filtresi uygulanmaz).
+		trialBonusBalanceOriginAt: {
+			type: Date,
+			default: null,
+		},
+		trialBonusBalanceInitial: {
+			type: Number,
+			default: 1000000,
+			min: 0,
+		},
 		updatedBy: {
 			type: mongoose.Schema.Types.ObjectId,
 			ref: "User",

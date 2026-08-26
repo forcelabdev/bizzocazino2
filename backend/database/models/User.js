@@ -286,6 +286,33 @@ const userSchema = new mongoose.Schema(
 			// amacıyla erken sonlandırıldıysa "real_deposit" olarak işaretlenir
 			// (bkz. bonusLock.js → forfeitTrialWageringLockOnDeposit).
 			forfeitedReason: { type: String, default: "" },
+
+			// Deneme Bonusu kilidi nihai olarak nasıl sonlandı: "completed"
+			// (admin incelemeyi onayladı) veya "cancelled" (admin manuel iptal
+			// etti veya bakiye 0 TL'ye düştü). Kilit hâlâ aktifken boş string.
+			outcome: { type: String, default: "" }, // "" | "completed" | "cancelled"
+			cancelledReason: { type: String, default: "" }, // "admin_manual" | "zero_balance" | "real_deposit"
+			cancelledAt: { type: Date, default: null },
+		},
+
+		// Sonlanan (tamamlanan veya iptal edilen) Deneme Bonusu kilitlerinin
+		// geçmiş kaydı — admin panelinde "Geçmiş Deneme Bonusları" tablosunda
+		// gösterilir. Her bonus sonlandığında bonusLock sıfırlanmadan önce bu
+		// diziye anlık görüntüsü eklenir (bkz. bonusLock.js).
+		trialBonusHistory: {
+			type: [
+				{
+					claimId: { type: mongoose.Schema.Types.ObjectId, default: null },
+					bonusAmount: { type: Number, default: 0 },
+					wageringRequired: { type: Number, default: 0 },
+					targetBalanceAmount: { type: Number, default: 0 },
+					outcome: { type: String, default: "" }, // "completed" | "cancelled"
+					reason: { type: String, default: "" },
+					startedAt: { type: Date },
+					endedAt: { type: Date, default: Date.now },
+				},
+			],
+			default: [],
 		},
 
 		// Reload Bonusu kilidi: bonusLock'tan tamamen bağımsızdır (Reload,

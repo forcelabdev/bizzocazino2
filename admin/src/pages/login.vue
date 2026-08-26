@@ -10,24 +10,9 @@ import {
 import axios from "axios"
 import { VForm } from "vuetify/components/VForm"
 
-import { useGenerateImageVariant } from "@core/composable/useGenerateImageVariant"
-import authV2LoginIllustrationBorderedDark from "@images/pages/auth-v2-login-illustration-bordered-dark.png"
-import authV2LoginIllustrationBorderedLight from "@images/pages/auth-v2-login-illustration-bordered-light.png"
-import authV2LoginIllustrationDark from "@images/pages/auth-v2-login-illustration-dark.png"
-import authV2LoginIllustrationLight from "@images/pages/auth-v2-login-illustration-light.png"
-import authV2MaskDark from "@images/pages/misc-mask-dark.png"
-import authV2MaskLight from "@images/pages/misc-mask-light.png"
+import logo from "@images/logo.svg?raw"
 import { emailValidator, requiredValidator } from "@validators"
 
-const authThemeImg = useGenerateImageVariant(
-  authV2LoginIllustrationLight,
-  authV2LoginIllustrationDark,
-  authV2LoginIllustrationBorderedLight,
-  authV2LoginIllustrationBorderedDark,
-  true,
-)
-
-const authThemeMask = useGenerateImageVariant(authV2MaskLight, authV2MaskDark)
 const isPasswordVisible = ref(false)
 const route = useRoute()
 const router = useRouter()
@@ -117,28 +102,7 @@ const onSubmit = () => {
     class="auth-wrapper bg-surface"
   >
     <VCol
-      lg="8"
-      class="d-none d-lg-flex"
-    >
-      <div class="position-relative bg-background rounded-lg w-100 ma-8 me-0">
-        <div class="d-flex align-center justify-center w-100 h-100">
-          <VImg
-            max-width="505"
-            :src="authThemeImg"
-            class="auth-illustration mt-16 mb-2"
-          />
-        </div>
-
-        <VImg
-          :src="authThemeMask"
-          class="auth-footer-mask"
-        />
-      </div>
-    </VCol>
-
-    <VCol
       cols="12"
-      lg="4"
       class="auth-card-v2 d-flex align-center justify-center"
     >
       <VCard
@@ -147,6 +111,20 @@ const onSubmit = () => {
         class="mt-12 mt-sm-0 pa-4"
       >
         <VCardText>
+          <div class="auth-brand">
+            <div
+              class="auth-brand-logo"
+              v-html="logo"
+            />
+            <h1 class="auth-brand-title">
+              Forcelab Backoffice
+            </h1>
+            <div class="auth-brand-meta">
+              <span class="auth-brand-chip">Bizzocasino</span>
+              <span class="auth-brand-chip auth-brand-chip--muted">Proje No: 3</span>
+            </div>
+          </div>
+
           <VForm
             ref="refVForm"
             @submit.prevent="onSubmit"
@@ -201,6 +179,58 @@ const onSubmit = () => {
 
 <style lang="scss">
 @use "@core/scss/template/pages/page-auth.scss";
+
+.auth-brand {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	margin-block-end: 2.25rem;
+	text-align: center;
+}
+
+.auth-brand-logo {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	margin-block-end: 1.25rem;
+	color: rgb(var(--v-global-theme-primary));
+	line-height: 0;
+
+	:deep(svg) {
+		inline-size: 60px;
+		block-size: 60px;
+	}
+}
+
+.auth-brand-title {
+	margin-block-end: 0.875rem;
+	font-size: 1.875rem;
+	font-weight: 600;
+	letter-spacing: 0.01em;
+}
+
+.auth-brand-meta {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+}
+
+.auth-brand-chip {
+	border-radius: 0.625rem;
+	background-color: rgba(var(--v-theme-primary), 0.16);
+	color: rgb(var(--v-theme-primary));
+	font-size: 0.9375rem;
+	font-weight: 500;
+	letter-spacing: 0.02em;
+	line-height: 1.7;
+	padding-block: 0.25rem;
+	padding-inline: 0.75rem;
+
+	&--muted {
+		background-color: rgba(var(--v-theme-on-surface), 0.08);
+		color: rgba(var(--v-theme-on-surface), 0.7);
+	}
+}
 </style>
 
 <route lang="yaml">

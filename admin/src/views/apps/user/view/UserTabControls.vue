@@ -49,7 +49,7 @@ const currencyCode = computed(() => props.userData?.fiatCurrency || "USD")
 const formatMoney = value => {
   const number = Number(value || 0)
 
-  return `$${number.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  return `${number.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} TL`
 }
 
 const formatDate = value => {

@@ -24,6 +24,7 @@ const {
 	evaluateCategoryBetLimit,
 } = require("../utils/userBetAccess");
 const { onBetSettled } = require("../utils/wagerHooks");
+const trialBonusService = require("../services/trialBonusService");
 
 const router = express.Router();
 
@@ -655,6 +656,18 @@ router.post("/", async (req, res) => {
 								balanceAfter: balanceAfterMerge,
 							});
 
+							// 🎯 Deneme Bonusu hedef bakiye kontrolü — bu "merge" (mükerrer
+							// txn_id) akışı da bakiyeyi wallet.js'i atlayarak günceller,
+							// aşağıdaki ana akıştaki kontrole hiç uğramadan erken dönüyor.
+							trialBonusService
+								.checkTrialBonusTargetBalance(user._id, balanceAfterMerge)
+								.catch((err) =>
+									console.error(
+										"❌ GoldApi merge(credit) → deneme bonusu hedef bakiye kontrolü hatası:",
+										err.message
+									)
+								);
+
 							return res.status(200).json({
 								status: 1,
 								user_balance: balanceAfterMerge,
@@ -734,6 +747,17 @@ router.post("/", async (req, res) => {
 								balanceBefore: existingTxn.balance_after,
 								balanceAfter: balanceAfterMerge,
 							});
+
+							// 🎯 Deneme Bonusu hedef bakiye kontrolü — bkz. yukarıdaki
+							// "credit" dalındaki aynı not.
+							trialBonusService
+								.checkTrialBonusTargetBalance(user._id, balanceAfterMerge)
+								.catch((err) =>
+									console.error(
+										"❌ GoldApi merge(debit_credit) → deneme bonusu hedef bakiye kontrolü hatası:",
+										err.message
+									)
+								);
 
 							return res.status(200).json({
 								status: 1,
@@ -936,6 +960,20 @@ router.post("/", async (req, res) => {
 							providerCode: provider_code,
 						});
 					}
+
+					// 🎯 Deneme Bonusu hedef bakiye kontrolü. Bu route bakiyeyi
+					// `wallet.js → updateWalletBalance`'ı ATLAYARAK ham $inc ile
+					// güncellediği için o hook'tan hiç geçmez — burada AYRICA
+					// çağırmak gerekir (Çevrim Katsayısı=0 + Hedef Bakiye kullanan
+					// deneme bonusları için hem bet hem win/settlement callback'lerinde şart).
+					trialBonusService
+						.checkTrialBonusTargetBalance(user._id, balanceAfter)
+						.catch((err) =>
+							console.error(
+								"❌ GoldApi callback → deneme bonusu hedef bakiye kontrolü hatası:",
+								err.message
+							)
+						);
 
 					emitUserBalance(null, {
 						_id: user._id,

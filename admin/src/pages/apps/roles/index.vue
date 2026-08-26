@@ -8,6 +8,7 @@ import {
 	createRole,
 	updateRole,
 	deleteRole,
+	getFieldRestrictionsRegistry,
 } from "@/services/roleService";
 
 const { t } = useI18n();
@@ -16,6 +17,7 @@ const { t } = useI18n();
 const roles = ref([]);
 const permissions = ref([]);
 const groupedPermissions = ref({});
+const fieldRestrictionRegistry = ref([]);
 const loading = ref(false);
 const isDialogOpen = ref(false);
 const isDeleteDialogOpen = ref(false);
@@ -30,6 +32,7 @@ const formData = ref({
 	permissions: [],
 	color: "primary",
 	icon: "tabler-user-shield",
+	restrictedFields: [],
 });
 
 // Colors for role badge
@@ -76,6 +79,7 @@ const resourceLabels = {
 	reports: "Raporlar",
 	controlGame: "ControlGame",
 	roles: "Roller",
+	security: "Güvenlik",
 	// Turkish keys (from backend group field)
 	finans: "Finans",
 	oyunlar: "Oyunlar",
@@ -87,6 +91,7 @@ const resourceLabels = {
 	raporlar: "Raporlar",
 	controlgame: "ControlGame",
 	roller: "Roller",
+	güvenlik: "Güvenlik",
 };
 
 const resolveGroupLabel = (key) => {
@@ -297,6 +302,15 @@ const fetchPermissions = async () => {
 	}
 };
 
+const fetchFieldRestrictionRegistry = async () => {
+	try {
+		const response = await getFieldRestrictionsRegistry();
+		fieldRestrictionRegistry.value = response.data || [];
+	} catch (error) {
+		console.error("Error fetching field restriction registry:", error);
+	}
+};
+
 const openCreateDialog = () => {
 	if (!canCreateRoles.value) return;
 	editingRole.value = null;
@@ -307,6 +321,7 @@ const openCreateDialog = () => {
 		permissions: [],
 		color: "primary",
 		icon: "tabler-user-shield",
+		restrictedFields: [],
 	};
 	isDialogOpen.value = true;
 };
@@ -321,6 +336,7 @@ const openEditDialog = (role) => {
 		permissions: role.permissions?.map((p) => p._id) || [],
 		color: role.color || "primary",
 		icon: role.icon || "tabler-user-shield",
+		restrictedFields: [...(role.restrictedFields || [])],
 	};
 	isDialogOpen.value = true;
 };
@@ -369,7 +385,11 @@ const handleDelete = async () => {
 
 // Lifecycle
 onMounted(async () => {
-	await Promise.all([fetchRoles(), fetchPermissions()]);
+	await Promise.all([
+		fetchRoles(),
+		fetchPermissions(),
+		fetchFieldRestrictionRegistry(),
+	]);
 });
 </script>
 
@@ -744,12 +764,55 @@ meta:
 											</VExpansionPanel>
 										</VExpansionPanels>
 									</VExpansionPanelText>
-								</VExpansionPanel>
-							</VExpansionPanels>
-						</VCol>
-					</VRow>
-				</VForm>
-			</VCardText>
+									</VExpansionPanel>
+								</VExpansionPanels>
+							</VCol>
+
+							<!-- Field Restrictions -->
+							<VCol cols="12">
+								<VDivider class="mb-4" />
+								<h6 class="text-h6 mb-1">
+									Alan Kısıtlamaları (İsteğe Bağlı)
+								</h6>
+								<p class="text-body-2 text-medium-emphasis mb-4">
+									İşaretlediğiniz alanlar, bu role sahip adminler
+									tarafından düzenlenemez. Diğer tüm alanlar (ve
+									sayfanın kendisi) normal yetkilerine göre
+									görünür/düzenlenir kalır.
+								</p>
+
+								<div
+									v-for="resourceEntry in fieldRestrictionRegistry"
+									:key="resourceEntry.resource"
+									class="mb-4"
+								>
+									<span
+										class="text-body-2 font-weight-medium d-block mb-2"
+									>
+										{{ resourceEntry.tabLabel || resourceEntry.label }}
+									</span>
+									<VRow dense>
+										<VCol
+											v-for="field in resourceEntry.fields"
+											:key="field.code"
+											cols="12"
+											sm="6"
+											md="4"
+										>
+											<VCheckbox
+												v-model="formData.restrictedFields"
+												:value="field.code"
+												:label="field.label"
+												hide-details
+												density="compact"
+											/>
+										</VCol>
+									</VRow>
+								</div>
+							</VCol>
+						</VRow>
+					</VForm>
+				</VCardText>
 
 			<VCardActions class="px-6 pb-4">
 				<VSpacer />

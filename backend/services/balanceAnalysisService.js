@@ -6,6 +6,7 @@ const CampaignTransaction = require("../database/models/CampaignTransaction");
 const FluxKriptoTransaction = require("../database/models/FluxKriptoTransaction");
 const XPaymentTransaction = require("../database/models/XPaymentTransaction");
 const BalanceAnalysisSetting = require("../database/models/BalanceAnalysisSetting");
+const { TRIAL_BONUS_CATEGORY } = require("./trialBonusService");
 
 const round2 = (value) => Math.round(Number(value || 0) * 100) / 100;
 
@@ -43,6 +44,8 @@ const updateSettings = async (patch = {}, actorUser = null) => {
 		"agentBalanceInitial",
 		"bonusBalanceOriginAt",
 		"bonusBalanceInitial",
+		"trialBonusBalanceOriginAt",
+		"trialBonusBalanceInitial",
 	];
 
 	for (const field of allowedFields) {
@@ -99,6 +102,9 @@ const getRemainingAgentBalance = async (settings) => {
 /**
  * Kalan Bonus Bakiyesi: başlangıç tutarından, başlangıç tarihinden sonraki
  * manuel eklenen (kind=bonus, direction=credit) toplam düşülerek hesaplanır.
+ * Deneme bonusu (trial bonus) kategorisindeki kayıtlar HARİÇ tutulur —
+ * onlar artık ayrı "Kalan Deneme Bonus Bakiyesi" havuzundan düşülür
+ * (bkz. getRemainingTrialBonusBalance).
  */
 const getRemainingBonusBalance = async (settings) => {
 	if (!settings.bonusBalanceOriginAt) {
@@ -110,6 +116,7 @@ const getRemainingBonusBalance = async (settings) => {
 			$match: {
 				direction: "credit",
 				kind: "bonus",
+				category: { $ne: TRIAL_BONUS_CATEGORY },
 				createdAt: { $gt: settings.bonusBalanceOriginAt },
 			},
 		},
@@ -121,6 +128,40 @@ const getRemainingBonusBalance = async (settings) => {
 	return {
 		bonusSum,
 		remaining: round2(settings.bonusBalanceInitial - bonusSum),
+	};
+};
+
+/**
+ * Kalan Deneme Bonus Bakiyesi: başlangıç tutarından (varsayılan 1.000.000 TL),
+ * sistemden verilen deneme bonusu (kind=bonus, direction=credit,
+ * category="DENEME BONUSU") toplamı düşülerek hesaplanır. originAt boşsa
+ * (varsayılan) tüm zamanların toplamı düşülür.
+ */
+const getRemainingTrialBonusBalance = async (settings) => {
+	const match = {
+		direction: "credit",
+		kind: "bonus",
+		category: TRIAL_BONUS_CATEGORY,
+	};
+	if (settings.trialBonusBalanceOriginAt) {
+		match.createdAt = { $gt: settings.trialBonusBalanceOriginAt };
+	}
+
+	const trialBonusResult = await AdminManualAdjustment.aggregate([
+		{ $match: match },
+		{ $group: { _id: null, total: { $sum: "$appliedAmount" } } },
+	]);
+
+	const trialBonusSum = round2(Number(trialBonusResult[0]?.total || 0));
+	// Şema alanı henüz eski bir dokümana yazılmamışsa (migration edilmemiş
+	// kayıt) undefined/NaN'a düşmeyip varsayılan 1.000.000 TL'ye geri dönülür.
+	const trialBonusInitial = Number.isFinite(Number(settings.trialBonusBalanceInitial))
+		? Number(settings.trialBonusBalanceInitial)
+		: 1000000;
+
+	return {
+		trialBonusSum,
+		remaining: round2(trialBonusInitial - trialBonusSum),
 	};
 };
 
@@ -235,9 +276,10 @@ const getSummary = async ({ startDate, endDate } = {}) => {
 	);
 	const totalManualCount = manualBonusCount + manualBalanceCount;
 
-	const [agentBalance, bonusBalance] = await Promise.all([
+	const [agentBalance, bonusBalance, trialBonusBalance] = await Promise.all([
 		getRemainingAgentBalance(settings),
 		getRemainingBonusBalance(settings),
+		getRemainingTrialBonusBalance(settings),
 	]);
 
 	return {
@@ -257,11 +299,14 @@ const getSummary = async ({ startDate, endDate } = {}) => {
 		totalManualCount,
 		remainingAgentBalance: agentBalance.remaining,
 		remainingBonusBalance: bonusBalance.remaining,
+		remainingTrialBonusBalance: trialBonusBalance.remaining,
 		settings: {
 			agentBalanceOriginAt: settings.agentBalanceOriginAt,
 			agentBalanceInitial: settings.agentBalanceInitial,
 			bonusBalanceOriginAt: settings.bonusBalanceOriginAt,
 			bonusBalanceInitial: settings.bonusBalanceInitial,
+			trialBonusBalanceOriginAt: settings.trialBonusBalanceOriginAt,
+			trialBonusBalanceInitial: settings.trialBonusBalanceInitial,
 		},
 	};
 };

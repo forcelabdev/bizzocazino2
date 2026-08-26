@@ -18,6 +18,12 @@ const TRIAL_BONUS_ERROR_MESSAGES = {
 		"Yakın zamanda alınan bir bonus nedeniyle şu anda başka bonus talep edilemez.",
 	ALREADY_CLAIMED: "Deneme bonusunu daha önce talep ettiniz.",
 	TRIAL_BONUS_AMOUNT_INVALID: "Deneme bonusu tutarı geçersiz.",
+	REGISTERED_BEFORE_CUTOFF:
+		"Bu tarihten önce kayıt olan üyeler deneme bonusu talep edemez.",
+	HAS_APPROVED_DEPOSIT:
+		"Daha önce yatırım yapmış üyeler deneme bonusu talep edemez.",
+	HAS_TRIAL_BONUS_HISTORY:
+		"Deneme bonusunu daha önce kullandığınız için tekrar talep edemezsiniz.",
 };
 
 // Multer yapılandırması (resim yüklemek için)
@@ -281,9 +287,11 @@ router.post("/trial/claim", authorizeUser(true), async (req, res) => {
 			data: { claim: result.claim, newBalance: result.newBalance },
 		});
 	} catch (error) {
-		const message =
-			TRIAL_BONUS_ERROR_MESSAGES[error.message] || error.message || "Sunucu hatası.";
-		const status = TRIAL_BONUS_ERROR_MESSAGES[error.message] ? 400 : 500;
+		// `error.code` set edilmişse (bilinen bir uygunluk/reddedilme sebebi)
+		// onu, yoksa geriye dönük uyumluluk için `error.message`'ı anahtar olarak kullan.
+		const key = error.code || error.message;
+		const message = TRIAL_BONUS_ERROR_MESSAGES[key] || error.message || "Sunucu hatası.";
+		const status = TRIAL_BONUS_ERROR_MESSAGES[key] ? 400 : 500;
 		if (status === 500) console.error("Trial bonus claim error:", error);
 		res.status(status).json({ success: false, message });
 	}

@@ -381,6 +381,16 @@ const formatNumber = (value) => {
 	return number.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
+// Seçili RTP çarpanı × bahis tutarı = kullanıcıya gönderilecek tutar.
+// RTP seçilirken bu tutarın büyük şekilde görünmesi, hangi çarpanın
+// seçildiğinde ne kadar gönderileceğini net göstermek için.
+const selectedCallAmount = computed(() => {
+	const bet = Number(giveCallDialog.value.player?.betAmount);
+	const rtp = Number(giveCallDialog.value.selectedRtp);
+	if (!Number.isFinite(bet) || !Number.isFinite(rtp)) return null;
+	return bet * rtp;
+});
+
 const closeGiveCallDialog = () => {
 	giveCallDialog.value.open = false;
 	giveCallDialog.value.player = null;
@@ -503,10 +513,19 @@ const playersTableRowsAll = computed(() =>
 	);
 
 // "Sadece Deneme Bonusu Alanlar" filtresi açıksa listeyi daraltır.
-// Bilgi amaçlıdır — RTP/oyun sonucu hesaplamasına dahil değildir.
+// ÖNEMLİ: tablodaki "Deneme Bonusu (bizzodeneme)" rozeti `agentSource === "trial"`
+// alanına bakarak gösteriliyor (kullanıcının ŞU AN aktif/sonlanmamış deneme
+// bonusu kilidiyle bizzodeneme agent'ında olup olmadığı). `_trialBonus`
+// (trialBonusMap) ise TAMAMEN AYRI ve bağımsız bir veri kaynağı — geçmişte
+// onaylanmış claim kayıtlarını gösterir, aktif/güncel durumla senkron
+// değildir. Filtre eskiden `_trialBonus`'a bakıyordu, bu yüzden rozette
+// "Deneme Bonusu (bizzodeneme)" görünen ama _trialBonus'ta karşılığı
+// olmayan (veya tersi) satırlar filtrelenmiyordu. Artık rozetle AYNI alana
+// (`agentSource`) bakıyor, böylece filtre açıkken "Normal" rozetli satırlar
+// asla görünmüyor.
 const playersTableRows = computed(() =>
 	trialBonusOnlyFilter.value
-	? playersTableRowsAll.value.filter((row) => row._trialBonus)
+	? playersTableRowsAll.value.filter((row) => row.agentSource === "trial")
 	: playersTableRowsAll.value,
 	);
 
@@ -817,6 +836,27 @@ onBeforeUnmount(() => {
 						{{ giveCallDialog.error }}
 					</VAlert>
 
+					<!-- Gönderilecek tutar: Bahis × Seçili RTP, RTP seçilirken büyük şekilde
+						gösterilir ki hangi çarpanın seçildiğinde ne kadar gönderileceği net olsun. -->
+					<VCard
+						class="mb-4 pa-4 text-center send-amount-card"
+						:variant="selectedCallAmount !== null ? 'flat' : 'tonal'"
+						:color="selectedCallAmount !== null ? 'primary' : undefined"
+					>
+						<div class="text-caption" :class="selectedCallAmount !== null ? 'text-white opacity-90' : 'text-medium-emphasis'">
+							Gönderilecek Tutar
+							<template v-if="giveCallDialog.selectedRtp !== null">
+								({{ formatNumber(giveCallDialog.player?.betAmount) }} × {{ giveCallDialog.selectedRtp }}x)
+							</template>
+						</div>
+						<div
+							class="send-amount-value font-weight-bold"
+							:class="selectedCallAmount !== null ? 'text-white' : 'text-medium-emphasis'"
+						>
+							{{ selectedCallAmount !== null ? `${formatNumber(selectedCallAmount)} TL` : "RTP seçilmedi" }}
+						</div>
+					</VCard>
+
 					<div class="text-subtitle-2 mb-2">RTP Seçin</div>
 
 					<div v-if="giveCallDialog.loading" class="d-flex justify-center py-10">
@@ -954,6 +994,16 @@ onBeforeUnmount(() => {
 	max-height: 420px;
 	overflow-y: auto;
 	padding-right: 4px;
+}
+
+.send-amount-card {
+	transition: background-color 0.15s ease;
+}
+
+.send-amount-value {
+	font-size: 2.5rem;
+	line-height: 1.2;
+	letter-spacing: -0.02em;
 }
 </style>
 

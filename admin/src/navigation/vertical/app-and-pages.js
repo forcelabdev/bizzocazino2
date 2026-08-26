@@ -1,71 +1,45 @@
 export default [
-  { heading: "Apps & Pages" },
-
-  // 📡 Communication
+  { heading: "Kullanıcı Yönetimi" },
   {
-    title: "communication.title",
-    icon: { icon: "tabler-message" },
-    action: "read",
-    subject: "communication",
-    children: [
-      {
-        title: "communication.email",
-        to: "apps-email",
-        action: "read",
-        subject: "communication",
-      },
-      {
-        title: "communication.chat",
-        to: "apps-chat",
-        action: "read",
-        subject: "communication",
-      },
-    ],
-  },
-
-  // 👥 Users
-  {
-    title: "users.title",
+    title: "Kullanıcılar",
     icon: { icon: "tabler-users" },
     action: "read",
     subject: "users",
     children: [
       {
-        title: "users.list",
+        title: "Kullanıcı Listesi",
         to: "apps-user-list",
         action: "read",
         subject: "users",
       },
       {
-        title: "users.leaderboard",
+        title: "Liderlik Tablosu",
         to: "apps-leaderboard",
         action: "read",
         subject: "users",
       },
       {
-        title: "users.vip",
+        title: "VIP",
         to: "apps-vip",
         action: "read",
         subject: "users",
       },
     ],
   },
-
-  // 📇 CRM
   {
-    title: "crm.title",
+    title: "CRM",
     icon: { icon: "tabler-address-book" },
     action: "read",
     subject: "users",
     children: [
       {
-        title: "crm.playerSegments",
+        title: "Oyuncu Segmentleri",
         to: "apps-crm-player-segments",
         action: "read",
         subject: "users",
       },
       {
-        title: "crm.tagManager",
+        title: "Tag Manager",
         to: "apps-crm-tag-manager",
         action: "read",
         subject: "users",
@@ -73,444 +47,363 @@ export default [
     ],
   },
 
-  // 💰 Finance
+  { heading: "Finans Yönetimi" },
   {
-    title: "finance.title",
-    icon: { icon: "tabler-file-dollar" },
+    title: "Yatırım",
+    icon: { icon: "tabler-arrow-down-circle" },
+    to: "apps-finance-deposit",
     action: "read",
-    subject: "finance",
-    children: [
-      {
-        title: "finance.deposits",
-        to: "apps-finance-deposit",
-        action: "read",
-        subject: "finance.deposits",
-      },
-      {
-        title: "finance.withdraws",
-        to: "apps-finance-withdraw",
-        action: "read",
-        subject: "finance.withdraws",
-      },
-      {
-        title: "manualAdjustments.title",
-        to: "apps-finance-manual-adjustments",
-        action: "read",
-        subject: "users",
-      },
-    ],
+    subject: "finance.deposits",
+  },
+  {
+    title: "Çekimler",
+    icon: { icon: "tabler-arrow-up-circle" },
+    to: "apps-finance-withdraw",
+    action: "read",
+    subject: "finance.withdraws",
+  },
+  {
+    title: "Manuel İşlemler",
+    icon: { icon: "tabler-adjustments" },
+    to: "apps-finance-manual-adjustments",
+    action: "read",
+    subject: "users",
   },
 
-  // 🏷️ Promotions
+  { heading: "Rapor Yönetimi" },
   {
-    title: "finance.promotionsGroup",
-    icon: { icon: "tabler-discount-2" },
-    action: "read",
-    subject: "finance.promo",
-    children: [
-      {
-        title: "platform.campaigns",
-        to: "apps-campaigns",
-        action: "read",
-        subject: "finance.campaigns",
-      },
-      {
-        title: "platform.promotions",
-        to: "apps-promotions",
-        action: "read",
-        subject: "finance.promo",
-      },
-      {
-        title: "finance.promo",
-        to: "apps-promo",
-        action: "read",
-        subject: "finance.promo",
-      },
-      {
-        title: "platform.bulkBonus",
-        to: "apps-bulk-bonus",
-        action: "read",
-        subject: "finance.manualAdjustments",
-      },
-      {
-        title: "platform.bonusNames",
-        to: "apps-bonus-names",
-        action: "read",
-        subject: "finance.manualAdjustments",
-      },
-      {
-        title: "platform.lossBonus",
-        to: "apps-loss-bonus",
-        action: "read",
-        subject: "finance.lossBonus",
-      },
-      {
-        title: "platform.depositBonus",
-        to: "apps-deposit-bonus",
-        action: "read",
-        subject: "finance.depositBonus",
-      },
-      {
-        title: "platform.trialBonus",
-        to: "apps-trial-bonus",
-        action: "read",
-        subject: "finance.trialBonus",
-      },
-      {
-        title: "platform.reloadBonus",
-        to: "apps-reload-bonus",
-        action: "read",
-        subject: "finance.reloadBonus",
-      },
-      {
-        title: "platform.callScenarios",
-        to: "apps-call-scenarios",
-        action: "read",
-        subject: "callScenarios",
-      },
-      {
-        title: "platform.freeSpinBonus",
-        to: "apps-free-spin-bonus",
-        action: "read",
-        subject: "controlGame",
-      },
-      {
-        title: "platform.ticketEvents",
-        to: "apps-tickets",
-        action: "read",
-        subject: "finance.tickets",
-      },
-      {
-        title: "platform.raceTournaments",
-        to: "apps-race",
-        action: "read",
-        subject: "finance.race",
-      },
-    ],
-  },
-
-  // 🎮 Games
-  {
-    title: "gamestitle",
-    icon: { icon: "tabler-device-gamepad" },
-    action: "read",
-    subject: "games",
-    children: [
-      {
-        title: "gamesall",
-        to: "apps-games",
-        action: "read",
-        subject: "games",
-      },
-      {
-        title: "Spor Bahisleri",
-        to: "apps-sports-bets",
-        icon: { icon: "tabler-ball-football" },
-        action: "read",
-        subject: "sports",
-      },
-      {
-        title: "Spor Turnuvası",
-        to: "apps-sports-tournament",
-        icon: { icon: "tabler-trophy" },
-        action: "read",
-        subject: "sports.tournament",
-      },
-
-      {
-        title: "gameshistorytitle",
-        icon: { icon: "tabler-history" },
-        action: "read",
-        subject: "games",
-        children: [
-          {
-            title: "gameshistoryfutures",
-            to: "apps-futures",
-            action: "read",
-            subject: "games",
-          },
-          {
-            title: "gameshistoryturbo",
-            to: "apps-turbo",
-            action: "read",
-            subject: "games",
-          },
-          {
-            title: "gameshistorywingo",
-            to: "apps-wingo",
-            action: "read",
-            subject: "games",
-          },
-          {
-            title: "gameshistorybattles",
-            to: "apps-battles",
-            action: "read",
-            subject: "games",
-          },
-          {
-            title: "gameshistoryblackjack",
-            to: "apps-blackjack",
-            action: "read",
-            subject: "games",
-          },
-          {
-            title: "gameshistorycrash",
-            to: "apps-crash",
-            action: "read",
-            subject: "games",
-          },
-          {
-            title: "gameshistoryduels",
-            to: "apps-duels",
-            action: "read",
-            subject: "games",
-          },
-          {
-            title: "gameshistorymines",
-            to: "apps-mines",
-            action: "read",
-            subject: "games",
-          },
-          {
-            title: "gameshistoryrolls",
-            to: "apps-rolls",
-            action: "read",
-            subject: "games",
-          },
-          {
-            title: "gameshistorytowers",
-            to: "apps-towers",
-            action: "read",
-            subject: "games",
-          },
-          {
-            title: "gameshistoryunbox",
-            to: "apps-unbox",
-            action: "read",
-            subject: "games",
-          },
-        ],
-      },
-    ],
-  },
-
-  // 📊 Reports
-  {
-    title: "betinoviReports.title",
+    title: "CRM Raporu",
     icon: { icon: "tabler-report-analytics" },
+    to: "apps-reports-crm",
     action: "read",
     subject: "finance.balanceAnalysis",
+  },
+  {
+    title: "Bakiye Analiz Raporu",
+    icon: { icon: "tabler-chart-pie" },
+    to: "apps-reports-balance-analysis",
+    action: "read",
+    subject: "finance.balanceAnalysis",
+  },
+
+  { heading: "Promosyon Yönetimi" },
+  {
+    title: "Kampanyalar",
+    icon: { icon: "tabler-speakerphone" },
+    to: "apps-campaigns",
+    action: "read",
+    subject: "finance.campaigns",
+  },
+  {
+    title: "Promosyonlar",
+    icon: { icon: "tabler-discount-2" },
+    to: "apps-promotions",
+    action: "read",
+    subject: "finance.promo",
+  },
+  {
+    title: "Bonus Adları",
+    icon: { icon: "tabler-tags" },
+    to: "apps-bonus-names",
+    action: "read",
+    subject: "finance.manualAdjustments",
+  },
+  {
+    title: "Promosyon Kodu",
+    icon: { icon: "tabler-ticket" },
+    to: "apps-promo",
+    action: "read",
+    subject: "finance.promo",
+  },
+  {
+    title: "Toplu Bonus Yükle",
+    icon: { icon: "tabler-upload" },
+    to: "apps-bulk-bonus",
+    action: "read",
+    subject: "finance.manualAdjustments",
+  },
+
+  { heading: "Oto Bonus Yönetimi" },
+  {
+    title: "Deneme Bonusu",
+    icon: { icon: "tabler-gift" },
+    to: "apps-trial-bonus",
+    action: "read",
+    subject: "finance.trialBonus",
+  },
+  {
+    title: "Yatırım Bonusu",
+    icon: { icon: "tabler-coin" },
+    to: "apps-deposit-bonus",
+    action: "read",
+    subject: "finance.depositBonus",
+  },
+  {
+    title: "Reload Bonusu",
+    icon: { icon: "tabler-refresh" },
+    to: "apps-reload-bonus",
+    action: "read",
+    subject: "finance.reloadBonus",
+  },
+  {
+    title: "Kayıp Bonusu",
+    icon: { icon: "tabler-mood-sad" },
+    to: "apps-loss-bonus",
+    action: "read",
+    subject: "finance.lossBonus",
+  },
+  {
+    title: "Freespin Bonusu",
+    icon: { icon: "tabler-rotate" },
+    to: "apps-free-spin-bonus",
+    action: "read",
+    subject: "controlGame",
+  },
+
+  { heading: "Etkinlik Yönetimi" },
+  {
+    title: "Bilet Etkinliği",
+    icon: { icon: "tabler-ticket" },
+    to: "apps-tickets",
+    action: "read",
+    subject: "finance.tickets",
+  },
+  {
+    title: "Çevrim Turnuvası",
+    icon: { icon: "tabler-trophy" },
+    to: "apps-race",
+    action: "read",
+    subject: "finance.race",
+  },
+  {
+    title: "Spor Turnuvası",
+    icon: { icon: "tabler-ball-football" },
+    to: "apps-sports-tournament",
+    action: "read",
+    subject: "sports.tournament",
+  },
+
+  { heading: "Oyun Yönetimi" },
+  {
+    title: "Casino Oyunları (Tümü)",
+    icon: { icon: "tabler-device-gamepad" },
+    to: "apps-games",
+    action: "read",
+    subject: "games",
+  },
+  {
+    title: "Spor Bahisleri",
+    icon: { icon: "tabler-ball-football" },
+    to: "apps-sports-bets",
+    action: "read",
+    subject: "sports",
+  },
+  {
+    title: "Oyun Geçmişi (Pasif)",
+    icon: { icon: "tabler-history" },
+    action: "read",
+    subject: "games",
+    disable: true,
     children: [
       {
-        title: "betinoviReports.crmReport",
-        to: "apps-reports-crm",
+        title: "gameshistoryfutures",
+        to: "apps-futures",
         action: "read",
-        subject: "finance.balanceAnalysis",
+        subject: "games",
       },
       {
-        title: "betinoviReports.balanceAnalysis",
-        to: "apps-reports-balance-analysis",
+        title: "gameshistoryturbo",
+        to: "apps-turbo",
         action: "read",
-        subject: "finance.balanceAnalysis",
+        subject: "games",
+      },
+      {
+        title: "gameshistorywingo",
+        to: "apps-wingo",
+        action: "read",
+        subject: "games",
+      },
+      {
+        title: "gameshistorybattles",
+        to: "apps-battles",
+        action: "read",
+        subject: "games",
+      },
+      {
+        title: "gameshistoryblackjack",
+        to: "apps-blackjack",
+        action: "read",
+        subject: "games",
+      },
+      {
+        title: "gameshistorycrash",
+        to: "apps-crash",
+        action: "read",
+        subject: "games",
+      },
+      {
+        title: "gameshistoryduels",
+        to: "apps-duels",
+        action: "read",
+        subject: "games",
+      },
+      {
+        title: "gameshistorymines",
+        to: "apps-mines",
+        action: "read",
+        subject: "games",
+      },
+      {
+        title: "gameshistoryrolls",
+        to: "apps-rolls",
+        action: "read",
+        subject: "games",
+      },
+      {
+        title: "gameshistorytowers",
+        to: "apps-towers",
+        action: "read",
+        subject: "games",
+      },
+      {
+        title: "gameshistoryunbox",
+        to: "apps-unbox",
+        action: "read",
+        subject: "games",
       },
     ],
   },
 
-  // 🎛️ ControlGame / Call Management
+  { heading: "Oyun Kontrol Yönetimi" },
   {
-    title: "controlGame.title",
+    title: "Call Management",
     icon: { icon: "tabler-adjustments-star" },
     to: "apps-control-game",
     action: "read",
     subject: "controlGame",
   },
 
-  // 🔌 Providers (API Integrations)
+  { heading: "Güvenlik Ve Risk Yönetimi" },
   {
-    title: "providers.title",
-    icon: { icon: "tabler-plug" },
+    title: "Güvenlik Ve Risk Yönetimi",
+    icon: { icon: "tabler-shield-lock" },
+    to: "apps-security",
     action: "read",
-    subject: "providers",
-    children: [
-      {
-        title: "providers.apiProviders",
-        to: "apps-providers-api-providers",
-        action: "read",
-        subject: "providers",
-      },
-      {
-        title: "providers.gameProviders",
-        to: "apps-providers-game-providers",
-        action: "read",
-        subject: "providers",
-      },
-    ],
+    subject: "security",
   },
 
-  // 📦 NFT
+  { heading: "Ödeme Yöntemi Yönetimi" },
   {
-    title: "nft.title",
-    icon: { icon: "tabler-box" },
-    action: "read",
-    subject: "nft",
-    children: [
-      {
-        title: "nft.boxes",
-        to: "apps-box",
-        action: "read",
-        subject: "nft",
-      },
-      {
-        title: "nft.items",
-        to: "apps-box-items",
-        action: "read",
-        subject: "nft",
-      },
-    ],
-  },
-
-  // ⚙️ Platform Settings
-  {
-    title: "platform.title",
-    icon: { icon: "tabler-settings" },
+    title: "FluxKripto",
+    icon: { icon: "tabler-currency-bitcoin" },
+    to: "apps-payment-methods-fluxkripto",
     action: "read",
     subject: "platform",
-    children: [
-      {
-        title: "platform.siteSettings",
-        to: "site-settings",
-        action: "read",
-        subject: "platform",
-      },
-      {
-        title: "platform.shop",
-        to: "apps-shop",
-        action: "read",
-        subject: "shop",
-      },
-      {
-        title: "platform.banners",
-        to: "apps-banner",
-        action: "read",
-        subject: "platform",
-      },
-      {
-        title: "platform.fileManager",
-        to: "file-manager",
-        action: "read",
-        subject: "platform",
-      },
-      {
-        title: "platform.category",
-        to: "apps-category",
-        action: "read",
-        subject: "platform",
-      },
-      {
-        title: "platform.bankAccounts",
-        to: "apps-bank-accounts",
-        action: "read",
-        subject: "finance.bankAccounts",
-      },
-    ],
   },
-
-  // 💳 Payment Methods
   {
-    title: "paymentMethods.title",
+    title: "XPayment",
     icon: { icon: "tabler-credit-card" },
+    to: "apps-payment-methods-xpayments",
     action: "read",
     subject: "platform",
-    children: [
-      {
-        title: "paymentMethods.forcelabFinance",
-        to: "apps-payment-methods-forcelab-finance",
-        action: "read",
-        subject: "platform",
-      },
-      {
-        title: "paymentMethods.meelDev",
-        to: "apps-payment-methods-meeldev",
-        action: "read",
-        subject: "platform",
-      },
-      {
-        title: "paymentMethods.galaxyPay",
-        to: "apps-payment-methods-galaxypay",
-        action: "read",
-        subject: "platform",
-      },
-      {
-        title: "paymentMethods.fluxKripto",
-        to: "apps-payment-methods-fluxkripto",
-        action: "read",
-        subject: "platform",
-      },
-      {
-        title: "paymentMethods.xPayments",
-        to: "apps-payment-methods-xpayments",
-        action: "read",
-        subject: "platform",
-      },
-    ],
   },
-
-  // 🎟️ BattlePass
   {
-    title: "battlepass.title",
-    icon: { icon: "tabler-ticket" },
+    title: "Forcelab Finans",
+    icon: { icon: "tabler-building-bank" },
+    to: "apps-payment-methods-forcelab-finance",
     action: "read",
-    subject: "battlepass",
-    children: [
-      {
-        title: "battlepass.season",
-        to: "apps-battlepass",
-        action: "read",
-        subject: "battlepass",
-      },
-      {
-        title: "battlepass.missions",
-        to: "apps-battlepass-missions",
-        action: "read",
-        subject: "battlepass",
-      },
-      {
-        title: "battlepass.rewards",
-        to: "apps-battlepass-rewards",
-        action: "read",
-        subject: "battlepass",
-      },
-    ],
+    subject: "platform",
+  },
+  {
+    title: "Meeldev",
+    icon: { icon: "tabler-wallet" },
+    to: "apps-payment-methods-meeldev",
+    action: "read",
+    subject: "platform",
+  },
+  {
+    title: "GalaxyPay",
+    icon: { icon: "tabler-rocket" },
+    to: "apps-payment-methods-galaxypay",
+    action: "read",
+    subject: "platform",
   },
 
-  // 🔔 Notice
+  { heading: "Site Bildirim Yönetimi" },
   {
-    title: "notice.title",
-    icon: { icon: "tabler-bell-minus" },
+    title: "Duyuru",
+    icon: { icon: "tabler-bell-ringing" },
     to: "apps-notice",
     action: "read",
     subject: "notice",
   },
-
-  // 🔐 Rol & Yetki Yönetimi
   {
-    title: "roles.title",
-    icon: { icon: "tabler-shield" },
+    title: "Mesaj Gönder",
+    icon: { icon: "tabler-send" },
+    to: "apps-send-message",
+    action: "read",
+    subject: "notice",
+  },
+  {
+    title: "Pop-up Duyuru Banneri",
+    icon: { icon: "tabler-photo-up" },
+    to: "apps-popup-banner",
+    action: "read",
+    subject: "notice",
+  },
+
+  { heading: "Site Yönetimi" },
+  {
+    title: "Site Ayarları",
+    icon: { icon: "tabler-settings" },
+    to: "site-settings",
+    action: "read",
+    subject: "platform",
+  },
+  {
+    title: "Dosya Yöneticisi",
+    icon: { icon: "tabler-folder" },
+    to: "file-manager",
+    action: "read",
+    subject: "platform",
+  },
+
+  { heading: "Rol ve Yetki Yönetimi" },
+  {
+    title: "Rol Listesi",
+    icon: { icon: "tabler-shield-check" },
+    to: "apps-roles",
     action: "read",
     subject: "roles",
-    children: [
-      {
-        title: "roles.list",
-        to: "apps-roles",
-        action: "read",
-        subject: "roles",
-      },
-      {
-        title: "roles.adminUsers",
-        to: "apps-admin-users",
-        action: "read",
-        subject: "roles",
-      },
-    ],
+  },
+  {
+    title: "Admin Kullanıcıları",
+    icon: { icon: "tabler-user-shield" },
+    to: "apps-admin-users",
+    action: "read",
+    subject: "roles",
+  },
+
+  { heading: "CMS Yönetimi" },
+  {
+    title: "Bannerlar",
+    icon: { icon: "tabler-photo" },
+    to: "apps-banner",
+    action: "read",
+    subject: "platform",
+  },
+  {
+    title: "Kategori",
+    icon: { icon: "tabler-category" },
+    to: "apps-category",
+    action: "read",
+    subject: "platform",
+  },
+  {
+    title: "Mağaza",
+    icon: { icon: "tabler-shopping-cart" },
+    to: "apps-shop",
+    action: "read",
+    subject: "shop",
   },
 ]

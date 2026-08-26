@@ -1351,6 +1351,20 @@ router.post("/callback", async (req, res) => {
 						});
 					}
 
+					// 🎯 Deneme Bonusu hedef bakiye kontrolü. Bu route bakiyeyi
+					// `wallet.js → updateWalletBalance`'ı ATLAYARAK ham $inc ile
+					// güncellediği için o hook'tan hiç geçmez — burada AYRICA
+					// çağırmak gerekir (Çevrim Katsayısı=0 + Hedef Bakiye kullanan
+					// deneme bonusları için hem bet hem win callback'lerinde şart).
+					trialBonusService
+						.checkTrialBonusTargetBalance(user._id, balanceAfter)
+						.catch((err) =>
+							console.error(
+								"❌ Betinovi callback → deneme bonusu hedef bakiye kontrolü hatası:",
+								err.message
+							)
+						);
+
 					try {
 						if (normalizedTxnType === 0) {
 							await logEvent("bet", {

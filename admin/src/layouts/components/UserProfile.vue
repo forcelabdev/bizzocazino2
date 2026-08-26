@@ -71,6 +71,7 @@ const userProfileList = computed(() => {
 	>
 		<VAvatar
 			class="cursor-pointer"
+			:rounded="0"
 			:color="!(userData && userData.avatar) ? 'primary' : undefined"
 			:variant="!(userData && userData.avatar) ? 'tonal' : undefined"
 		>
