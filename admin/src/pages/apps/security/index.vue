@@ -386,16 +386,16 @@ const formatDate = (value) => (value ? new Date(value).toLocaleString("tr-TR") :
 						hide-default-footer
 					>
 						<template #item.timestamp="{ item }">
-							{{ formatDate(item.timestamp) }}
+							{{ formatDate(item.raw.timestamp) }}
 						</template>
 						<template #item.userId="{ item }">
-							{{ item.userId?.username || "-" }}
+							{{ item.raw.userId?.username || "-" }}
 						</template>
 						<template #item.ip="{ item }">
-							{{ item.metadata?.ip || "-" }}
+							{{ item.raw.metadata?.ip || "-" }}
 						</template>
 						<template #item.userAgent="{ item }">
-							<span class="text-caption">{{ item.metadata?.userAgent || "-" }}</span>
+							<span class="text-caption">{{ item.raw.metadata?.userAgent || "-" }}</span>
 						</template>
 					</VDataTableServer>
 
