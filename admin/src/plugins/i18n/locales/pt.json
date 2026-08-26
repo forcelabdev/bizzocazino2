@@ -277,7 +277,8 @@
         "fullName": "Nome Completo",
         "identityNumber": "Número de Identidade",
         "identityVerified": "Identidade Verificada",
-        "emailVerified": "E-mail Verificado"
+        "emailVerified": "E-mail Verificado",
+        "restrictedByRole": "Este campo é restrito pela sua função"
     },
     "communication": {
         "title": "Comunicação",

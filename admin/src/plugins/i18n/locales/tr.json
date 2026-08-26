@@ -423,13 +423,14 @@
 		"security": "Güvenlik",
 		"system": "Sistem"
 	},
-	"fields": {
-		"fullName": "Tam Ad",
-		"username": "Kullanıcı Adı",
-		"email": "E-posta",
-		"phone": "Telefon",
-		"fiatCurrency": "Fiat Para Birimi",
-		"rank": "Rütbe",
+		"fields": {
+			"fullName": "Tam Ad",
+			"username": "Kullanıcı Adı",
+			"email": "E-posta",
+			"phone": "Telefon",
+			"fiatCurrency": "Fiat Para Birimi",
+			"restrictedByRole": "Bu alan rolünüz tarafından kısıtlanmıştır",
+			"rank": "Rütbe",
 		"coin": "Coin",
 		"chain": "Zincir",
 		"type": "Tür",

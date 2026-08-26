@@ -429,6 +429,7 @@
 		"email": "Email",
 		"phone": "Phone",
 		"fiatCurrency": "Fiat Currency",
+		"restrictedByRole": "This field is restricted by your role",
 		"rank": "Rank",
 		"coin": "Coin",
 		"chain": "Chain",
