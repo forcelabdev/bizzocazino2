@@ -8461,13 +8461,21 @@ router.get("/sports-bets", checkPermission("sports.read"), async (req, res) => {
 	try {
 		const {
 			page = 1,
-			limit = 20,
 			status,
 			search,
 			userId,
+			dateFrom,
+			dateTo,
 			sortBy = "createdAt",
 			sortOrder = "desc",
 		} = req.query;
+
+		// Dışa aktarım modunda (export=true) sayfalama üst sınırı kaldırılır ve
+		// güvenli bir tavana (20.000 kayıt) kadar tüm eşleşen kayıtlar döndürülür.
+		const isExport = String(req.query.export) === "true";
+		const limit = isExport
+			? 20000
+			: Math.min(500, Math.max(1, parseInt(req.query.limit) || 20));
 
 		const query = {};
 
@@ -8492,7 +8500,16 @@ router.get("/sports-bets", checkPermission("sports.read"), async (req, res) => {
 			];
 		}
 
-		const skip = (parseInt(page) - 1) * parseInt(limit);
+		// Tarih/Saat aralığı filtresi (kupon oluşturulma tarihi üzerinden)
+		const parsedDateFrom = parseHistoryDate(dateFrom);
+		const parsedDateTo = parseHistoryDate(dateTo, { endOfSecond: true });
+		if (parsedDateFrom || parsedDateTo) {
+			query.createdAt = {};
+			if (parsedDateFrom) query.createdAt.$gte = parsedDateFrom;
+			if (parsedDateTo) query.createdAt.$lte = parsedDateTo;
+		}
+
+		const skip = (parseInt(page) - 1) * limit;
 		const sortOptions = { [sortBy]: sortOrder === "desc" ? -1 : 1 };
 
 		const [bets, total] = await Promise.all([
@@ -8500,7 +8517,7 @@ router.get("/sports-bets", checkPermission("sports.read"), async (req, res) => {
 				.populate("user", "username local.email avatar numericId")
 				.sort(sortOptions)
 				.skip(skip)
-				.limit(parseInt(limit))
+				.limit(limit)
 				.lean(),
 			SportsBet.countDocuments(query),
 		]);
@@ -8530,8 +8547,8 @@ router.get("/sports-bets", checkPermission("sports.read"), async (req, res) => {
 			data: betsWithEvents,
 			total,
 			page: parseInt(page),
-			limit: parseInt(limit),
-			totalPages: Math.ceil(total / parseInt(limit)),
+			limit,
+			totalPages: Math.ceil(total / limit),
 		});
 	} catch (error) {
 		console.error("Sports bets fetch error:", error);

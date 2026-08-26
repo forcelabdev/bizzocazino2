@@ -1,13 +1,20 @@
 <script setup>
 import axios from "@axios";
 import { VDataTableServer } from "vuetify/labs/VDataTable";
+import { exportToXlsx, autoColumnWidths } from "@/utils/exportXlsx";
+import { useNotify } from "@/composables/useNotify";
+
+const { success: notifySuccess, error: notifyError, info: notifyInfo } = useNotify();
 
 const searchQuery = ref("");
 const selectedStatus = ref();
+// Tarih/Saat aralığı filtresi — "Y-m-d H:i to Y-m-d H:i" formatında flatpickr range çıktısı
+const dateRange = ref("");
 const totalBets = ref(0);
 const bets = ref([]);
 const stats = ref(null);
 const isLoading = ref(false);
+const isExporting = ref(false);
 const selectedBet = ref(null);
 const isDetailDialogVisible = ref(false);
 
@@ -38,6 +45,15 @@ const headers = [
 	{ title: "İşlemler", key: "actions", sortable: false, width: "100px" },
 ];
 
+// flatpickr range çıktısını ("2026-08-01 00:00 to 2026-08-26 23:59") dateFrom/dateTo'ya çevirir
+const parseDateRange = () => {
+	const [dateFrom, dateTo] = String(dateRange.value || "")
+		.split("to")
+		.map((value) => value.trim());
+
+	return { dateFrom: dateFrom || undefined, dateTo: dateTo || undefined };
+};
+
 const fetchBets = async () => {
 	isLoading.value = true;
 	try {
@@ -48,11 +64,15 @@ const fetchBets = async () => {
 			? options.value.sortBy[0].order
 			: "desc";
 
+		const { dateFrom, dateTo } = parseDateRange();
+
 		const params = {
 			page: options.value.page,
 			limit: options.value.itemsPerPage,
 			sortBy,
 			sortOrder,
+			dateFrom,
+			dateTo,
 		};
 
 		if (searchQuery.value) params.search = searchQuery.value;
@@ -66,6 +86,60 @@ const fetchBets = async () => {
 		console.error("Bahisler yüklenemedi:", err);
 	} finally {
 		isLoading.value = false;
+	}
+};
+
+// Mevcut filtrelere göre tüm kayıtları xlsx olarak dışa aktarır
+const exportBets = async () => {
+	if (isExporting.value) return;
+	isExporting.value = true;
+
+	try {
+		const { dateFrom, dateTo } = parseDateRange();
+
+		const res = await axios.get("/admin/sports-bets", {
+			params: {
+				search: searchQuery.value || undefined,
+				status: selectedStatus.value || undefined,
+				dateFrom,
+				dateTo,
+				page: 1,
+				export: true,
+			},
+		});
+
+		const list = res.data?.data || [];
+
+		if (!list.length) {
+			notifyInfo("Dışa aktarılacak kayıt bulunamadı.");
+			return;
+		}
+
+		const rows = list.map((item) => ({
+			"Kupon ID": item.externalCouponId || item._id,
+			"Kullanıcı": item.user?.username || "-",
+			"Tutar": Number(item.amount) || 0,
+			"Toplam Oran": parseFloat(item.totalOdds || 1).toFixed(2),
+			"Potansiyel": Number(item.potentialWin) || 0,
+			"Kazanç": Number(item.actualWin) || 0,
+			"Maç Sayısı": item.eventCount || item.details?.length || 0,
+			"Durum": getStatusText(item.status),
+			"Tarih": formatDate(item.createdAt),
+		}));
+
+		await exportToXlsx({
+			rows,
+			fileName: "spor-bahisleri",
+			sheetName: "Spor Bahisleri",
+			columnWidths: autoColumnWidths(rows),
+		});
+
+		notifySuccess("Bahis kuponları başarıyla dışa aktarıldı.");
+	} catch (err) {
+		console.error("Bahisler dışa aktarılamadı:", err);
+		notifyError("Dışa aktarım sırasında bir hata oluştu.");
+	} finally {
+		isExporting.value = false;
 	}
 };
 
@@ -125,7 +199,7 @@ onMounted(() => {
 });
 
 watchEffect(fetchBets);
-watch([selectedStatus, searchQuery], () => {
+watch([selectedStatus, searchQuery, dateRange], () => {
 	options.value.page = 1;
 	fetchBets();
 });
@@ -236,7 +310,7 @@ watch([selectedStatus, searchQuery], () => {
 		<VCard class="mb-6">
 			<VCardText>
 				<VRow>
-					<VCol cols="12" sm="4">
+					<VCol cols="12" sm="3">
 						<VTextField
 							v-model="searchQuery"
 							placeholder="Kupon ID ara..."
@@ -245,7 +319,7 @@ watch([selectedStatus, searchQuery], () => {
 							clearable
 						/>
 					</VCol>
-					<VCol cols="12" sm="4">
+					<VCol cols="12" sm="3">
 						<VSelect
 							v-model="selectedStatus"
 							:items="statusOptions"
@@ -256,10 +330,28 @@ watch([selectedStatus, searchQuery], () => {
 							clearable
 						/>
 					</VCol>
-					<VCol cols="12" sm="4" class="d-flex align-center">
+					<VCol cols="12" sm="3">
+						<AppDateTimePicker
+							v-model="dateRange"
+							placeholder="Tarih/Saat Aralığı Filtrele"
+							density="compact"
+							:config="{ mode: 'range', dateFormat: 'Y-m-d H:i', enableTime: true, time_24hr: true }"
+							clearable
+						/>
+					</VCol>
+					<VCol cols="12" sm="3" class="d-flex align-center gap-2">
 						<VBtn color="primary" @click="fetchBets" :loading="isLoading">
 							<VIcon icon="tabler-refresh" class="me-2" />
 							Yenile
+						</VBtn>
+						<VBtn
+							color="success"
+							variant="tonal"
+							:loading="isExporting"
+							@click="exportBets"
+						>
+							<VIcon icon="tabler-file-spreadsheet" class="me-2" />
+							Excel'e Aktar
 						</VBtn>
 					</VCol>
 				</VRow>
