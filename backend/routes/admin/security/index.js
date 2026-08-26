@@ -5,6 +5,9 @@ const User = require("../../../database/models/User");
 const AdminActionLog = require("../../../database/models/AdminActionLog");
 const UserActionLog = require("../../../database/models/UserActionLog");
 const { checkPermission } = require("../../../middleware/permission");
+const {
+	findSuspiciousManualCredits,
+} = require("../../../services/suspiciousManualCreditService");
 
 const MIN_COLLISION_MEMBERS = 2;
 
@@ -243,5 +246,47 @@ router.get("/activity-logs", checkPermission("security.read"), async (req, res) 
 		res.status(500).json({ success: false, message: "Aktivite logları alınırken bir hata oluştu." });
 	}
 });
+
+/**
+ * GET /admin/security/suspicious-manual-credits
+ *
+ * Reddedilen/başarısız yatırım denemeleriyle, sonrasında aynı kullanıcıya
+ * yapılan manuel bakiye/bonus kredilerini (AdminManualAdjustment) tutar ve
+ * zaman penceresi bazında eşleştirir.
+ *
+ * ÖNEMLİ: Bu bir suistimal KANITI değildir — sadece incelenmesi gereken bir
+ * korelasyon sinyalidir. Meşru senaryolar da (örn. gerçek bir ödeme arızası
+ * sonrası müşteriye iyi niyetli telafi) aynı deseni üretebilir. Otomatik
+ * hiçbir engelleme/işlem yapılmaz, sadece görünürlük sağlanır.
+ */
+router.get(
+	"/suspicious-manual-credits",
+	checkPermission("security.read"),
+	async (req, res) => {
+		try {
+			const {
+				page = 1,
+				limit = 20,
+				lookbackDays = 30,
+				minRejections = 2,
+			} = req.query;
+
+			const data = await findSuspiciousManualCredits({
+				page,
+				limit,
+				lookbackDays,
+				minRejections,
+			});
+
+			res.json({ success: true, ...data });
+		} catch (err) {
+			console.error("suspicious-manual-credits hata:", err);
+			res.status(500).json({
+				success: false,
+				message: "Şüpheli manuel kredi taraması yapılırken bir hata oluştu.",
+			});
+		}
+	}
+);
 
 module.exports = router;

@@ -5,6 +5,7 @@ import {
 	getIpCollisions,
 	getSystemLogs,
 	getActivityLogs,
+	getSuspiciousManualCredits,
 } from "@/services/securityService";
 
 const activeTab = ref("ip-collisions");
@@ -13,6 +14,7 @@ const tabs = [
 	{ value: "ip-collisions", title: "İp Çakışmaları", icon: "tabler-network" },
 	{ value: "system-logs", title: "Sistem Ayrıntıları", icon: "tabler-server-cog" },
 	{ value: "activity-logs", title: "Log", icon: "tabler-list-details" },
+	{ value: "suspicious-manual-credits", title: "Şüpheli Manuel Krediler", icon: "tabler-alert-hexagon" },
 ];
 
 const errorMessage = ref("");
@@ -163,15 +165,65 @@ const applyCollisionsSearch = () => {
 	fetchCollisions();
 };
 
+// ─────────────────────────────────────────────────────────
+// Şüpheli Manuel Krediler
+// (Reddedilen/başarısız yatırım ↔ sonrasında gelen manuel bakiye/bonus
+// kredisi korelasyonu. KANIT DEĞİLDİR — sadece inceleme sinyalidir.)
+// ─────────────────────────────────────────────────────────
+const suspiciousCredits = ref([]);
+const suspiciousCreditsTotal = ref(0);
+const suspiciousCreditsLoading = ref(false);
+const suspiciousCreditsOptions = ref({ page: 1, itemsPerPage: 20 });
+const suspiciousCreditsFilters = ref({ lookbackDays: 30, minRejections: 2 });
+
+const lookbackDaysItems = [
+	{ title: "Son 7 gün", value: 7 },
+	{ title: "Son 14 gün", value: 14 },
+	{ title: "Son 30 gün", value: 30 },
+	{ title: "Son 60 gün", value: 60 },
+	{ title: "Son 90 gün", value: 90 },
+];
+
+const minRejectionsItems = [
+	{ title: "2 veya daha fazla", value: 2 },
+	{ title: "3 veya daha fazla", value: 3 },
+	{ title: "5 veya daha fazla", value: 5 },
+];
+
+const fetchSuspiciousCredits = async () => {
+	suspiciousCreditsLoading.value = true;
+	errorMessage.value = "";
+	try {
+		const res = await getSuspiciousManualCredits({
+			page: suspiciousCreditsOptions.value.page,
+			limit: suspiciousCreditsOptions.value.itemsPerPage,
+			...suspiciousCreditsFilters.value,
+		});
+		suspiciousCredits.value = res.results || [];
+		suspiciousCreditsTotal.value = res.pagination?.total || suspiciousCredits.value.length;
+	} catch (err) {
+		errorMessage.value = err?.response?.data?.message || "Şüpheli manuel krediler alınamadı.";
+	} finally {
+		suspiciousCreditsLoading.value = false;
+	}
+};
+
+const applySuspiciousCreditsFilters = () => {
+	suspiciousCreditsOptions.value.page = 1;
+	fetchSuspiciousCredits();
+};
+
 watch(activeTab, (tab) => {
 	if (tab === "ip-collisions" && collisions.value.length === 0) fetchCollisions();
 	if (tab === "system-logs" && systemLogs.value.length === 0) fetchSystemLogs();
 	if (tab === "activity-logs" && activityLogs.value.length === 0) fetchActivityLogs();
+	if (tab === "suspicious-manual-credits" && suspiciousCredits.value.length === 0) fetchSuspiciousCredits();
 });
 
 onMounted(fetchCollisions);
 
 const formatDate = (value) => (value ? new Date(value).toLocaleString("tr-TR") : "-");
+const formatAmount = (value) => `${Number(value || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} TL`;
 </script>
 
 <template>
@@ -411,6 +463,88 @@ const formatDate = (value) => (value ? new Date(value).toLocaleString("tr-TR") :
 						</template>
 						<template #item.userAgent="{ item }">
 							<span class="text-caption">{{ item.raw.metadata?.userAgent || "-" }}</span>
+						</template>
+					</VDataTableServer>
+				</div>
+
+				<!-- Şüpheli Manuel Krediler -->
+				<div v-if="activeTab === 'suspicious-manual-credits'">
+					<VAlert type="warning" variant="tonal" density="compact" class="mb-4">
+						<strong>Bu bir suistimal kanıtı değildir.</strong> Bir kullanıcının reddedilen/
+						başarısız yatırım denemesi(leri) ile, sonrasında kendisine yapılan manuel
+						bakiye/bonus kredisinin tutar ve tarih olarak örtüştüğü durumlar burada
+						listelenir. Bu, "reddedilen ödemeyi elden alıp sisteme bonus adı altında geri
+						yükleme" deseniyle de meşru bir "arıza telafisi" ile aynı görünebilir —
+						her kayıt tek tek incelenmelidir.
+					</VAlert>
+					<VRow class="mb-4" align="center">
+						<VCol cols="12" md="3">
+							<VSelect
+								v-model="suspiciousCreditsFilters.lookbackDays"
+								:items="lookbackDaysItems"
+								label="Taranacak süre"
+								density="compact"
+							/>
+						</VCol>
+						<VCol cols="12" md="3">
+							<VSelect
+								v-model="suspiciousCreditsFilters.minRejections"
+								:items="minRejectionsItems"
+								label="Minimum red sayısı"
+								density="compact"
+							/>
+						</VCol>
+						<VCol cols="12" md="2">
+							<VBtn color="primary" :loading="suspiciousCreditsLoading" block @click="applySuspiciousCreditsFilters">
+								Tara
+							</VBtn>
+						</VCol>
+					</VRow>
+
+					<VDataTableServer
+						v-model:page="suspiciousCreditsOptions.page"
+						v-model:items-per-page="suspiciousCreditsOptions.itemsPerPage"
+						:headers="[
+							{ title: 'Kullanıcı', key: 'user' },
+							{ title: 'Reddedilen Yatırımlar', key: 'rejected' },
+							{ title: 'Eşleşen Manuel Kredi', key: 'match' },
+						]"
+						:items="suspiciousCredits"
+						:items-length="suspiciousCreditsTotal"
+						:loading="suspiciousCreditsLoading"
+					>
+						<template #item.user="{ item }">
+							<div class="font-weight-medium">{{ item.raw.targetSnapshot?.username || item.raw.userId }}</div>
+							<div class="text-caption text-medium-emphasis">{{ item.raw.targetSnapshot?.email }}</div>
+						</template>
+						<template #item.rejected="{ item }">
+							<div v-for="(dep, idx) in item.raw.rejectedDeposits" :key="idx" class="mb-1">
+								<VChip size="small" color="error" variant="tonal" class="mr-1">
+									{{ dep.provider }}
+								</VChip>
+								<span class="text-caption">{{ formatAmount(dep.amount) }} · {{ formatDate(dep.failedAt) }}</span>
+							</div>
+						</template>
+						<template #item.match="{ item }">
+							<div v-for="(m, idx) in item.raw.matches" :key="idx" class="mb-2">
+								<VChip
+									size="small"
+									:color="m.amountDiffRatio === 0 ? 'error' : 'warning'"
+									variant="elevated"
+									class="mr-1"
+								>
+									{{ formatAmount(m.creditAmount) }} ({{ m.creditKind === 'bonus' ? 'Bonus' : 'Bakiye' }})
+								</VChip>
+								<div class="text-caption text-medium-emphasis">
+									İşlemi yapan: <strong>{{ m.actorSnapshot?.username || "-" }}</strong>
+									· {{ formatDate(m.creditCreatedAt) }}
+									· Reddedilenden {{ m.daysDiff }} gün sonra
+									· Tutar farkı %{{ (m.amountDiffRatio * 100).toFixed(1) }}
+								</div>
+								<div v-if="m.creditNote" class="text-caption text-medium-emphasis">
+									Not: {{ m.creditNote }}
+								</div>
+							</div>
 						</template>
 					</VDataTableServer>
 				</div>

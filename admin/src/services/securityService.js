@@ -7,6 +7,7 @@ import axios from "@/plugins/axios";
  * - IP çakışmaları (aynı IP'yi kullanan farklı üyeler)
  * - Sistem Ayrıntıları (admin işlem/denetim logu)
  * - Log (oyuncu giriş/kayıt aktivite logu)
+ * - Şüpheli Manuel Krediler (reddedilen yatırım ↔ manuel kredi korelasyonu)
  */
 
 export const getIpCollisions = async (params = {}) => {
@@ -24,8 +25,14 @@ export const getActivityLogs = async (params = {}) => {
 	return data;
 };
 
+export const getSuspiciousManualCredits = async (params = {}) => {
+	const { data } = await axios.get("/admin/security/suspicious-manual-credits", { params });
+	return data;
+};
+
 export default {
 	getIpCollisions,
 	getSystemLogs,
 	getActivityLogs,
+	getSuspiciousManualCredits,
 };
