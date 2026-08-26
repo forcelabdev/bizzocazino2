@@ -25,6 +25,8 @@ const hideTitleAndBadge = isVerticalNavMini(windowWidth);
 		<Component
 			:is="item.to ? 'RouterLink' : 'a'"
 			v-bind="getComputedNavLinkToProp(item)"
+			active-class=""
+			exact-active-class=""
 			:class="{
 				'router-link-active router-link-exact-active': isNavLinkActive(
 					item,
