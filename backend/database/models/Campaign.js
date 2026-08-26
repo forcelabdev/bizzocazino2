@@ -44,7 +44,7 @@ const campaignSchema = new mongoose.Schema({
 		default: "auto",
 	},
 
-	// Kullanıcıya verilecek Rivo bakiyesi
+	// Kullanıcıya verilecek bakiye
 	rewardAmount: { type: Number, default: 0, min: 0 },
 
 	// Maksimum kullanım limiti (0 = sınırsız)

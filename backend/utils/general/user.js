@@ -179,25 +179,25 @@ const generalUserGetRakeback = (user) => {
 	let rakeback = { name: null, percentage: 0 };
 
 	if (xp >= 100 && xp < 200) {
-		rakeback = { name: "Rivo VIP1", percentage: 0.002 }; // %0.2
+		rakeback = { name: "VIP1", percentage: 0.002 }; // %0.2
 	} else if (xp >= 200 && xp < 300) {
-		rakeback = { name: "Rivo VIP2", percentage: 0.0025 }; // %0.25
+		rakeback = { name: "VIP2", percentage: 0.0025 }; // %0.25
 	} else if (xp >= 300 && xp < 500) {
-		rakeback = { name: "Rivo VIP3", percentage: 0.003 }; // %0.3
+		rakeback = { name: "VIP3", percentage: 0.003 }; // %0.3
 	} else if (xp >= 500 && xp < 700) {
-		rakeback = { name: "Rivo VIP4", percentage: 0.004 }; // %0.4
+		rakeback = { name: "VIP4", percentage: 0.004 }; // %0.4
 	} else if (xp >= 700 && xp < 1500) {
-		rakeback = { name: "Rivo VIP5", percentage: 0.0045 }; // %0.45
+		rakeback = { name: "VIP5", percentage: 0.0045 }; // %0.45
 	} else if (xp >= 1500 && xp < 3000) {
-		rakeback = { name: "Rivo VIP6", percentage: 0.005 }; // %0.5
+		rakeback = { name: "VIP6", percentage: 0.005 }; // %0.5
 	} else if (xp >= 3000 && xp < 5000) {
-		rakeback = { name: "Rivo VIP7", percentage: 0.006 }; // %0.6
+		rakeback = { name: "VIP7", percentage: 0.006 }; // %0.6
 	} else if (xp >= 5000 && xp < 10000) {
-		rakeback = { name: "Rivo VIP8", percentage: 0.0065 }; // %0.65
+		rakeback = { name: "VIP8", percentage: 0.0065 }; // %0.65
 	} else if (xp >= 10000 && xp < 50000) {
-		rakeback = { name: "Rivo VIP9", percentage: 0.007 }; // %0.7
+		rakeback = { name: "VIP9", percentage: 0.007 }; // %0.7
 	} else if (xp >= 50000) {
-		rakeback = { name: "Rivo VIP10", percentage: 0.0085 }; // %0.85
+		rakeback = { name: "VIP10", percentage: 0.0085 }; // %0.85
 	}
 
 	return rakeback;

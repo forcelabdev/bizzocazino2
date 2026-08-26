@@ -12,10 +12,10 @@ exports.getSettings = async (req, res) => {
 
     // 🧠 Default'ları her ihtimale karşı garanti et
     const responseData = {
-      start_message: settings.start_message || '🎰 Merhaba! Rivo Casino Telegram botuna hoş geldin.\n\nBuradan canlı destek alabilir, kampanyaları görebilir veya özel linklere ulaşabilirsin.',
+      start_message: settings.start_message || '🎰 Merhaba! Casino Telegram botuna hoş geldin.\n\nBuradan canlı destek alabilir, kampanyaları görebilir veya özel linklere ulaşabilirsin.',
       support_message: settings.support_message || '💬 Destek ekibimiz kısa süre içinde sizinle iletişime geçecektir.',
       promotions_message: settings.promotions_message || '🎯 Güncel Kampanyalar:\n\n1️⃣ %50 İlk Yatırım Bonusu 💰\n2️⃣ %3 Günlük Rakeback 🔁\n3️⃣ Slot Turnuvası Devam Ediyor 🎰',
-      casino_link_message: settings.casino_link_message || '🌐 https://rivo.games adresinden hemen giriş yapabilirsin.',
+      casino_link_message: settings.casino_link_message || '🌐 https://sizin-alan-adiniz.com adresinden hemen giriş yapabilirsin.',
       updated_at: settings.updated_at || new Date()
     };
 
