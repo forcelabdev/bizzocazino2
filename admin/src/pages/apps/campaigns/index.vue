@@ -496,7 +496,7 @@ watch(() => pagination.value.page, fetchCampaigns);
 		</VCard>
 
 		<!-- Create/Edit Dialog -->
-		<VDialog v-model="dialogOpen" max-width="800" persistent>
+		<VDialog v-model="dialogOpen" max-width="960" persistent scrollable>
 			<VCard>
 				<VCardTitle>
 					{{ isEditing ? t("campaign.edit") : t("campaign.add") }}
@@ -697,15 +697,10 @@ watch(() => pagination.value.page, fetchCampaigns);
 								</VRow>
 							</VCol>
 
-							<!-- Terms (HTML) -->
+							<!-- Terms (Basit Mod / HTML) -->
 							<VCol cols="12">
 								<VDivider class="my-2" />
-								<VTextarea
-									v-model="form.terms"
-									:label="t('campaign.terms')"
-									:hint="t('campaign.termsHint')"
-									rows="4"
-								/>
+								<CampaignTermsBuilder v-model="form.terms" />
 							</VCol>
 						</VRow>
 					</VForm>

@@ -29,6 +29,7 @@ declare module '@vue/runtime-core' {
     AppTextField: typeof import('./src/@core/components/app-form-elements/AppTextField.vue')['default']
     BetinoviReportPage: typeof import('./src/components/betinovi/BetinoviReportPage.vue')['default']
     BuyNow: typeof import('./src/@core/components/BuyNow.vue')['default']
+    CampaignTermsBuilder: typeof import('./src/components/campaigns/CampaignTermsBuilder.vue')['default']
     CardAddEditDialog: typeof import('./src/components/dialogs/CardAddEditDialog.vue')['default']
     CardStatisticsHorizontal: typeof import('./src/@core/components/cards/CardStatisticsHorizontal.vue')['default']
     CardStatisticsVertical: typeof import('./src/@core/components/cards/CardStatisticsVertical.vue')['default']
