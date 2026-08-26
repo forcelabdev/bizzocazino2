@@ -85,6 +85,10 @@ const finalizeUserLoginSession = async ({ userId, req }) => {
 
 	await logEvent("login", {
 		userId: updatedUser._id,
+		metadata: {
+			ip: userIp,
+			userAgent: req?.headers?.["user-agent"] || "",
+		},
 	});
 
 	await updateMissionProgress("login", {

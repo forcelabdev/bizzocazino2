@@ -216,9 +216,18 @@ const {
 	checkPermission,
 	hasPermission,
 } = require("../../middleware/permission");
+const { adminOriginGuard } = require("../../middleware/adminOriginGuard");
+const { adminActionLogger } = require("../../middleware/adminActionLogger");
 
 // 🔐 All admin endpoints require an admin JWT
 router.use(authenticateAdmin);
+// 🔐 Reject + log state-changing requests that didn't come from the admin
+// panel itself (e.g. a valid token replayed via Postman/curl/fetch script).
+router.use(adminOriginGuard);
+// 🧾 Record every state-changing request that passed the checks above, so
+// "who did what, from where, when" is always available without relying on
+// any individual route to remember to log it.
+router.use(adminActionLogger);
 const {
 	getActiveWallet,
 	updateUserBalance,
@@ -10154,7 +10163,7 @@ router.put(
 				message: "Custom JavaScript başarıyla güncellendi.",
 			});
 		} catch (error) {
-			console.error("Custom JS güncellenirken hata:", error);
+			console.error("Custom JS g��ncellenirken hata:", error);
 			res.status(500).json({
 				success: false,
 				error: "Custom JavaScript güncellenirken bir hata oluştu.",
@@ -11098,7 +11107,7 @@ router.put(
 	},
 );
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ═════════════════════════════════���═════════════════════════════════════════
 // Forcelab Finance Admin Endpoints
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -12283,5 +12292,9 @@ router.post("/notifications/read-all", async (req, res) => {
 		res.status(500).json({ success: false, message: "Bildirimler güncellenemedi." });
 	}
 });
+
+// 🔐 Güvenlik Ve Risk Yönetimi: IP çakışmaları, sistem/admin denetim logu,
+// oyuncu aktivite logu
+router.use("/security", require("./security/index"));
 
 module.exports = router;

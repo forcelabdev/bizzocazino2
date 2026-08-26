@@ -800,6 +800,22 @@ const defaultPermissions = [
 		action: "manage",
 		group: "Roller",
 	},
+
+	// Güvenlik Ve Risk Yönetimi
+	{
+		code: "security.read",
+		name: "Güvenlik Ve Risk Yönetimi Görüntüle",
+		resource: "security",
+		action: "read",
+		group: "Güvenlik",
+	},
+	{
+		code: "security.manage",
+		name: "Güvenlik Ve Risk Yönetimi Tam Yetki",
+		resource: "security",
+		action: "manage",
+		group: "Güvenlik",
+	},
 ];
 
 // Varsayılan roller
@@ -851,6 +867,7 @@ const defaultRoles = [
 			"notice.update",
 			"communication.read",
 			"reports.read",
+			"security.read",
 		],
 	},
 	{
@@ -968,6 +985,7 @@ const defaultRoles = [
 			"platform.read",
 			"notice.read",
 			"reports.read",
+			"security.read",
 		],
 	},
 ];
