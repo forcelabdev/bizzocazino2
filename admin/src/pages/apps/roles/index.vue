@@ -76,6 +76,7 @@ const resourceLabels = {
 	reports: "Raporlar",
 	controlGame: "ControlGame",
 	roles: "Roller",
+	security: "Güvenlik",
 	// Turkish keys (from backend group field)
 	finans: "Finans",
 	oyunlar: "Oyunlar",
@@ -87,6 +88,7 @@ const resourceLabels = {
 	raporlar: "Raporlar",
 	controlgame: "ControlGame",
 	roller: "Roller",
+	güvenlik: "Güvenlik",
 };
 
 const resolveGroupLabel = (key) => {

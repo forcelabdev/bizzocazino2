@@ -283,6 +283,15 @@ export default [
     subject: "controlGame",
   },
 
+  { heading: "Güvenlik Ve Risk Yönetimi" },
+  {
+    title: "Güvenlik Ve Risk Yönetimi",
+    icon: { icon: "tabler-shield-lock" },
+    to: "apps-security",
+    action: "read",
+    subject: "security",
+  },
+
   { heading: "Ödeme Yöntemi Yönetimi" },
   {
     title: "FluxKripto",
