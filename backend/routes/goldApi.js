@@ -361,16 +361,41 @@ router.post("/", async (req, res) => {
 				} else if (game_type === "MN") {
 					// Mini game (ör. SPRIBE Aviator) — doküman "MN" anahtarını kullanıyor.
 					gameDetails = MN;
-				} else {
-					// Bilinmeyen/yeni bir game_type gelse bile, doküman "detay objesinin
-					// anahtarı game_type ile aynıdır" dediği için son bir çare olarak
-					// body[game_type]'ı deniyoruz (ileride eklenecek türler için güvenli).
-					gameDetails = (game_type && req.body[game_type]) || null;
-				}
+					} else {
+						// Bilinmeyen/yeni bir game_type gelse bile, doküman "detay objesinin
+						// anahtarı game_type ile aynıdır" dediği için son bir çare olarak
+						// body[game_type]'ı deniyoruz (ileride eklenecek türler için güvenli).
+						gameDetails = (game_type && req.body[game_type]) || null;
+					}
 
-				// ============================================================
-				// 2.5) SB (sportsbook) "info" alanını EN BAŞTA çözümle
-				// ============================================================
+					// ============================================================
+					// 2.6) İşlem alanlarını EN BAŞTA çözümle
+					// ============================================================
+					// KÖK NEDEN (TDZ / "Cannot access 'txn_id' before initialization"):
+					// Aşağıdaki 2.5 SB bloğu (couponCode = ... || txn_id) ve
+					// applySportsBetSettlement, txn_id/txn_type gibi alanları KULLANIYOR;
+					// ancak bu alanlar daha önce dosyanın ilerisinde (adım 3) "let" ile
+					// tanımlıydı. Bu yüzden her transaction isteği, henüz initialize
+					// edilmemiş "txn_id"e erişince ReferenceError ile ÇÖKÜYOR ve
+					// sağlayıcı panelinde "Network Error" görünüyordu. Çözüm: bu alanları
+					// ilk kullanımdan ÖNCE burada çözümlemek.
+					let provider_code = gameDetails?.provider_code || null;
+					let game_code = gameDetails?.game_code || null;
+					let bet_money = gameDetails?.bet_money || gameDetails?.betMoney || gameDetails?.amount || gameDetails?.stake || 0;
+					let win_money = gameDetails?.win_money || gameDetails?.winMoney || gameDetails?.winAmount || gameDetails?.profit || gameDetails?.payout || 0;
+					let txn_id = gameDetails?.txn_id || gameDetails?.transactionId || gameDetails?.txnId || null;
+					// ÖNEMLİ (sağlayıcı dokümantasyonu): "txn_id" bir BAHSE (round) aittir ve
+					// o bahsin ürettiği TÜM transaction'larda (debit + birden fazla credit)
+					// AYNIDIR — transaction başına benzersiz DEĞİLDİR. Gerçek benzersiz alan
+					// "txn_id_v2"dir ve mükerrer (idempotency) kontrolü SADECE bunun üzerinden
+					// yapılmalıdır.
+					let txn_id_v2 = gameDetails?.txn_id_v2 || gameDetails?.txnIdV2 || gameDetails?.transactionIdV2 || null;
+					let txn_type = gameDetails?.txn_type || gameDetails?.transactionType || gameDetails?.txnType || null;
+					let round_id = gameDetails?.round_id || gameDetails?.roundId || null;
+
+					// ============================================================
+					// 2.5) SB (sportsbook) "info" alanını EN BAŞTA çözümle
+					// ============================================================
 				// KÖK NEDEN: Nexus, spor bahsinin SONUÇ bildirimini (won/lost/void)
 				// genellikle bahsin İLK "debit" isteğiyle AYNI txn_id üzerinden
 				// "credit" olarak gönderiyor (bkz. üretim loglarında canlı rulet
@@ -517,26 +542,13 @@ router.post("/", async (req, res) => {
 					}
 				};
 
-				// ============================================================
-				// 3) Extract fields with proper fallbacks for SB
-				// ============================================================
-				let provider_code = gameDetails?.provider_code || null;
-				let game_code = gameDetails?.game_code || null;
-				let bet_money = gameDetails?.bet_money || gameDetails?.betMoney || gameDetails?.amount || gameDetails?.stake || 0;
-				let win_money = gameDetails?.win_money || gameDetails?.winMoney || gameDetails?.winAmount || gameDetails?.profit || gameDetails?.payout || 0;
-					let txn_id = gameDetails?.txn_id || gameDetails?.transactionId || gameDetails?.txnId || null;
-					// ÖNEMLİ (sağlayıcı dokümantasyonu): "txn_id" bir BAHSE (round) aittir ve
-					// o bahsin ürettiği TÜM transaction'larda (debit + birden fazla credit)
-					// AYNIDIR — transaction başına benzersiz DEĞİLDİR. Gerçek benzersiz alan
-					// "txn_id_v2"dir ve mükerrer (idempotency) kontrolü SADECE bunun üzerinden
-					// yapılmalıdır.
-					let txn_id_v2 = gameDetails?.txn_id_v2 || gameDetails?.txnIdV2 || gameDetails?.transactionIdV2 || null;
-					let txn_type = gameDetails?.txn_type || gameDetails?.transactionType || gameDetails?.txnType || null;
-					let round_id = gameDetails?.round_id || gameDetails?.roundId || null;
+					// ============================================================
+					// 3) (Alan çıkarımı yukarıda, adım 2.6'da yapıldı — TDZ fix)
+					// ============================================================
 
-				// ============================================================
-				// 4) VALIDATION - FIXED: SB support added
-				// ============================================================
+					// ============================================================
+					// 4) VALIDATION - FIXED: SB support added
+					// ============================================================
 				const betMoneyNum = parseFloat(bet_money) || 0;
 				const winMoneyNum = parseFloat(win_money) || 0;
 
