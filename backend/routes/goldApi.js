@@ -297,6 +297,32 @@ router.post("/", async (req, res) => {
 
 			case "transaction": {
 				// ============================================================
+				// 0) KÖK NEDEN DÜZELTMESİ — "Network Error" / bahsin bakiyeye
+				//    yansımaması:
+				// Nexus (ve genel olarak cüzdan-callback aggregatörleri) HTTP
+				// durum kodunu bir "ulaşılabilirlik/transport" sinyali gibi
+				// yorumlar: 200 DIŞINDAKİ HER yanıtı (400/403/404/500) "Network
+				// Error" sayar ve gövdedeki {status, msg} alanını HİÇ OKUMAZ.
+				// Eski kod iş kuralı redlerini (INSUFFICIENT_USER_FUNDS,
+				// USER_NOT_FOUND, WALLET_NOT_FOUND, bet-access blok, kategori
+				// limiti) ve beklenmedik hataları 4xx/5xx ile dönüyordu; bu
+				// yüzden sağlayıcı panelinde tüm işlemler "Network Error"
+				// görünüyor, oyun kendi iç bakiyesiyle devam ederken bizim
+				// tarafta bahis ne düşüyor ne de kazanç ekleniyordu.
+				//
+				// Doküman hem başarı hem başarısızlık yanıtını HTTP kodu
+				// belirtmeden saf JSON gövde olarak tanımlar (Success:
+				// {status:1,...} / Failure: {status:0,msg}) — yani bu callback
+				// HER ZAMAN 200 dönmeli, başarı/başarısızlık ayrımı yalnızca
+				// gövdedeki "status" (1/0) ile yapılmalıdır.
+				//
+				// Bunu tek noktadan ve gelecekteki tüm dönüş yolları için de
+				// garanti altına almak adına, bu case boyunca res.status()'u
+				// etkisiz hale getiriyoruz; böylece mevcut "res.status(4xx).json"
+				// çağrıları gövdeyi aynen koruyup HTTP 200 ile gider.
+				res.status = () => res;
+
+				// ============================================================
 				// 1) Log the entire incoming request for debugging
 				// ============================================================
 				console.log("============== NEXUS TRANSACTION ==============");
@@ -314,6 +340,7 @@ router.post("/", async (req, res) => {
 					slot,
 					live,
 					SB,
+					MN,
 					// ÖNEMLİ: Nexus, spor bahisi maç/market detaylarını ("betslips")
 					// "SB" objesinin İÇİNDE değil, request body'nin KÖK seviyesinde
 					// "info" adlı ayrı bir alanda (JSON string olarak) gönderiyor.
@@ -331,8 +358,14 @@ router.post("/", async (req, res) => {
 					gameDetails = slot;
 				} else if (game_type === "live") {
 					gameDetails = live;
+				} else if (game_type === "MN") {
+					// Mini game (ör. SPRIBE Aviator) — doküman "MN" anahtarını kullanıyor.
+					gameDetails = MN;
 				} else {
-					gameDetails = null;
+					// Bilinmeyen/yeni bir game_type gelse bile, doküman "detay objesinin
+					// anahtarı game_type ile aynıdır" dediği için son bir çare olarak
+					// body[game_type]'ı deniyoruz (ileride eklenecek türler için güvenli).
+					gameDetails = (game_type && req.body[game_type]) || null;
 				}
 
 				// ============================================================
