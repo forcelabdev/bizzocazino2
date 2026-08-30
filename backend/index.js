@@ -19,18 +19,49 @@ const { getClientIp } = require("./utils/ip");
 const app = express();
 const server = http.createServer(app);
 
-const allowedOrigins = [
+// KÖK NEDEN DÜZELTMESİ ("bağlantı hatası" / trial-bonus ve diğer isteklerde
+// CORS engeli): Eski kod SADECE process.env.ALLOWED_ORIGINS'i okuyordu; ancak
+// harici frontend origin'i (bizzocasino168.com) ALLOWED_ORIGINS_2/_4 gibi
+// numaralı değişkenlerde tanımlıydı ve hiç okunmuyordu. Ayrıca eşleştirme tam
+// string (===) ile yapıldığı için "https://site.com" ile "https://site.com/"
+// (sonda slash) veya "www." önekli/öneksiz varyantlar birbirine uymuyor,
+// tarayıcı preflight'ta Access-Control-Allow-Origin alamayınca isteği bloke
+// edip axios'ta "bağlantı hatası" gösteriyordu.
+//
+// Çözüm: TÜM ALLOWED_ORIGINS* değişkenlerini birleştir, origin'leri normalize
+// et (küçük harf + sondaki "/" kaldır) ve normalize edilmiş haliyle karşılaştır.
+const rawAllowedOrigins = [
 	process.env.SERVER_FRONTEND_URL, // http://localhost:8080
 	process.env.SERVER_ADMIN_URL, // http://localhost:5173
-	...((process.env.ALLOWED_ORIGINS || "").split(",").map((o) => o.trim()) ||
-		[]),
+	// process.env üzerindeki ALLOWED_ORIGINS ve ALLOWED_ORIGINS_2, _3, _4 ...
+	// biçimindeki tüm varyantları topla.
+	...Object.keys(process.env)
+		.filter((k) => /^ALLOWED_ORIGINS(_\d+)?$/.test(k))
+		.flatMap((k) => (process.env[k] || "").split(",")),
 ];
+
+const normalizeOrigin = (o) =>
+	(o || "").toString().trim().toLowerCase().replace(/\/+$/, "");
+
+// Hem ham (Socket.IO gibi bazı yerler ham liste bekler) hem de hızlı arama için
+// normalize edilmiş bir Set tutuyoruz.
+const allowedOrigins = [...new Set(rawAllowedOrigins.map((o) => (o || "").trim()).filter(Boolean))];
+const allowedOriginSet = new Set(
+	allowedOrigins.map(normalizeOrigin).filter(Boolean)
+);
+
+const isOriginAllowed = (origin) => {
+	if (!origin) return true; // server-to-server (Nexus callback vb.) — origin yok
+	return allowedOriginSet.has(normalizeOrigin(origin));
+};
+
 app.use(
 	cors({
 		origin: function (origin, callback) {
-			if (!origin || allowedOrigins.includes(origin)) {
+			if (isOriginAllowed(origin)) {
 				callback(null, true);
 			} else {
+				console.warn("[CORS] Reddedilen origin:", origin);
 				callback(null, false);
 			}
 		},
