@@ -50,16 +50,30 @@ const allowedOriginSet = new Set(
 	allowedOrigins.map(normalizeOrigin).filter(Boolean)
 );
 
-const isOriginAllowed = (origin) => {
+// ÖNEMLİ: Bazı proxy zincirleri (Cloudflare + nginx) "Origin" başlığını iki kez
+// ekleyip Express'te tek bir string olarak VİRGÜLLE birleştirebiliyor:
+//   "https://www.bizzocasino168.com, https://www.bizzocasino.com"
+// Bu yüzden gelen origin'i parçalara ayırıp HERHANGİ BİR parçası izinliyse kabul
+// ediyor ve geri yansıtılacak olarak o TEK (normalize edilmemiş, orijinal) parçayı
+// döndürüyoruz. Ham birleşik string'i yansıtmak geçersiz bir
+// Access-Control-Allow-Origin üretir ve tarayıcı isteği reddeder.
+const resolveAllowedOrigin = (origin) => {
 	if (!origin) return true; // server-to-server (Nexus callback vb.) — origin yok
-	return allowedOriginSet.has(normalizeOrigin(origin));
+	const parts = origin.split(",").map((p) => p.trim()).filter(Boolean);
+	for (const part of parts) {
+		if (allowedOriginSet.has(normalizeOrigin(part))) {
+			return part; // eşleşen tekil origin'i geri yansıt
+		}
+	}
+	return null; // hiçbir parça izinli değil
 };
 
 app.use(
 	cors({
 		origin: function (origin, callback) {
-			if (isOriginAllowed(origin)) {
-				callback(null, true);
+			const matched = resolveAllowedOrigin(origin);
+			if (matched) {
+				callback(null, matched);
 			} else {
 				console.warn("[CORS] Reddedilen origin:", origin);
 				callback(null, false);
