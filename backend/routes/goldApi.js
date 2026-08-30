@@ -491,9 +491,15 @@ router.post("/", async (req, res) => {
 				let game_code = gameDetails?.game_code || null;
 				let bet_money = gameDetails?.bet_money || gameDetails?.betMoney || gameDetails?.amount || gameDetails?.stake || 0;
 				let win_money = gameDetails?.win_money || gameDetails?.winMoney || gameDetails?.winAmount || gameDetails?.profit || gameDetails?.payout || 0;
-				let txn_id = gameDetails?.txn_id || gameDetails?.transactionId || gameDetails?.txnId || null;
-				let txn_type = gameDetails?.txn_type || gameDetails?.transactionType || gameDetails?.txnType || null;
-				let round_id = gameDetails?.round_id || gameDetails?.roundId || null;
+					let txn_id = gameDetails?.txn_id || gameDetails?.transactionId || gameDetails?.txnId || null;
+					// ÖNEMLİ (sağlayıcı dokümantasyonu): "txn_id" bir BAHSE (round) aittir ve
+					// o bahsin ürettiği TÜM transaction'larda (debit + birden fazla credit)
+					// AYNIDIR — transaction başına benzersiz DEĞİLDİR. Gerçek benzersiz alan
+					// "txn_id_v2"dir ve mükerrer (idempotency) kontrolü SADECE bunun üzerinden
+					// yapılmalıdır.
+					let txn_id_v2 = gameDetails?.txn_id_v2 || gameDetails?.txnIdV2 || gameDetails?.transactionIdV2 || null;
+					let txn_type = gameDetails?.txn_type || gameDetails?.transactionType || gameDetails?.txnType || null;
+					let round_id = gameDetails?.round_id || gameDetails?.roundId || null;
 
 				// ============================================================
 				// 4) VALIDATION - FIXED: SB support added
@@ -561,210 +567,189 @@ router.post("/", async (req, res) => {
 					const rakebackPercentage = userLevelData.percentage;
 
 					// ============================================================
-					// 6) Check for duplicate transaction
+					// 6) Idempotency & çoklu-transaction (aynı bahis) yönetimi
 					// ============================================================
+					// KÖK NEDEN (canlı casino / slot işlemlerinin sağlayıcıda "failed"
+					// görünmesi ve panele düşmemesi): Bir bahis (round_id / txn_id) TEK
+					// bir ödeme değildir — tumbling win, free spin turları, kapanış
+					// tahsilatı gibi BİRDEN FAZLA transaction üretebilir ve bunların
+					// HEPSİ AYNI "txn_id"yi paylaşır. Eski kod dedup'ı "txn_id" üzerinden
+					// yaptığı için, aynı txn_id ile gelen İKİNCİ+ credit'i
+					// "DUPLICATE_CREDIT" (status 0) ile REDDEDİYORDU. Sağlayıcı bunu
+					// "transaction failed" olarak görüyor, tur tamamlanamıyor ve işlem
+					// admin paneline hiç düşmüyordu.
+					//
+					// DÜZELTME (sağlayıcı dokümantasyonuna uygun): Idempotency SADECE
+					// benzersiz "txn_id_v2" üzerinden yapılır. Aynı txn_id'ye ait tüm
+					// transaction'lar TEK bir Transaction kaydında toplanır (mevcut unique
+					// "txn_id" index'i korunur, DB migration gerekmez). İşlenen her
+					// txn_id_v2, "extra.processedV2" dizisinde tutulur:
+					//   - Aynı txn_id_v2 tekrar gelirse → gerçek mükerrer/retry → bakiye
+					//     değiştirilmeden status 1 (idempotent başarı) döndürülür.
+					//   - Yeni bir txn_id_v2 gelirse → tutar BİRİKTİRİLEREK işlenir
+					//     (credit eklenir / debit düşülür); artık ASLA reddedilmez.
 					const existingTxn = await Transaction.findOne({ txn_id });
 					if (existingTxn) {
-						console.log("Existing txn found, attempting merge:", {
+						const processedV2 =
+							(existingTxn.extra && existingTxn.extra.processedV2) || [];
+
+						// Gerçek mükerrer: bu iç-spin (txn_id_v2) daha önce işlenmiş.
+						if (txn_id_v2 && processedV2.includes(txn_id_v2)) {
+							console.log(
+								"Duplicate txn_id_v2 ignored (idempotent):",
+								txn_id_v2
+							);
+							return res.status(200).json({
+								status: 1,
+								user_balance: activeWallet.balance,
+								msg: "DUPLICATE_TXN_IGNORED",
+							});
+						}
+
+						console.log("Existing txn found, accumulating:", {
 							txn_id,
+							txn_id_v2,
 							incoming_type: txn_type,
 							existing_type: existingTxn.txn_type,
 						});
-						
-						if (txn_type === "credit" || txn_type === "win" || txn_type === "payout") {
-							if (
-								existingTxn.win_money &&
-								existingTxn.win_money > 0
-							) {
-								console.log(
-									"Duplicate credit ignored for txn_id:",
-									txn_id
-								);
-								return res.status(400).json({
-									status: 0,
-									msg: "DUPLICATE_CREDIT",
-									user_balance: activeWallet.balance,
-								});
-							}
-							const balanceChange = winMoneyNum;
-							const updatedUserCredit =
-								await User.findByIdAndUpdate(
-									user._id,
-									{
-										$inc: {
-											"wallets.$[elem].balance":
-												balanceChange,
-											"stats.won": winMoneyNum,
-										},
-									},
-									{
-										arrayFilters: [
-											{
-												"elem.coinType":
-													activeWallet.coinType,
-												"elem.chain":
-													activeWallet.chain,
-												"elem.type": activeWallet.type,
-											},
-										],
-										new: true,
-									}
-								).select("wallets");
 
-							const balanceAfterMerge =
-								updatedUserCredit.wallets.find(
-									(w) =>
-										w.coinType === activeWallet.coinType &&
-										w.chain === activeWallet.chain &&
-										w.type === activeWallet.type
-								).balance;
+						const isCredit =
+							txn_type === "credit" ||
+							txn_type === "win" ||
+							txn_type === "payout";
+						const isDebit = txn_type === "debit" || txn_type === "bet";
+						const isDebitCredit = txn_type === "debit_credit";
 
-							await Transaction.updateOne(
-								{ _id: existingTxn._id },
-								{
-									$set: {
-										win_money: winMoneyNum,
-										txn_type:
-											existingTxn.txn_type === "debit" || existingTxn.txn_type === "bet"
-												? "debit_credit"
-												: existingTxn.txn_type,
-										balance_after: balanceAfterMerge,
-										// KÖK NEDEN DÜZELTMESİ: Bu birleştirme (merge) akışı daha
-										// önce "info"/ham webhook verisini hiç saklamıyordu — bu
-										// yüzden ayni txn_id ile gelen settlement (sonuç) bildirimi
-										// sessizce kayboluyordu. Artık merge'de de saklıyoruz.
-										extra: { info: rawInfo, betInfo, rawWebhook: req.body },
-									},
-								}
-							);
-
-							emitUserBalance(null, {
-								_id: user._id,
-								wallets: updatedUserCredit.wallets,
-								currency: user.currency,
+						// Ek debit / debit_credit için yetersiz bakiye kontrolü.
+						if ((isDebit || isDebitCredit) && activeWallet.balance < betMoneyNum) {
+							console.error("Insufficient Funds (accumulate):", {
+								balance: activeWallet.balance,
+								bet_money: betMoneyNum,
 							});
-
-							// KÖK NEDEN DÜZELTMESİ: SB (spor bahis) kuponları Nexus'tan
-							// settlement (won/lost/void) bildirimini genellikle bahsin
-							// AYNI txn_id'siyle "credit" olarak gönderiyor. Bu satır
-							// eklenmeden önce bu birleştirme (merge) yolu erken dönüş
-							// yaptığı için kupon durumu hiçbir zaman "pending" dışına
-							// çıkmıyor ve maç sonuçları hiç işlenmiyordu.
-							await applySportsBetSettlement({
-								winMoney: winMoneyNum,
-								balanceBefore: existingTxn.balance_after,
-								balanceAfter: balanceAfterMerge,
-							});
-
-							// 🎯 Deneme Bonusu hedef bakiye kontrolü — bu "merge" (mükerrer
-							// txn_id) akışı da bakiyeyi wallet.js'i atlayarak günceller,
-							// aşağıdaki ana akıştaki kontrole hiç uğramadan erken dönüyor.
-							trialBonusService
-								.checkTrialBonusTargetBalance(user._id, balanceAfterMerge)
-								.catch((err) =>
-									console.error(
-										"❌ GoldApi merge(credit) → deneme bonusu hedef bakiye kontrolü hatası:",
-										err.message
-									)
-								);
-
-							return res.status(200).json({
-								status: 1,
-								user_balance: balanceAfterMerge,
-								msg: "TRANSACTION_MERGED_CREDIT",
-							});
-						} else if (txn_type === "debit" || txn_type === "bet") {
 							return res.status(400).json({
 								status: 0,
-								msg: "DUPLICATE_DEBIT",
+								msg: "INSUFFICIENT_USER_FUNDS",
 								user_balance: activeWallet.balance,
 							});
-						} else if (txn_type === "debit_credit") {
-							if (
-								existingTxn.win_money &&
-								existingTxn.win_money > 0
-							) {
-								return res.status(400).json({
-									status: 0,
-									msg: "DUPLICATE_DEBIT_CREDIT",
-									user_balance: activeWallet.balance,
-								});
+						}
+
+						const balanceChange = isCredit
+							? winMoneyNum
+							: isDebit
+								? -betMoneyNum
+								: -betMoneyNum + winMoneyNum; // debit_credit
+
+						const statsInc = {};
+						if (isCredit) {
+							statsInc["stats.won"] = winMoneyNum;
+						} else if (isDebit) {
+							statsInc["stats.bet"] = betMoneyNum;
+						} else if (isDebitCredit) {
+							statsInc["stats.bet"] = betMoneyNum;
+							statsInc["stats.won"] = winMoneyNum;
+						}
+
+						const updatedUserMerge = await User.findByIdAndUpdate(
+							user._id,
+							{
+								$inc: {
+									"wallets.$[elem].balance": balanceChange,
+									...statsInc,
+								},
+							},
+							{
+								arrayFilters: [
+									{
+										"elem.coinType": activeWallet.coinType,
+										"elem.chain": activeWallet.chain,
+										"elem.type": activeWallet.type,
+									},
+								],
+								new: true,
 							}
-							const netChange = winMoneyNum;
-							const updatedUserDebitCredit =
-								await User.findByIdAndUpdate(
-									user._id,
-									{
-										$inc: {
-											"wallets.$[elem].balance":
-												netChange,
-											"stats.won": winMoneyNum,
-										},
-									},
-									{
-										arrayFilters: [
-											{
-												"elem.coinType":
-													activeWallet.coinType,
-												"elem.chain":
-													activeWallet.chain,
-												"elem.type": activeWallet.type,
-											},
-										],
-										new: true,
-									}
-								).select("wallets");
-							const balanceAfterMerge =
-								updatedUserDebitCredit.wallets.find(
-									(w) =>
-										w.coinType === activeWallet.coinType &&
-										w.chain === activeWallet.chain &&
-										w.type === activeWallet.type
-								).balance;
-							await Transaction.updateOne(
-								{ _id: existingTxn._id },
-								{
-									$set: {
-										win_money: winMoneyNum,
-										txn_type: "debit_credit",
-										balance_after: balanceAfterMerge,
-										// KÖK NEDEN DÜZELTMESİ: bkz. yukarıdaki "credit" dalındaki
-										// aynı not — merge'de "info"/ham webhook verisini de saklıyoruz.
-										extra: { info: rawInfo, betInfo, rawWebhook: req.body },
-									},
-								}
-							);
+						).select("wallets");
 
-							emitUserBalance(null, {
-								_id: user._id,
-								wallets: updatedUserDebitCredit.wallets,
-								currency: user.currency,
-							});
+						const balanceAfterMerge = updatedUserMerge.wallets.find(
+							(w) =>
+								w.coinType === activeWallet.coinType &&
+								w.chain === activeWallet.chain &&
+								w.type === activeWallet.type
+						).balance;
 
-							// KÖK NEDEN DÜZELTMESİ: bkz. yukarıdaki "credit" dalındaki aynı not.
+						// Aggregate Transaction kaydını güncelle: tutarları biriktir,
+						// işlenen txn_id_v2'yi kaydet, gerekiyorsa tipi debit_credit yap.
+						const nextTxnType =
+							(existingTxn.txn_type === "debit" ||
+								existingTxn.txn_type === "bet") &&
+							(isCredit || isDebitCredit)
+								? "debit_credit"
+								: existingTxn.txn_type;
+
+						const incFields = {};
+						if (betMoneyNum) incFields.bet_money = betMoneyNum;
+						if (winMoneyNum) incFields.win_money = winMoneyNum;
+
+						const updateOps = {
+							$set: {
+								txn_type: nextTxnType,
+								balance_after: balanceAfterMerge,
+								"extra.info": rawInfo,
+								"extra.betInfo": betInfo,
+								"extra.rawWebhook": req.body,
+							},
+						};
+						if (Object.keys(incFields).length > 0) {
+							updateOps.$inc = incFields;
+						}
+						if (txn_id_v2) {
+							updateOps.$push = { "extra.processedV2": txn_id_v2 };
+						}
+
+						await Transaction.updateOne({ _id: existingTxn._id }, updateOps);
+
+						emitUserBalance(null, {
+							_id: user._id,
+							wallets: updatedUserMerge.wallets,
+							currency: user.currency,
+						});
+
+						// SB (spor bahis) settlement: kazanç/sonuç bildirimi bu yoldan
+						// gelirse de kupon durumu (won/lost/void) ve maç sonuçları işlensin.
+						if (isCredit || isDebitCredit) {
 							await applySportsBetSettlement({
 								winMoney: winMoneyNum,
-								balanceBefore: existingTxn.balance_after,
+								balanceBefore: activeWallet.balance,
 								balanceAfter: balanceAfterMerge,
 							});
+						}
 
-							// 🎯 Deneme Bonusu hedef bakiye kontrolü — bkz. yukarıdaki
-							// "credit" dalındaki aynı not.
-							trialBonusService
-								.checkTrialBonusTargetBalance(user._id, balanceAfterMerge)
-								.catch((err) =>
-									console.error(
-										"❌ GoldApi merge(debit_credit) → deneme bonusu hedef bakiye kontrolü hatası:",
-										err.message
-									)
-								);
-
-							return res.status(200).json({
-								status: 1,
-								user_balance: balanceAfterMerge,
-								msg: "TRANSACTION_MERGED_DEBIT_CREDIT",
+						// Bilet çevrimi + Race puanı hook'u: ek debit/debit_credit de bahis.
+						if ((isDebit || isDebitCredit) && betMoneyNum > 0) {
+							onBetSettled({
+								userId: user._id,
+								amount: betMoneyNum,
+								category: game_type === "SB" ? "sportsBook" : "casino",
+								providerCode: provider_code,
 							});
 						}
+
+						// 🎯 Deneme Bonusu hedef bakiye kontrolü — bu akış bakiyeyi
+						// wallet.js'i atlayarak günceller, ana akıştaki kontrole uğramadan
+						// döner; bu yüzden burada ayrıca çağırmak gerekir.
+						trialBonusService
+							.checkTrialBonusTargetBalance(user._id, balanceAfterMerge)
+							.catch((err) =>
+								console.error(
+									"❌ GoldApi accumulate → deneme bonusu hedef bakiye kontrolü hatası:",
+									err.message
+								)
+							);
+
+						return res.status(200).json({
+							status: 1,
+							user_balance: balanceAfterMerge,
+							msg: "TRANSACTION_ACCUMULATED",
+						});
 					}
 
 					if (
@@ -932,6 +917,10 @@ router.post("/", async (req, res) => {
 						balance_after: balanceAfter,
 						rakeback: rakebackAmount,
 						affiliate: affiliateAmount,
+						// "processedV2": Bu bahse (txn_id) ait işlenmiş txn_id_v2'lerin listesi.
+						// Idempotency ve aynı tura ait sonraki credit'lerin (tumbling/free
+						// spin) biriktirilmesi bu diziye göre yapılır (bkz. adım 6).
+						//
 						// SB (sportsbook) kuponlarının maç/market detaylarını (info) daha
 						// sonra referans/debug için Transaction kaydında da saklıyoruz.
 						// NOT: "info" request body'nin kök seviyesinden geliyor (SB'nin içinden değil).
@@ -940,10 +929,12 @@ router.post("/", async (req, res) => {
 						// sonradan hangi alanın eksik geldiğini teşhis etmek
 						// imkansız oluyordu. Artık SB işlemlerinde "info" boş olsa
 						// bile ham request body'sini saklıyoruz.
-						extra:
-							game_type === "SB"
+						extra: {
+							processedV2: txn_id_v2 ? [txn_id_v2] : [],
+							...(game_type === "SB"
 								? { info: info || null, rawWebhook: req.body }
-								: undefined,
+								: {}),
+						},
 					});
 
 					await transaction.save();
