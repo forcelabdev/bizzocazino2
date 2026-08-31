@@ -30,9 +30,22 @@ const server = http.createServer(app);
 //
 // Çözüm: TÜM ALLOWED_ORIGINS* değişkenlerini birleştir, origin'leri normalize
 // et (küçük harf + sondaki "/" kaldır) ve normalize edilmiş haliyle karşılaştır.
+// Bilinen production domainleri — KOD İÇİ GÜVENLİ VARSAYILAN.
+// .env düzenlemesi (maskeleme/sed) tekrar tekrar güvenilmez olduğu için, canlı
+// frontend domainlerini burada sabit olarak da tutuyoruz. Frontend hangi varyanttan
+// (www'lu/www'suz) istek atarsa atsın CORS geçer. Bu liste .env'deki
+// ALLOWED_ORIGINS* değerlerine EK'tir, onların yerini almaz.
+const DEFAULT_PROD_ORIGINS = [
+	"https://bizzocasino168.com",
+	"https://www.bizzocasino168.com",
+	"https://bizzocasino.com",
+	"https://www.bizzocasino.com",
+];
+
 const rawAllowedOrigins = [
 	process.env.SERVER_FRONTEND_URL, // http://localhost:8080
 	process.env.SERVER_ADMIN_URL, // http://localhost:5173
+	...DEFAULT_PROD_ORIGINS,
 	// process.env üzerindeki ALLOWED_ORIGINS ve ALLOWED_ORIGINS_2, _3, _4 ...
 	// biçimindeki tüm varyantları topla.
 	...Object.keys(process.env)
@@ -49,6 +62,7 @@ const allowedOrigins = [...new Set(rawAllowedOrigins.map((o) => (o || "").trim()
 const allowedOriginSet = new Set(
 	allowedOrigins.map(normalizeOrigin).filter(Boolean)
 );
+console.log("[CORS] İzinli origin'ler yüklendi:", [...allowedOriginSet]);
 
 // ÖNEMLİ: Bazı proxy zincirleri (Cloudflare + nginx) "Origin" başlığını iki kez
 // ekleyip Express'te tek bir string olarak VİRGÜLLE birleştirebiliyor:
