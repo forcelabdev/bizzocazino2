@@ -42,15 +42,24 @@ const DEFAULT_PROD_ORIGINS = [
 	"https://www.bizzocasino.com",
 ];
 
+// Çoklu-marka kurulum: SERVER_FRONTEND_URL, SERVER_FRONTEND_URL_2/_3/_4,
+// SERVER_ADMIN_URL, SERVER_ADMIN_URL_2/... ve ALLOWED_ORIGINS, ALLOWED_ORIGINS_2,
+// ALLOWED_ORIGINS_2_2, _3, _4, _5, _6 ... gibi TÜM numaralı varyantları topla.
+// Tek tek isim yazmak yerine kalıba göre eşleştiriyoruz ki yeni bir marka/domain
+// eklendiğinde kod değişikliği gerekmesin.
+const collectEnvOrigins = (regex) =>
+	Object.keys(process.env)
+		.filter((k) => regex.test(k))
+		.flatMap((k) => (process.env[k] || "").split(","));
+
 const rawAllowedOrigins = [
-	process.env.SERVER_FRONTEND_URL, // http://localhost:8080
-	process.env.SERVER_ADMIN_URL, // http://localhost:5173
 	...DEFAULT_PROD_ORIGINS,
-	// process.env üzerindeki ALLOWED_ORIGINS ve ALLOWED_ORIGINS_2, _3, _4 ...
-	// biçimindeki tüm varyantları topla.
-	...Object.keys(process.env)
-		.filter((k) => /^ALLOWED_ORIGINS(_\d+)?$/.test(k))
-		.flatMap((k) => (process.env[k] || "").split(",")),
+	// SERVER_FRONTEND_URL, SERVER_FRONTEND_URL_2, _3, _4 ...
+	...collectEnvOrigins(/^SERVER_FRONTEND_URL(_\d+)*$/),
+	// SERVER_ADMIN_URL, SERVER_ADMIN_URL_2, _3, _4 ...
+	...collectEnvOrigins(/^SERVER_ADMIN_URL(_\d+)*$/),
+	// ALLOWED_ORIGINS, ALLOWED_ORIGINS_2, ALLOWED_ORIGINS_2_2, _3, _4, _5, _6 ...
+	...collectEnvOrigins(/^ALLOWED_ORIGINS(_\d+)*$/),
 ];
 
 const normalizeOrigin = (o) =>
@@ -101,7 +110,15 @@ app.use(
 
 const io = socket(server, {
 	cors: {
-		origin: allowedOrigins,
+		// HTTP tarafıyla aynı esnek mantık: birleşik/normalize origin toleransı
+		// ve eşleşen tekil origin'in geri yansıtılması.
+		origin: function (origin, callback) {
+			const matched = resolveAllowedOrigin(origin);
+			if (matched === true) return callback(null, true);
+			if (matched) return callback(null, matched);
+			console.warn("[CORS][socket] Reddedilen origin:", origin);
+			return callback(null, false);
+		},
 		credentials: true,
 	},
 });
