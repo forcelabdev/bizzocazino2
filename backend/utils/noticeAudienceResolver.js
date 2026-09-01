@@ -24,7 +24,9 @@ const resolveNoticeAudience = async (audience = {}) => {
 	}
 
 	if (type === "online" || type === "offline") {
-		const onlineIds = new Set(ioUtils.getOnlineUserIds());
+		// pm2 cluster mode: getOnlineUserIds artık TÜM worker'ların paylaştığı
+		// Redis Set'ini okuyan async bir fonksiyon (bkz. utils/io.js).
+		const onlineIds = new Set(await ioUtils.getOnlineUserIds());
 		// Socket bağlantısı login olmayan ziyaretçiler için socket.id kullanır,
 		// bu yüzden sadece geçerli Mongo ObjectId formatındaki id'ler kullanıcı eşleşmesi sayılır.
 		const isValidObjectId = (id) => /^[a-f0-9]{24}$/i.test(id);
