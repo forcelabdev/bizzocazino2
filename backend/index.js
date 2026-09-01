@@ -189,12 +189,23 @@ io.on("connection", (socket) => {
 	// Eğer kullanıcı login olmuşsa token'dan userId gönder
 	const userId = socket.handshake.auth?.userId || socket.id;
 
+	// KÖK NEDEN DÜZELTMESİ (pm2 sonsuz restart döngüsü — "NOAUTH Authentication
+	// required" / Redis bağlantı sorunları): Bu async IIFE'lerin hiç .catch()'i
+	// yoktu. ioUtils.addOnlineUser/getOnlineCount içeride Redis kullanıyor;
+	// Redis auth hatası veya bağlantı kopması gibi bir sebeple reject olduğunda
+	// bu bir "unhandledRejection" olarak process'i ÇÖKERTİYORDU (Node 15+
+	// varsayılan davranışı). pm2 process'i sürekli yeniden başlatıyor, her
+	// başlatmada yeni Redis client'lar oluşup MaxListenersExceededWarning
+	// birikiyordu. Artık hata sadece loglanıyor, process ayakta kalıyor —
+	// online sayaç geçici olarak güncellenmese de site/soket bağlantıları kesilmiyor.
 	(async () => {
 		await ioUtils.addOnlineUser(userId);
 		const online = await ioUtils.getOnlineCount();
 		// Redis adapter sayesinde bu emit TÜM worker'lara bağlı istemcilere ulaşır.
 		io.emit("siteOnline", { online });
-	})();
+	})().catch((err) => {
+		console.error("[Online Sayaç] addOnlineUser/getOnlineCount hatası:", err?.message || err);
+	});
 
 	socket.on("disconnect", () => {
 		(async () => {
@@ -202,7 +213,9 @@ io.on("connection", (socket) => {
 			const online = await ioUtils.getOnlineCount();
 			io.emit("siteOnline", { online });
 			// console.log("❌ Kullanıcı ayrıldı:", userId);
-		})();
+		})().catch((err) => {
+			console.error("[Online Sayaç] removeOnlineUser/getOnlineCount hatası:", err?.message || err);
+		});
 	});
 });
 
@@ -297,3 +310,22 @@ const gracefulShutdown = (signal) => {
 
 process.on("SIGINT", () => gracefulShutdown("SIGINT"));
 process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+
+// GÜVENLİK AĞI: Yukarıdaki .catch() eklemeleriyle bilinen Redis/online-sayaç
+// hatalarını yakaladık, ama başka bir yerde benzer bir catch'siz promise
+// unutulursa yine "unhandledRejection" ile process çökebilir. Bunu SESSİZCE
+// yutup process'i "zombi" halde ayakta tutmak DAHA KÖTÜ bir durumdur (pm2
+// "online" gösterir ama process bozuk kalabilir) — bu yüzden burada sadece
+// stack trace'i AÇIKÇA loglayıp process'in normal (varsayılan) davranışıyla
+// sonlanmasına izin veriyoruz. Amaç: bir sonraki çökmede bu tail komutuyla
+// gerçek hatayı hemen görebilmek, "boş" log ile zaman kaybetmemek.
+process.on("unhandledRejection", (reason) => {
+	console.error("[FATAL] unhandledRejection:", reason);
+});
+
+process.on("uncaughtException", (err) => {
+	console.error("[FATAL] uncaughtException:", err);
+	// Node için önerilen davranış: uncaughtException sonrası process güvenilmez
+	// durumda kalır, temiz bir şekilde çıkıp pm2'nin yeniden başlatmasına izin ver.
+	process.exit(1);
+});
